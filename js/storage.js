@@ -15,6 +15,8 @@ window.Store = (function () {
       joys: [],                             // що приносить радість { name, date }
       littleJoys: [],                       // мої маленькі радощі { id, category, text, date }
       friendNotes: [],                      // практика «порада подрузі» { id, situation, advice, date }
+      wellbeing: {},                        // щоденна шкала самопочуття { YYYY-MM-DD: { level, date } }
+      goodEvents: [],                       // хороші події дня { id, text, date, dayKey }
       achievements: {},                     // { id: ISOдата }
       checkins: {},                         // { 'YYYY-MM-DD': true } для серій
       draft: null,                          // незавершений запис
@@ -57,13 +59,29 @@ window.Store = (function () {
       const all = db();
       if (all[currentEmail]) {
         state = all[currentEmail];
-        // оновити ім'я/провайдера, якщо змінилися
-        state.profile = Object.assign({}, state.profile, { name: profile.name, provider: profile.provider });
+        // оновити ім'я/провайдера/стать/аватар, якщо змінилися
+        const patch = { name: profile.name, provider: profile.provider };
+        if (profile.gender) patch.gender = profile.gender;
+        if (profile.picture) patch.picture = profile.picture;
+        state.profile = Object.assign({}, state.profile, patch);
       } else {
         state = emptyState({ ...profile, email: currentEmail, createdAt: new Date().toISOString() });
       }
       persist();
       return state;
+    },
+
+    setGender(gender) {
+      if (state && state.profile) { state.profile.gender = gender; persist(); }
+    },
+
+    hasAccount(email) {
+      if (!email) return false;
+      return !!db()[email.trim().toLowerCase()];
+    },
+    accountGender(email) {
+      const acc = db()[(email || "").trim().toLowerCase()];
+      return acc && acc.profile ? acc.profile.gender : null;
     },
 
     logout() {
@@ -132,9 +150,11 @@ window.Store = (function () {
     removeTreasure(id) { state.treasure = state.treasure.filter(x => x.id !== id); persist(); },
 
     // ---- Тести ----
-    addTest(score) {
-      state.tests.push({ date: new Date().toISOString(), score });
+    addTest(score, meta) {
+      const rec = Object.assign({ date: new Date().toISOString(), score }, meta || {});
+      state.tests.push(rec);
       persist();
+      return rec;
     },
 
     // ---- Радість (джерела радості) ----
@@ -177,6 +197,34 @@ window.Store = (function () {
     },
     removeFriendNote(id) {
       state.friendNotes = (state.friendNotes || []).filter(x => x.id !== id); persist();
+    },
+
+    // ---- Щоденне самопочуття + хороші події ----
+    setWellbeing(level, date) {
+      const iso = date || new Date().toISOString();
+      const dayKey = iso.slice(0, 10);
+      if (!state.wellbeing || Array.isArray(state.wellbeing)) state.wellbeing = {};
+      state.wellbeing[dayKey] = { level: +level, date: iso };
+      this.markCheckin(iso);
+      persist();
+      return state.wellbeing[dayKey];
+    },
+    todayWellbeing() {
+      if (!state.wellbeing || Array.isArray(state.wellbeing)) state.wellbeing = {};
+      return state.wellbeing[new Date().toISOString().slice(0, 10)] || null;
+    },
+    addGoodEvent(text, date) {
+      text = (text || "").trim(); if (!text) return null;
+      const iso = date || new Date().toISOString();
+      const dayKey = iso.slice(0, 10);
+      if (!Array.isArray(state.goodEvents)) state.goodEvents = [];
+      const ev = { id: "ge" + Date.now() + Math.random().toString(36).slice(2, 5), text, date: iso, dayKey };
+      state.goodEvents.unshift(ev);
+      persist();
+      return ev;
+    },
+    removeGoodEvent(id) {
+      state.goodEvents = (state.goodEvents || []).filter(x => x.id !== id); persist();
     },
 
     // ---- Серії (check-ins) ----

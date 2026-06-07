@@ -3,6 +3,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const { mainModule } = require("process");
 
 const PORT = process.env.PORT || 5173;
 const ROOT = __dirname;
@@ -27,3 +28,5 @@ http.createServer((req, res) => {
     res.end(data);
   });
 }).listen(PORT, () => console.log(`Спокій працює на http://localhost:${PORT}`));
+
+

@@ -10,6 +10,108 @@
   const todayKey = () => new Date().toISOString().slice(0, 10);
   const uid = () => Math.random().toString(36).slice(2, 9);
 
+  /* ===================== КОНФІГУРАЦІЯ ===================== */
+  // Щоб увімкнути справжній вхід через Google — встав сюди Client ID
+  // з Google Cloud Console (OAuth 2.0, тип «Web»), додавши свій домен у дозволені.
+  const GOOGLE_CLIENT_ID = ""; // напр. "1234567890-abc.apps.googleusercontent.com"
+
+  // Резервне хмарне збереження. Працює з будь-яким REST-сховищем (JSONBin, Supabase, власний бекенд).
+  // endpoint має приймати GET (повернути JSON) та PUT (зберегти тіло). Якщо порожнє — використовується файловий бекап.
+  const CLOUD = { endpoint: "", headers: {} };
+
+  /* ===================== ГЕНДЕРНА ЛОКАЛІЗАЦІЯ ===================== */
+  // Базові тексти написані в жіночому роді. Для чоловіка перетворюємо на льоту.
+  const UA_LET = "А-Яа-яЇїІіЄєҐґʼ'’";
+  const G_PHRASES = [
+    ["з твоєю подругою", "з твоїм другом"],
+    ["твоєю подругою", "твоїм другом"],
+    ["своєю подругою", "своїм другом"],
+    ["що б ти їй порадила", "що б ти йому порадив"],
+    ["їй порадила", "йому порадив"],
+    ["у твоєї кращої подруги", "у твого кращого друга"],
+    ["твоєї кращої подруги", "твого кращого друга"],
+    ["у моєї кращої подруги", "у мого кращого друга"],
+    ["моєї кращої подруги", "мого кращого друга"],
+    ["очима доброї подруги", "очима доброго друга"],
+    ["доброї подруги", "доброго друга"],
+    ["кращої подруги", "кращого друга"],
+    ["найкращій подрузі", "найкращому другу"],
+    ["сильною чи ідеальною", "сильним чи ідеальним"],
+    ["сама собі", "сам собі"],
+    ["Ти не сама", "Ти не сам"],
+    ["ти не сама", "ти не сам"],
+    ["побудь сама", "побудь сам"]
+  ];
+  const G_WORDS = [
+    // дієслова минулого часу
+    ["зробила","зробив"],["зробилася","зробився"],["повернулася","повернувся"],["подбала","подбав"],["подбали","подбав"],
+    ["змогла","зміг"],["відчула","відчув"],["обрала","обрав"],["почала","почав"],["хотіла","хотів"],["пройшла","пройшов"],
+    ["навчилася","навчився"],["була","був"],["стала","став"],["прийшла","прийшов"],["знайшла","знайшов"],
+    ["впоралася","впорався"],["впоралась","впорався"],["засмутилася","засмутився"],["втомилася","втомився"],
+    ["заспокоїлася","заспокоївся"],["зосередилася","зосередився"],["пишалася","пишався"],["зрозуміла","зрозумів"],
+    ["сказала","сказав"],["написала","написав"],["помітила","помітив"],["дозволила","дозволив"],["відпочила","відпочив"],
+    ["поговорила","поговорив"],["дочекалася","дочекався"],["спробувала","спробував"],["вирішила","вирішив"],
+    ["переживала","переживав"],["мала","мав"],
+    // прикметники / стани (називний)
+    ["сама","сам"],["готова","готовий"],["впевнена","впевнений"],["вдячна","вдячний"],["відкрита","відкритий"],
+    ["спокійна","спокійний"],["цінна","цінний"],["винна","винен"],["зобов'язана","зобов'язаний"],["зобовʼязана","зобовʼязаний"],
+    ["сильна","сильний"],["щаслива","щасливий"],["вільна","вільний"],["гідна","гідний"],["варта","вартий"],
+    ["достатня","достатній"],["важлива","важливий"],["потрібна","потрібний"],["здатна","здатний"],["рада","радий"],
+    ["втомлена","втомлений"],["налаштована","налаштований"],["самотня","самотній"],
+    // прикметники в орудному (-ою → -им)
+    ["сильною","сильним"],["ідеальною","ідеальним"],["впевненою","впевненим"],["спокійною","спокійним"],
+    ["вдячною","вдячним"],["відкритою","відкритим"],["готовою","готовим"],["щасливою","щасливим"],["вільною","вільним"],
+    // дружба
+    ["подругою","другом"],["подрузі","другу"],["подругу","друга"],["подруга","друг"]
+  ];
+  let _gWordRe = null;
+  function buildGenderRe() {
+    const map = {};
+    G_WORDS.forEach(([f, m]) => { map[f.toLowerCase()] = m; });
+    const keys = G_WORDS.map(p => p[0]).sort((a, b) => b.length - a.length).map(escapeRe);
+    _gWordRe = { re: new RegExp("(?<![" + UA_LET + "])(" + keys.join("|") + ")(?![" + UA_LET + "])", "gi"), map };
+  }
+  function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+  function matchCase(src, repl) {
+    if (src && src[0] === src[0].toUpperCase() && src[0] !== src[0].toLowerCase())
+      return repl.charAt(0).toUpperCase() + repl.slice(1);
+    return repl;
+  }
+  function genderize(text) {
+    if (!text || isMale() !== true) return text;
+    let out = String(text);
+    G_PHRASES.forEach(([f, m]) => {
+      if (out.indexOf(f) !== -1) out = out.split(f).join(m);
+    });
+    if (!_gWordRe) buildGenderRe();
+    out = out.replace(_gWordRe.re, (full) => {
+      const repl = _gWordRe.map[full.toLowerCase()];
+      return repl ? matchCase(full, repl) : full;
+    });
+    return out;
+  }
+  function isMale() {
+    return !!(S.state && S.state.profile && S.state.profile.gender === "male");
+  }
+  function genderizeDOM(root) {
+    if (!root || !isMale()) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(n) {
+        if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        const p = n.parentNode;
+        if (p && (p.tagName === "SCRIPT" || p.tagName === "STYLE" || p.tagName === "TEXTAREA")) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    const nodes = [];
+    let cur;
+    while ((cur = walker.nextNode())) nodes.push(cur);
+    nodes.forEach(n => {
+      const next = genderize(n.nodeValue);
+      if (next !== n.nodeValue) n.nodeValue = next;
+    });
+  }
+
   const MONTHS = ["січня","лютого","березня","квітня","травня","червня","липня","серпня","вересня","жовтня","листопада","грудня"];
   function fmtDate(iso) {
     const d = new Date(iso); if (isNaN(d)) return "";
@@ -32,7 +134,7 @@
   function toast(msg, type = "", ms = 3800) {
     const t = document.createElement("div");
     t.className = "toast " + type;
-    t.innerHTML = `<span>${msg}</span>`;
+    t.innerHTML = `<span>${genderize(msg)}</span>`;
     $("#toasts").appendChild(t);
     setTimeout(() => { t.style.opacity = "0"; t.style.transform = "translateY(8px)"; setTimeout(() => t.remove(), 300); }, ms);
   }
@@ -59,6 +161,7 @@
     const root = $("#modal-root");
     root.innerHTML = `<div class="modal" style="position:relative">${html}<button class="modal-x" data-close>×</button></div>`;
     root.classList.remove("hidden");
+    genderizeDOM(root);
     root.onclick = (e) => { if (e.target === root || e.target.hasAttribute("data-close")) closeModal(); };
   }
   function closeModal() { const r = $("#modal-root"); r.classList.add("hidden"); r.innerHTML = ""; }
@@ -91,15 +194,16 @@
   /* ===================== Навігація ===================== */
   // Скорочене меню для першої версії. Решта розділів доступні з головної.
   const NAV = [
-    { id: "home", icon: "🏠", label: "Головна" },
-    { id: "new", icon: "✍️", label: "Новий запис" },
-    { id: "sos", icon: "🆘", label: "SOS", action: true },
-    { id: "evidence", icon: "🛡️", label: "Банк доказів" },
-    { id: "resources", icon: "🌱", label: "Мої ресурси" },
-    { id: "analytics", icon: "📊", label: "Аналітика" },
-    { id: "joys", icon: "🌈", label: "Мої радощі" },
-    { id: "friend", icon: "💌", label: "Порада подрузі" },
-    { id: "history", icon: "📜", label: "Моя історія" }
+    { id: "home", icon: "⌂", label: "Головна" },
+    { id: "new", icon: "+", label: "Новий запис" },
+    { id: "sos", icon: "SOS", label: "SOS", action: true },
+    { id: "evidence", icon: "✓", label: "Банк доказів" },
+    { id: "resources", icon: "◌", label: "Мої ресурси" },
+    { id: "analytics", icon: "∿", label: "Аналітика" },
+    { id: "joys", icon: "◇", label: "Мої радощі" },
+    { id: "good", icon: "☺", label: "Хороші події" },
+    { id: "friend", icon: "✉", label: "Порада подрузі" },
+    { id: "history", icon: "≡", label: "Моя історія" }
   ];
 
   let route = "home";
@@ -124,23 +228,23 @@
   /* ===================== ІНСТРУКЦІЯ (про сайт) ===================== */
   function openGuide() {
     const items = [
-      { ico: "🆘", t: "SOS — швидка допомога", d: "Коли накриває просто зараз: дихання животом 1 хвилина, заземлення й тепла фраза. Кнопка вгорі та в меню." },
-      { ico: "🫧", t: "Мені тривожно", d: "Спокійний покроковий сценарій: оцінити стан, розкласти думку, подихати, заземлитися й повернути увагу до життя." },
-      { ico: "✍️", t: "Новий запис і лист собі", d: "Записати тривогу чи страх і призначити день, коли варто перевірити — чи справдився він насправді." },
-      { ico: "🛡️", t: "Банк доказів", d: "Колекція страхів, які не справдилися. Жива підбірка доказів, що тривога часто перебільшує." },
-      { ico: "🌱", t: "Мої ресурси", d: "Сайт сам збирає те, що тобі допомагає, і показує рейтинг найдієвіших способів заспокоєння." },
-      { ico: "📊", t: "Аналітика / Мій прогрес", d: "Динаміка тривоги, настрою та енергії, серії днів, тригери й порівняння зі стартом." },
-      { ico: "🌈", t: "Мої маленькі радощі", d: "Збережи книги, фільми, музику, прогулянки, хобі — сайт час від часу нагадає про них." },
-      { ico: "💌", t: "Порада подрузі", d: "Поглянь на ситуацію очима доброї подруги — і подаруй цю ж підтримку собі." },
-      { ico: "🧭", t: "Типи тривоги + тести", d: "Заспокійливі тести під різні тривоги, а для фінансової — окремий «Фінансовий потік»." },
-      { ico: "💝", t: "Скарбничка підтримки", d: "Цитати, афірмації, теплі слова, спогади й перемоги — щоб дістати їх у складний момент." },
-      { ico: "📚", t: "Бібліотека", d: "Короткі статті: як працює тривога, дихання, заземлення, кордони, робота з думками тощо." },
-      { ico: "🏆", t: "Прогрес і досягнення", d: "Маленькі перемоги відзначаються — за серії днів, перші доказі, перший лист собі." },
-      { ico: "🎧", t: "Пісня дня та теми", d: "Музика для настрою вгорі екрана (можна додати свою) і перемикання денної/нічної теми." },
-      { ico: "🔒", t: "Приватність", d: "Усі записи зберігаються лише на твоєму пристрої. Нічого не публікується без твоєї згоди." }
+      { ico: "SOS", t: "SOS — швидка допомога", d: "Коли накриває просто зараз: дихання животом 1 хвилина, заземлення й тепла фраза. Кнопка вгорі та в меню." },
+      { ico: "01", t: "Мені тривожно", d: "Спокійний покроковий сценарій: оцінити стан, розкласти думку, подихати, заземлитися й повернути увагу до життя." },
+      { ico: "+", t: "Новий запис і лист собі", d: "Записати тривогу чи страх і призначити день, коли варто перевірити — чи справдився він насправді." },
+      { ico: "✓", t: "Банк доказів", d: "Колекція страхів, які не справдилися. Жива підбірка доказів, що тривога часто перебільшує." },
+      { ico: "◌", t: "Мої ресурси", d: "Сайт сам збирає те, що тобі допомагає, і показує рейтинг найдієвіших способів заспокоєння." },
+      { ico: "∿", t: "Аналітика / Мій прогрес", d: "Динаміка тривоги, настрою та енергії, серії днів, тригери й порівняння зі стартом." },
+      { ico: "◇", t: "Мої маленькі радощі", d: "Збережи книги, фільми, музику, прогулянки, хобі — сайт час від часу нагадає про них." },
+      { ico: "✉", t: "Порада подрузі", d: "Поглянь на ситуацію очима доброї подруги — і подаруй цю ж підтримку собі." },
+      { ico: "⌁", t: "Типи тривоги + тести", d: "Заспокійливі тести під різні тривоги, а для фінансової — окремий «Фінансовий потік»." },
+      { ico: "□", t: "Скарбничка підтримки", d: "Цитати, афірмації, теплі слова, спогади й перемоги — щоб дістати їх у складний момент." },
+      { ico: "§", t: "Бібліотека", d: "Короткі статті: як працює тривога, дихання, заземлення, кордони, робота з думками тощо." },
+      { ico: "↑", t: "Прогрес і досягнення", d: "Маленькі перемоги відзначаються — за серії днів, перші доказі, перший лист собі." },
+      { ico: "♪", t: "Пісня дня та теми", d: "Музика для настрою вгорі екрана (можна додати свою) і перемикання денної/нічної теми." },
+      { ico: "⌧", t: "Приватність", d: "Усі записи зберігаються лише на твоєму пристрої. Нічого не публікується без твоєї згоди." }
     ];
     openModal(`
-      <h2>📖 Про сайт «Спокій»</h2>
+      <h2>Про сайт «Спокій»</h2>
       <p class="muted" style="margin:0 0 14px;line-height:1.55">Головна мета — не аналізувати тривогу безкінечно, а швидше повертати тебе до спокою й власного життя. Ось що ти знайдеш тут для себе:</p>
       <div class="guide-list">
         ${items.map(i => `
@@ -192,13 +296,14 @@
     const song = currentSongText();
     return `
       <div class="song-bar" id="song-bar">
-        <span class="song-ico">🎧</span>
+        <span class="song-ico">♪</span>
         <div class="song-main">
-          <div class="song-label">${mine ? "Твоя пісня настрою" : "Пісня дня"} · увімкни щось, що підіймає тобі настрій 🎶</div>
+          <div class="song-label">${mine ? "Твоя пісня настрою" : "Пісня дня"} · увімкни щось, що підіймає тобі настрій</div>
           <div class="song-name">${esc(song)}</div>
         </div>
         <div class="song-actions">
-          <button class="song-btn" id="song-find">🔎 Слухати</button>
+          <button class="song-btn" id="song-player" title="Відкрити плеєр">♪ Плеєр</button>
+          <button class="song-btn ghost" id="song-find" title="Знайти на YouTube">Пошук</button>
           ${mine ? "" : `<button class="song-btn ghost" id="song-next" title="Інша пісня">↻</button>`}
           <button class="song-btn ghost" id="song-mine" title="Моя пісня">${mine ? "✎" : "♪ Моя"}</button>
           ${mine ? `<button class="song-btn ghost" id="song-clear" title="Прибрати мою пісню">✕</button>` : ""}
@@ -214,9 +319,128 @@
     const mine = $("#song-mine");
     if (mine) mine.onclick = openSongModal;
     const clear = $("#song-clear");
-    if (clear) clear.onclick = () => { S.state.settings.songReminder = ""; S.save(); refreshSongBar(); toast("Повернула пісні дня 🎧"); };
+    if (clear) clear.onclick = () => { S.state.settings.songReminder = ""; S.save(); refreshSongBar(); toast("Повернула пісні дня"); };
     const theme = $("#theme-toggle");
     if (theme) theme.onclick = toggleTheme;
+    const pl = $("#song-player");
+    if (pl) pl.onclick = playerOpen;
+  }
+
+  /* ===================== МУЗИЧНИЙ ПЛЕЄР ===================== */
+  let plIndex = 0, plInited = false, plOpen = false;
+  function audioEl() { return $("#audio"); }
+  function fmtTime(s) {
+    if (!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return m + ":" + String(sec).padStart(2, "0");
+  }
+  function playerInitOnce() {
+    if (plInited) return;
+    plInited = true;
+    const a = audioEl();
+    a.addEventListener("timeupdate", playerSync);
+    a.addEventListener("loadedmetadata", playerSync);
+    a.addEventListener("play", playerSyncButtons);
+    a.addEventListener("pause", playerSyncButtons);
+    a.addEventListener("ended", () => playerNext());
+    a.addEventListener("error", () => { if (plOpen) toast("Не вдалося завантажити трек. Спробуй інший", "warn"); });
+    a.volume = 0.8;
+  }
+  function playerLoad(i, autoplay) {
+    const list = C.PLAYLIST;
+    plIndex = (i + list.length) % list.length;
+    const a = audioEl();
+    a.src = list[plIndex].url;
+    a.load();
+    if (autoplay) a.play().catch(() => {});
+    playerRender();
+  }
+  function playerOpen() {
+    playerInitOnce();
+    plOpen = true;
+    const a = audioEl();
+    if (!a.src) playerLoad(plIndex, true);
+    else { playerRender(); if (a.paused) a.play().catch(() => {}); }
+    $("#player").classList.remove("hidden");
+  }
+  function playerClose() {
+    const a = audioEl(); a.pause();
+    plOpen = false;
+    $("#player").classList.add("hidden");
+  }
+  function playerToggle() {
+    const a = audioEl();
+    if (a.paused) a.play().catch(() => {}); else a.pause();
+  }
+  function playerNext() { playerLoad(plIndex + 1, true); }
+  function playerPrev() {
+    const a = audioEl();
+    if (a.currentTime > 3) { a.currentTime = 0; return; }
+    playerLoad(plIndex - 1, true);
+  }
+  function playerRender() {
+    const t = C.PLAYLIST[plIndex];
+    const a = audioEl();
+    const playing = !a.paused;
+    $("#player").innerHTML = `
+      <div class="pl-info">
+        <div class="pl-art">♪</div>
+        <div class="pl-meta">
+          <div class="pl-title" id="pl-title">${esc(t.title)}</div>
+          <div class="pl-artist">${esc(t.artist)} · ${plIndex + 1}/${C.PLAYLIST.length}</div>
+        </div>
+        <button class="pl-x" id="pl-close" title="Сховати">×</button>
+      </div>
+      <div class="pl-seek">
+        <span id="pl-cur">0:00</span>
+        <input type="range" id="pl-progress" min="0" max="100" value="0" step="0.1">
+        <span id="pl-dur">0:00</span>
+      </div>
+      <div class="pl-controls">
+        <button class="pl-btn" id="pl-prev" title="Попередній">‹</button>
+        <button class="pl-btn pl-play" id="pl-play" title="Грати / пауза">${playing ? "⏸" : "▶"}</button>
+        <button class="pl-btn" id="pl-next" title="Наступний">›</button>
+        <div class="pl-vol">
+          <span>Vol</span>
+          <input type="range" id="pl-volume" min="0" max="1" step="0.01" value="${a.volume}">
+        </div>
+      </div>
+      <div class="pl-list-title">Плейлист</div>
+      <div class="pl-list" id="pl-list">
+        ${C.PLAYLIST.map((track, i) => `
+          <button class="pl-track ${i === plIndex ? "active" : ""}" data-track="${i}">
+            <span class="pl-track-num">${String(i + 1).padStart(2, "0")}</span>
+            <span class="pl-track-main">
+              <b>${esc(track.title)}</b>
+              <small>${esc(track.artist)}</small>
+            </span>
+            <span class="pl-track-state">${i === plIndex && playing ? "Грає" : "Увімкнути"}</span>
+          </button>`).join("")}
+      </div>`;
+    $("#pl-close").onclick = playerClose;
+    $("#pl-play").onclick = playerToggle;
+    $("#pl-prev").onclick = playerPrev;
+    $("#pl-next").onclick = playerNext;
+    $$(".pl-track", $("#player")).forEach(b => b.onclick = () => playerLoad(+b.dataset.track, true));
+    const prog = $("#pl-progress");
+    prog.oninput = () => { if (a.duration) a.currentTime = (prog.value / 100) * a.duration; };
+    $("#pl-volume").oninput = (e) => { a.volume = +e.target.value; };
+    playerSync();
+  }
+  function playerSync() {
+    if (!plOpen) return;
+    const a = audioEl();
+    const cur = $("#pl-cur"), dur = $("#pl-dur"), prog = $("#pl-progress");
+    if (cur) cur.textContent = fmtTime(a.currentTime);
+    if (dur) dur.textContent = fmtTime(a.duration);
+    if (prog && a.duration) prog.value = (a.currentTime / a.duration) * 100;
+    playerSyncButtons();
+  }
+  function playerSyncButtons() {
+    const btn = $("#pl-play");
+    if (btn) btn.textContent = audioEl().paused ? "▶" : "⏸";
+    const state = $(".pl-track.active .pl-track-state");
+    if (state) state.textContent = audioEl().paused ? "Увімкнути" : "Грає";
   }
   function refreshSongBar() {
     const bar = $("#song-bar");
@@ -272,6 +496,7 @@
       if (b.dataset.route === "sos") { startCalm("quick"); return; }
       go(b.dataset.route);
     });
+    genderizeDOM(nav);
 
     const p = S.state.profile;
     const initials = (p.name || p.email || "?").trim().charAt(0).toUpperCase();
@@ -382,6 +607,102 @@
     return `<div class="empty"><div class="em-ico">${icon}</div><div>${esc(text)}</div></div>`;
   }
 
+  function wellbeingLabel(level) {
+    if (level >= 8) return "дуже тривожно";
+    if (level >= 7) return "висока тривога";
+    if (level >= 5) return "помірна напруга";
+    if (level >= 3) return "спокійніше за середнє";
+    return "спокійно";
+  }
+
+  function homeWellbeingCard() {
+    const today = S.todayWellbeing();
+    const level = today ? today.level : null;
+    const song = currentSongText();
+    const scale = Array.from({ length: 10 }, (_, i) => {
+      const v = i + 1;
+      return `<button class="well-btn ${level === v ? "sel" : ""}" data-well="${v}">${v}</button>`;
+    }).join("");
+    let recommendation = `
+      <div class="well-result muted">
+        Обери число: <b>1</b> — майже спокійно, <b>10</b> — дуже тривожно. Це не тест, а коротка перевірка стану.
+      </div>`;
+
+    if (level != null && level >= 7) {
+      recommendation = `
+        <div class="well-result high">
+          <b>Схоже, напруга зараз висока.</b>
+          <p>Не потрібно розбирати все одразу. Спершу стабілізуй нервову систему, а потім можна пройти м'який тест про тип тривоги.</p>
+          <div class="row" style="gap:8px;margin-top:10px">
+            <button class="btn btn-primary btn-sm" id="well-types">Перейти до тестів</button>
+            <button class="btn btn-ghost btn-sm" id="well-sos">SOS-заспокоєння</button>
+          </div>
+        </div>`;
+    } else if (level != null && level <= 4) {
+      recommendation = `
+        <div class="well-result calm">
+          <b>Сьогодні стан досить спокійний.</b>
+          <p>Увімкни музику, яка піднімає настрій, і зафіксуй щось приємне. Гарний день можна зробити ще кращим маленькими теплими ситуаціями — це стане опорою проти майбутніх тривог.</p>
+          <div class="song-mini">
+            <span>Рекомендація:</span><b>${esc(song)}</b>
+            <button class="btn btn-ghost btn-sm" id="well-player">Плеєр</button>
+          </div>
+          <div class="row" style="gap:8px;margin-top:10px">
+            <input id="good-home-input" class="quick-input" placeholder="Що приємного або цікавого сьогодні сталося?" />
+            <button class="btn btn-primary btn-sm" id="good-home-save">Зберегти</button>
+          </div>
+        </div>`;
+    } else if (level != null) {
+      recommendation = `
+        <div class="well-result mid">
+          <b>Стан середній: ${esc(wellbeingLabel(level))}.</b>
+          <p>Можна обрати один маленький крок: записати думку, увімкнути плеєр або зберегти приємну подію дня.</p>
+          <div class="row" style="gap:8px;margin-top:10px">
+            <input id="good-home-input" class="quick-input" placeholder="Маленька хороша подія сьогодні..." />
+            <button class="btn btn-primary btn-sm" id="good-home-save">Зберегти</button>
+            <button class="btn btn-ghost btn-sm" id="well-player">Плеєр</button>
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="card wellbeing-card">
+        <div class="row spread" style="align-items:flex-start;gap:12px">
+          <div>
+            <div class="card-title" style="margin:0">Як ти зараз почуваєшся?</div>
+            <p class="muted" style="margin:6px 0 0">Коротко відміть рівень тривоги перед будь-якими практиками.</p>
+          </div>
+          ${level != null ? `<span class="pill ${level >= 7 ? "pill-red" : level <= 4 ? "pill-green" : "pill-warn"}">${level}/10 · ${esc(wellbeingLabel(level))}</span>` : ""}
+        </div>
+        <div class="well-scale" style="margin-top:14px">${scale}</div>
+        ${recommendation}
+        <div class="row" style="justify-content:flex-end;margin-top:12px">
+          <button class="btn btn-ghost btn-sm" id="well-good">Хороші події та календар</button>
+        </div>
+      </div>`;
+  }
+
+  function wireWellbeingCard() {
+    $$(".well-btn", $("#view")).forEach(b => b.onclick = () => {
+      S.setWellbeing(+b.dataset.well);
+      render();
+    });
+    const types = $("#well-types"); if (types) types.onclick = () => go("types");
+    const sos = $("#well-sos"); if (sos) sos.onclick = () => startCalm("quick");
+    const player = $("#well-player"); if (player) player.onclick = playerOpen;
+    const good = $("#well-good"); if (good) good.onclick = () => go("good");
+    const save = $("#good-home-save");
+    if (save) save.onclick = () => {
+      const input = $("#good-home-input");
+      const text = input.value.trim();
+      if (!text) { toast("Напиши хоча б одну приємну подію", "warn"); return; }
+      S.addGoodEvent(text);
+      input.value = "";
+      toast("Збережено в хороші події 🙂", "good");
+      render();
+    };
+  }
+
   /* ===================== ГОЛОВНА ===================== */
   function viewHome() {
     const streak = computeStreak();
@@ -392,7 +713,7 @@
     // Червоний прапорець
     if (checkRedFlag() && S.state.settings.dismissedRedFlag !== todayKey()) {
       banners += `<div class="banner banner-red">
-        <div class="b-ico">💗</div>
+        <div class="b-ico">!</div>
         <div style="flex:1"><b>Ти проходиш складний період</b>
         <p>Останні дні рівень тривоги високий. Можливо, зараз тобі допоможе підтримка психолога або близької людини. Ти не сама.</p></div>
         <button class="btn btn-sm btn-ghost" id="dismiss-red">Зрозуміло</button>
@@ -403,21 +724,21 @@
     if (litJoys.length) {
       const jl = litJoys.map(j => j.text).join(" або ");
       banners += `<div class="banner banner-violet">
-        <div class="b-ico">🌈</div>
+        <div class="b-ico">◇</div>
         <div style="flex:1"><b>Маленька радість на сьогодні</b><p>Колись тебе тішило <b>${esc(jl)}</b>. Може, варто повернутися до цього сьогодні?</p></div>
         <button class="btn btn-sm btn-ghost" data-route="joys">Мої радощі</button>
       </div>`;
     } else if (ranking.length) {
       const list = ranking.slice(0, 2).map(r => r.name).join(" та ");
       banners += `<div class="banner banner-violet">
-        <div class="b-ico">💡</div>
+        <div class="b-ico">i</div>
         <div><b>Нагадування</b><p>У минулому тобі допомагало <b>${esc(list)}</b>. Спробуй це знову.</p></div>
       </div>`;
     }
 
     const reminderCard = pend.length ? `
       <div class="banner banner-warn">
-        <div class="b-ico">🔔</div>
+        <div class="b-ico">!</div>
         <div style="flex:1"><b>Час повернутися до ${pend.length} ${pluralUk(pend.length,"запису","записів","записів")}</b>
         <p>Настав день відкриття. Перевір, чи справдилися твої страхи.</p></div>
         <button class="btn btn-sm btn-primary" data-route="reminders">Відкрити</button>
@@ -429,57 +750,59 @@
 
     $("#view").innerHTML = `
       <div class="welcome">
-        <h1>Привіт 🌿</h1>
+        <h1>Привіт</h1>
         <p>Тут не потрібно бути сильною чи ідеальною.<br>Зроби один маленький крок до себе.</p>
       </div>
       ${banners}
       ${reminderCard}
+      ${homeWellbeingCard()}
 
       <button class="sos-button" id="sos-btn">
-        <span class="sos-ico">🆘</span>
+        <span class="sos-ico">SOS</span>
         <span class="sos-text"><b>SOS: мені зараз тривожно</b><span>Дихання, заземлення та підтримка — прямо зараз</span></span>
       </button>
 
       <div class="home-actions two">
         <button class="big-action act-calm" id="act-calm">
-          <span class="ba-ico">🫧</span>
+          <span class="ba-ico">01</span>
           <span class="ba-title">Мені тривожно</span>
           <span class="ba-sub">Спокійно розберемося й повернемося до життя</span>
         </button>
         <button class="big-action act-new" id="act-new">
-          <span class="ba-ico">✍️</span>
+          <span class="ba-ico">+</span>
           <span class="ba-title">Новий запис</span>
           <span class="ba-sub">Записати думку чи лист собі</span>
         </button>
       </div>
 
       <div class="grid grid-2" style="margin-top:16px">
-        <div class="stat streak-stat"><div class="s-ico">🔥</div><div class="s-val">${streak}</div><div class="s-lbl">${pluralUk(streak,"день поспіль","дні поспіль","днів поспіль")}</div></div>
+        <div class="stat streak-stat"><div class="s-ico">↑</div><div class="s-val">${streak}</div><div class="s-lbl">${pluralUk(streak,"день поспіль","дні поспіль","днів поспіль")}</div></div>
         <div class="card aff-card">
-          <div class="card-title">🌟 Афірмація дня</div>
+          <div class="card-title">Афірмація дня</div>
           <p id="aff-text" class="aff-text">${esc(shownAff)}</p>
           <div class="row">
             <button class="btn btn-primary btn-sm" id="next-aff">↻ Інша</button>
-            <button class="btn btn-ghost btn-sm" id="save-aff">💝 Зберегти</button>
+            <button class="btn btn-ghost btn-sm" id="save-aff">Зберегти</button>
           </div>
         </div>
       </div>
 
       <div class="card joys-card" id="joys-card" style="margin-top:16px">
         <div class="row spread">
-          <div class="card-title" style="margin:0">🌈 Мої маленькі радощі</div>
+          <div class="card-title" style="margin:0">Мої маленькі радощі</div>
           <span class="faint">${litCount}</span>
         </div>
         <p class="muted" style="margin:8px 0 0">Збережи те, що тебе тішить — книги, фільми, музику, прогулянки, хобі. Я нагадуватиму про це.</p>
       </div>
 
       <div class="more-grid" style="margin-top:16px">
-        <button class="more-link" id="more-guide"><span>📖</span>Інструкція</button>
-        <button class="more-link" data-route="types"><span>🧭</span>Типи тривоги</button>
-        <button class="more-link" data-route="analytics"><span>📈</span>Мій прогрес</button>
-        <button class="more-link" data-route="treasure"><span>💝</span>Скарбничка</button>
-        <button class="more-link" data-route="library"><span>📚</span>Бібліотека</button>
-        <button class="more-link" data-route="achievements"><span>🏆</span>Прогрес</button>
+        <button class="more-link" id="more-guide"><span>?</span>Інструкція</button>
+        <button class="more-link" data-route="types"><span>⌁</span>Типи тривоги</button>
+        <button class="more-link" data-route="analytics"><span>∿</span>Мій прогрес</button>
+        <button class="more-link" data-route="good"><span>☺</span>Хороші події</button>
+        <button class="more-link" data-route="treasure"><span>□</span>Скарбничка</button>
+        <button class="more-link" data-route="library"><span>§</span>Бібліотека</button>
+        <button class="more-link" data-route="achievements"><span>↑</span>Прогрес</button>
       </div>
     `;
 
@@ -489,6 +812,7 @@
     $("#act-new").onclick = () => go("new");
     $("#joys-card").onclick = () => go("joys");
     $("#more-guide").onclick = openGuide;
+    wireWellbeingCard();
     const dr = $("#dismiss-red"); if (dr) dr.onclick = () => { S.state.settings.dismissedRedFlag = todayKey(); S.save(); render(); };
 
     const affEl = $("#aff-text");
@@ -519,30 +843,49 @@
     $$("[data-type]", $("#view")).forEach(b => b.onclick = () => go("typeTest", b.dataset.type));
   }
 
-  /* Заспокійливий тест за типом: кожен варіант дає пораду, що заспокоює */
+  /* Заспокійливий тест за типом: кожен варіант дає пораду, що заспокоює.
+     Кроки оновлюються «на місці» (без перемальовування всієї сторінки) — без мерехтіння. */
   let testState = null;
   function viewTypeTest() {
     const type = C.ANXIETY_TYPES.find(t => t.id === routeParam);
     if (!type) { go("types"); return; }
-    // ініціалізація стану під поточний тип
     if (!testState || testState.typeId !== type.id) testState = { typeId: type.id, step: 0, picked: null };
-
-    const total = type.questions.length;
-    const step = testState.step;
-
-    if (step >= total) {
-      if (!testState.friendDone) { renderFriendStep(type); return; }
-      renderTestOutro(type); return;
-    }
-
-    const q = type.questions[step];
-    const picked = testState.picked;
-
     $("#view").innerHTML = `
       <button class="btn btn-ghost btn-sm" id="tt-back">← До типів</button>
-      <div class="page-head" style="margin-top:14px"><h1>${type.icon} ${esc(type.title)}</h1>
-        <p>${step === 0 ? esc(type.intro) : "Дихай спокійно. Кожна відповідь — це турбота про себе."}</p></div>
+      <div id="tt-stage" class="tt-stage" style="margin-top:14px"></div>`;
+    $("#tt-back").onclick = () => { testState = null; go("types"); };
+    paintType(type, false);
+  }
 
+  // Оновлення лише сцени тесту з плавним переходом
+  function paintType(type, animate) {
+    const stage = $("#tt-stage"); if (!stage) return;
+    const total = type.questions.length;
+    const step = testState.step;
+    let html, wire;
+    if (step >= total) {
+      if (!testState.friendDone) { html = friendStepHTML(type); wire = () => wireFriendStep(type); }
+      else { html = testOutroHTML(type); wire = () => wireTestOutro(type); }
+    } else {
+      html = testStepHTML(type, step); wire = () => wireTestStep(type, step);
+    }
+    const apply = () => {
+      stage.innerHTML = html;
+      wire();
+      genderizeDOM(stage);
+      stage.style.opacity = "1";
+    };
+    if (animate) { stage.style.opacity = "0"; setTimeout(apply, 140); }
+    else apply();
+  }
+
+  function testStepHTML(type, step) {
+    const total = type.questions.length;
+    const q = type.questions[step];
+    const picked = testState.picked;
+    return `
+      <div class="page-head"><h1>${type.icon} ${esc(type.title)}</h1>
+        <p>${step === 0 ? esc(type.intro) : "Дихай спокійно. Кожна відповідь — це турбота про себе."}</p></div>
       <div class="card">
         <div class="row spread" style="margin-bottom:6px"><span class="faint">Питання ${step + 1} з ${total}</span></div>
         <div class="bar" style="margin-bottom:16px"><i style="width:${Math.round((step) / total * 100)}%"></i></div>
@@ -560,21 +903,22 @@
         </div>
       </div>
       ${type.id === "finances" && step === 0 ? financeToolkitHTML() : ""}`;
+  }
 
-    if (type.id === "finances" && step === 0) wireFinanceToolkit($("#view"));
-    $("#tt-back").onclick = () => { testState = null; go("types"); };
-    $("#tt-prev").onclick = () => { if (testState.step > 0) { testState.step--; testState.picked = null; render(); } };
+  function wireTestStep(type, step) {
+    const q = type.questions[step];
+    if (type.id === "finances" && step === 0) wireFinanceToolkit($("#tt-stage"));
+    $("#tt-prev").onclick = () => { if (testState.step > 0) { testState.step--; testState.picked = null; paintType(type, true); } };
     $("#tt-next").onclick = () => {
       if (testState.picked == null) return;
-      testState.step++; testState.picked = null; render();
+      testState.step++; testState.picked = null; paintType(type, true);
     };
-    $$("[data-opt]", $("#view")).forEach(b => b.onclick = () => {
+    $$("[data-opt]", $("#tt-stage")).forEach(b => b.onclick = () => {
       testState.picked = +b.dataset.opt;
-      // оновлюємо лише виділення та пораду без повного перемальовування
-      $$(".opt", $("#view")).forEach(x => x.classList.remove("sel"));
+      $$(".opt", $("#tt-stage")).forEach(x => x.classList.remove("sel"));
       b.classList.add("sel");
-      $("#tt-advice").innerHTML = adviceCard(q.options[testState.picked].advice);
-      const nx = $("#tt-next"); nx.disabled = false;
+      const adv = $("#tt-advice"); adv.innerHTML = adviceCard(q.options[testState.picked].advice); genderizeDOM(adv);
+      $("#tt-next").disabled = false;
     });
   }
 
@@ -583,9 +927,9 @@
   }
 
   // Питання про подругу після кожного тесту + повернення підтримки собі
-  function renderFriendStep(type) {
+  function friendStepHTML(type) {
     const revealed = !!testState.friendRevealed;
-    $("#view").innerHTML = `
+    return `
       <div class="page-head"><h1>${type.icon} Останній крок 🤍</h1>
         <p>Іноді найдобріші слова ми бережемо для інших. Спробуймо інакше.</p></div>
       <div class="card">
@@ -599,21 +943,20 @@
             : `<button class="btn btn-primary" id="friend-reveal">Готово</button>`}
         </div>
       </div>`;
+  }
+  function wireFriendStep(type) {
     const ta = $("#friend-answer");
     ta.oninput = () => { testState.friendAnswer = ta.value; };
-    $("#friend-skip").onclick = () => { testState.friendDone = true; render(); };
-    if (revealed) {
-      $("#friend-go").onclick = () => { testState.friendDone = true; render(); };
-    } else {
-      $("#friend-reveal").onclick = () => { testState.friendRevealed = true; render(); };
-    }
+    $("#friend-skip").onclick = () => { testState.friendDone = true; paintType(type, true); };
+    if (testState.friendRevealed) $("#friend-go").onclick = () => { testState.friendDone = true; paintType(type, true); };
+    else $("#friend-reveal").onclick = () => { testState.friendRevealed = true; paintType(type, true); };
   }
 
-  function renderTestOutro(type) {
+  function testOutroHTML(type) {
     const aff = C.AFFIRMATIONS[Math.floor(Math.random() * C.AFFIRMATIONS.length)];
-    $("#view").innerHTML = `
+    return `
       <div class="page-head"><h1>${type.icon} Ти молодець 🤍</h1></div>
-      <div class="card" style="background:linear-gradient(135deg,#2fae8e,#5cc9aa);color:#fff;border:none">
+      <div class="card" style="background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;border:none">
         <p style="font-size:22px;line-height:1.5;margin:0 0 14px;font-family:var(--font-hand)">${esc(type.outro)}</p>
         <p style="opacity:.92;margin:0;font-size:16px">Афірмація для тебе: «${esc(aff)}»</p>
       </div>
@@ -622,7 +965,7 @@
           <div class="stack">
             <button class="btn btn-accent btn-block" id="o-crisis">🫁 Дихальна вправа та заземлення</button>
             <button class="btn btn-ghost btn-block" id="o-save">💝 Зберегти ці слова у скарбничку</button>
-            <button class="btn btn-ghost btn-block" id="o-entry">✍️ Записати, що відчуваю зараз</button>
+            <button class="btn btn-ghost btn-block" id="o-entry">Записати, що відчуваю зараз</button>
           </div>
         </div>
         <div class="card"><div class="card-title">Що далі?</div>
@@ -634,24 +977,26 @@
         </div>
       </div>
       ${type.id === "finances" ? financeToolkitHTML() : ""}`;
+  }
+  function wireTestOutro(type) {
     $("#o-crisis").onclick = () => openCrisis();
     $("#o-save").onclick = () => { S.addTreasure({ type: "affirmation", content: type.outro }); toast("Додано у скарбничку 💝", "good"); };
     $("#o-entry").onclick = () => { testState = null; go("new"); };
-    $("#o-again").onclick = () => { testState = { typeId: type.id, step: 0, picked: null }; render(); };
+    $("#o-again").onclick = () => { testState = { typeId: type.id, step: 0, picked: null }; paintType(type, true); };
     $("#o-types").onclick = () => { testState = null; go("types"); };
-    if (type.id === "finances") wireFinanceToolkit($("#view"));
+    if (type.id === "finances") wireFinanceToolkit($("#tt-stage"));
   }
 
   /* ===================== ФІНАНСОВИЙ НАБІР ===================== */
   function financeToolkitHTML() {
     return `
       <div class="card fin-toolkit">
-        <div class="card-title">🌊 Фінансовий потік</div>
+        <div class="card-title">Фінансовий потік</div>
         <p class="muted" style="margin:-4px 0 14px">Перемкни фокус зі страху нестачі на спокій і можливості.</p>
         <div class="fin-grid">
-          <button class="fin-btn fin-flow" data-fin="mindset"><span class="fin-ico">🌊</span><b>Тест грошового потоку</b><span>Перенаправ думки на вищий рівень</span></button>
-          <button class="fin-btn" data-fin="aff"><span class="fin-ico">💸</span><b>Грошові афірмації</b><span>Заземлення та достаток</span></button>
-          <button class="fin-btn" data-fin="tips"><span class="fin-ico">📚</span><b>Що реально працює</b><span>Поради психологів і фінансистів</span></button>
+          <button class="fin-btn fin-flow" data-fin="mindset"><span class="fin-ico">01</span><b>Тест грошового потоку</b><span>Перенаправ думки на вищий рівень</span></button>
+          <button class="fin-btn" data-fin="aff"><span class="fin-ico">02</span><b>Грошові афірмації</b><span>Заземлення та достаток</span></button>
+          <button class="fin-btn" data-fin="tips"><span class="fin-ico">03</span><b>Що реально працює</b><span>Поради психологів і фінансистів</span></button>
         </div>
       </div>`;
   }
@@ -1017,7 +1362,7 @@
     { v: "affirmation", label: "Афірмація", icon: "🌟" },
     { v: "photo", label: "Фото моменту", icon: "📷" },
     { v: "achievement", label: "Досягнення", icon: "🏅" },
-    { v: "message", label: "Тепле повідомлення", icon: "💌" },
+    { v: "message", label: "Тепле повідомлення", icon: "✉" },
     { v: "memory", label: "Спогад", icon: "🌈" },
     { v: "victory", label: "Перемога над тривогою", icon: "🏆" }
   ];
@@ -1120,6 +1465,7 @@
       </div>`;
     ov.classList.remove("hidden");
     document.body.style.overflow = "hidden";
+    genderizeDOM(ov);
 
     // 5-4-3-2-1
     $$(".g-step", ov).forEach(s => s.onclick = () => s.classList.toggle("done"));
@@ -1166,7 +1512,7 @@
 
     $("#view").innerHTML = `
       <button class="btn btn-ghost btn-sm" id="j-back">← На головну</button>
-      <div class="page-head" style="margin-top:14px"><h1>🌈 Мої маленькі радощі</h1>
+      <div class="page-head" style="margin-top:14px"><h1>Мої маленькі радощі</h1>
         <p>Збери тут те, що тебе тішить. Я час від часу нагадуватиму — щоб ти не забувала про себе.</p></div>
 
       <div class="card">
@@ -1216,11 +1562,102 @@
     $$("[data-del]", list).forEach(b => b.onclick = () => { S.removeLittleJoy(b.dataset.del); render(); });
   }
 
+  /* ===================== ХОРОШІ ПОДІЇ + КАЛЕНДАР ===================== */
+  function dayKeyLocal(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function calendarMark(dayKey) {
+    const w = (S.state.wellbeing || {})[dayKey];
+    const hasGood = (S.state.goodEvents || []).some(e => e.dayKey === dayKey);
+    if (w && w.level >= 7) return { mark: "😟", cls: "anxious", title: "Тривожний день" };
+    if (hasGood || (w && w.level <= 4)) return { mark: "🙂", cls: "good", title: "Хороший / спокійний день" };
+    return { mark: "", cls: "", title: "" };
+  }
+
+  function goodCalendarHTML(date = new Date()) {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const first = new Date(year, month, 1);
+    const days = new Date(year, month + 1, 0).getDate();
+    const start = (first.getDay() + 6) % 7; // понеділок перший
+    const cells = [];
+    for (let i = 0; i < start; i++) cells.push(`<div class="cal-cell empty"></div>`);
+    for (let d = 1; d <= days; d++) {
+      const key = dayKeyLocal(new Date(year, month, d));
+      const m = calendarMark(key);
+      const count = (S.state.goodEvents || []).filter(e => e.dayKey === key).length;
+      cells.push(`<div class="cal-cell ${m.cls}" title="${esc(m.title)}">
+        <span class="cal-day">${d}</span>
+        ${m.mark ? `<span class="cal-face">${m.mark}</span>` : ""}
+        ${count ? `<span class="cal-count">${count}</span>` : ""}
+      </div>`);
+    }
+    return `
+      <div class="good-calendar">
+        <div class="row spread">
+          <div class="card-title" style="margin:0">${MONTHS[month]} ${year}</div>
+          <div class="cal-legend"><span>🙂 хороший/спокійний</span><span>😟 тривожний</span></div>
+        </div>
+        <div class="cal-weekdays"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Нд</span></div>
+        <div class="cal-grid">${cells.join("")}</div>
+      </div>`;
+  }
+
+  function viewGoodEvents() {
+    const events = S.state.goodEvents || [];
+    const today = S.todayWellbeing();
+    $("#view").innerHTML = `
+      <div class="page-head"><h1>Хороші події</h1>
+        <p>Це твоя колекція приємних фактів. У тривожні періоди вона нагадує: хороше теж стається, навіть якщо мозок тимчасово фокусується на загрозах.</p></div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="card-title">Додати подію сьогодні</div>
+          <p class="muted">Якщо день гарний — зроби його ще кращим: поміть маленьку приємність, цікаву розмову, добрий жест, смачну каву, прогулянку чи будь-яку теплу деталь.</p>
+          <label class="field" style="margin-top:12px"><span>Що приємного або цікавого сталося?</span>
+            <textarea id="good-text" rows="3" placeholder="Наприклад: була гарна прогулянка, добре поговорила, почула класну пісню..."></textarea></label>
+          <div class="row" style="justify-content:space-between;margin-top:12px;gap:10px">
+            ${today ? `<span class="pill ${today.level >= 7 ? "pill-red" : today.level <= 4 ? "pill-green" : "pill-warn"}">Самопочуття: ${today.level}/10</span>` : `<span class="faint">Сьогодні ще немає оцінки самопочуття</span>`}
+            <button class="btn btn-primary btn-sm" id="good-save">Зберегти</button>
+          </div>
+        </div>
+        <div class="card">${goodCalendarHTML()}</div>
+      </div>
+
+      <h2 class="section-title">Усі хороші події (${events.length})</h2>
+      <div class="stack" id="good-list">
+        ${events.length ? events.map(e => `
+          <div class="item">
+            <div class="item-head">
+              <span class="pill pill-green">${fmtDate(e.date)}</span>
+              <button class="btn btn-ghost btn-sm" data-del-good="${e.id}">Прибрати</button>
+            </div>
+            <div class="item-body">${esc(e.text)}</div>
+          </div>`).join("") : emptyBlock("🙂", "Поки порожньо. Додай першу хорошу подію — навіть зовсім маленьку.")}
+      </div>`;
+
+    $("#good-save").onclick = () => {
+      const text = $("#good-text").value.trim();
+      if (!text) { toast("Опиши приємну подію", "warn"); return; }
+      S.addGoodEvent(text);
+      toast("Хорошу подію збережено 🙂", "good");
+      render();
+    };
+    $$("[data-del-good]", $("#view")).forEach(b => b.onclick = () => {
+      S.removeGoodEvent(b.dataset.delGood);
+      render();
+    });
+  }
+
   /* ===================== ПРАКТИКА «ПОРАДА ПОДРУЗІ» ===================== */
   function viewFriendPractice() {
     const notes = S.state.friendNotes || [];
     $("#view").innerHTML = `
-      <div class="page-head"><h1>💌 Якби це сталося у моєї кращої подруги</h1>
+      <div class="page-head"><h1>Якби це сталося у моєї кращої подруги</h1>
         <p>Ми часто буваємо добрішими до інших, ніж до себе. Опиши ситуацію збоку — і подаруй собі ту саму підтримку.</p></div>
 
       <div class="card">
@@ -1257,7 +1694,7 @@
 
     const list = $("#fp-list");
     if (!notes.length) {
-      list.innerHTML = emptyBlock("💌", "Поки порожньо. Спробуй поглянути на свою ситуацію очима доброї подруги.");
+      list.innerHTML = emptyBlock("✉", "Поки порожньо. Спробуй поглянути на свою ситуацію очима доброї подруги.");
       return;
     }
     list.innerHTML = `<h2 class="section-title">Мої поради собі (${notes.length})</h2>` + notes.map(n => `
@@ -1318,6 +1755,7 @@
       if (opts.confirmClose) confirmModal("Завершити раніше?", "Прогрес цього проходження не збережеться.", closeCalm, "Вийти");
       else closeCalm();
     };
+    genderizeDOM($("#calm-overlay"));
   }
 
   function renderCalm() {
@@ -1713,7 +2151,7 @@
     const letters = e.filter(x => x.type === "letter");
     const reviewed = e.filter(x => x.reviewed && x.review);
     $("#view").innerHTML = `
-      <div class="page-head"><h1>📜 Моя історія</h1><p>Усі твої записи в одному місці.</p></div>
+      <div class="page-head"><h1>Моя історія</h1><p>Усі твої записи в одному місці.</p></div>
       <div class="chip-row" id="hist-tabs" style="margin-bottom:16px">
         <button class="chip sel" data-tab="diary">📓 Щоденник (${diary.length})</button>
         <button class="chip" data-tab="letters">✉️ Листи (${letters.length})</button>
@@ -1800,8 +2238,15 @@
 
       <div class="card">
         <div class="card-title">👤 Обліковий запис</div>
-        <div class="row"><div class="user-avatar" style="width:48px;height:48px;font-size:20px">${esc((p.name||p.email||"?").charAt(0).toUpperCase())}</div>
+        <div class="row">${p.picture ? `<img src="${esc(p.picture)}" alt="" style="width:48px;height:48px;border-radius:50%">` : `<div class="user-avatar" style="width:48px;height:48px;font-size:20px">${esc((p.name||p.email||"?").charAt(0).toUpperCase())}</div>`}
         <div><b>${esc(p.name||"Користувач")}</b><div class="faint">${esc(p.email)} · вхід через ${p.provider==="google"?"Google":"Email"}</div></div></div>
+        <div class="row" style="margin-top:12px;align-items:center;gap:10px">
+          <span class="faint">Стать:</span>
+          <div class="gender-pick" id="prof-gender" style="flex:0 0 auto">
+            <button type="button" class="gender-opt ${p.gender==="female"?"sel":""}" data-g="female"><span class="gender-symbol">♀</span> Жінка</button>
+            <button type="button" class="gender-opt ${p.gender==="male"?"sel":""}" data-g="male"><span class="gender-symbol">♂</span> Чоловік</button>
+          </div>
+        </div>
       </div>
 
       <div class="card">
@@ -1817,9 +2262,24 @@
       </div>
 
       <div class="card">
+        <div class="card-title">☁️ Резервне хмарне збереження</div>
+        ${CLOUD.endpoint ? `
+          <p class="muted">Збережи копію в хмару, щоб записи не зникли при зміні телефону чи очищенні браузера.</p>
+          <div class="row">
+            <button class="btn btn-primary btn-sm" id="cloud-save">☁️ Зберегти в хмару</button>
+            <button class="btn btn-ghost btn-sm" id="cloud-load">⬇️ Відновити з хмари</button>
+          </div>` : `
+          <p class="muted">Зараз дані зберігаються локально на цьому пристрої. Найнадійніший спосіб не втратити записи — час від часу робити <b>резервну копію (JSON)</b> вище і зберігати її в Google Drive, на пошті чи в месенджері. На новому пристрої просто зроби «Імпорт».</p>
+          <p class="muted" style="margin-top:8px">Можна підключити автоматичну хмару (Google, Supabase чи власний сервер) — для цього у файлі <b>js/app.js</b> заповни налаштування <b>CLOUD.endpoint</b>. Після цього тут з'являться кнопки синхронізації.</p>`}
+      </div>
+
+      <div class="card">
         <div class="card-title">🧪 Тест тривожності</div>
-        <p class="muted">Періодично проходьте короткий тест, щоб бачити динаміку.</p>
-        <button class="btn btn-primary btn-sm" id="do-test">Пройти тест зараз</button>
+        <p class="muted">Періодично проходь короткий тест, щоб бачити динаміку. Пройдено разів: <b>${(S.state.tests||[]).length}</b>.</p>
+        <div class="row">
+          <button class="btn btn-primary btn-sm" id="do-test">Пройти тест зараз</button>
+          <button class="btn btn-ghost btn-sm" id="see-tests">📊 Результати тестів</button>
+        </div>
       </div>
 
       <div class="card">
@@ -1847,10 +2307,44 @@
       reader.readAsText(file);
     };
     $("#do-test").onclick = startTest;
+    $("#see-tests").onclick = openTestHistory;
+    if (CLOUD.endpoint) {
+      $("#cloud-save").onclick = cloudSave;
+      $("#cloud-load").onclick = () => confirmModal("Відновити з хмари?", "Поточні дані буде замінено копією з хмари.", cloudLoad, "Відновити");
+    }
+    $$("#prof-gender .gender-opt").forEach(b => b.onclick = () => {
+      S.setGender(b.dataset.g);
+      toast("Збережено 🌿", "good");
+      render();
+    });
     $("#logout").onclick = () => confirmModal("Вийти з акаунта?", "Твої дані залишаться збереженими на цьому пристрої.", () => { S.logout(); location.reload(); });
     $("#del-all").onclick = () => confirmModal("Видалити ВСІ дані?", "Це назавжди видалить твій профіль і всі записи з цього пристрою. Дію не можна скасувати. Бажаєш спершу зробити резервну копію?", () => {
       S.deleteAllData(); location.reload();
     }, "Видалити назавжди", true);
+  }
+
+  async function cloudSave() {
+    if (!CLOUD.endpoint) return;
+    try {
+      const res = await fetch(CLOUD.endpoint, {
+        method: "PUT",
+        headers: Object.assign({ "Content-Type": "application/json" }, CLOUD.headers || {}),
+        body: S.exportJSON()
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      toast("Збережено в хмару ☁️", "good");
+    } catch (e) { toast("Помилка хмари: " + e.message, "warn"); }
+  }
+  async function cloudLoad() {
+    if (!CLOUD.endpoint) return;
+    try {
+      const res = await fetch(CLOUD.endpoint, { headers: CLOUD.headers || {} });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const text = await res.text();
+      S.importJSON(text);
+      toast("Відновлено з хмари ✅", "good");
+      go("home");
+    } catch (e) { toast("Помилка хмари: " + e.message, "warn"); }
   }
 
   function downloadFile(name, content, type) {
@@ -1907,13 +2401,57 @@
       const sv = $("#test-save"); if (sv) sv.onclick = () => {
         const score = ans.reduce((s, x) => s + x, 0);
         const res = C.TEST.interpret(score);
-        S.addTest(score);
-        closeModal();
-        toast(`Тест завершено: ${score} балів — ${res.level}`, "good", 5000);
-        if (route === "analytics" || route === "profile") render();
+        const prev = (S.state.tests || [])[S.state.tests.length - 1] || null;
+        S.addTest(score, { level: res.level, max: C.TEST.questions.length * 3 });
+        showTestResult(score, res, prev);
       };
     }
     paint();
+  }
+
+  function showTestResult(score, res, prev) {
+    const max = C.TEST.questions.length * 3;
+    let compare = "";
+    if (prev && typeof prev.score === "number") {
+      const diff = score - prev.score;
+      if (diff < 0) compare = `<p class="muted" style="margin:10px 0 0">📉 Порівняно з минулим разом тривога <b>знизилася на ${Math.abs(diff)}</b> ${pluralUk(Math.abs(diff),"бал","бали","балів")}. Це справжній прогрес!</p>`;
+      else if (diff > 0) compare = `<p class="muted" style="margin:10px 0 0">📈 Порівняно з минулим разом результат вищий на ${diff} ${pluralUk(diff,"бал","бали","балів")}. Буває по-різному — будь до себе м'якою.</p>`;
+      else compare = `<p class="muted" style="margin:10px 0 0">Результат такий самий, як минулого разу.</p>`;
+    }
+    openModal(`
+      <div style="text-align:center">
+        <div style="font-size:46px">${res.emoji || "🌿"}</div>
+        <h2 style="margin:6px 0 2px">Твій результат</h2>
+        <div style="font-size:40px;font-weight:700;color:var(--primary-d);line-height:1.1">${score}<span style="font-size:18px;color:var(--ink-faint)"> / ${max}</span></div>
+        <span class="pill ${res.pill}" style="margin-top:8px;display:inline-block">${res.level}</span>
+      </div>
+      <p style="margin:16px 0 0;line-height:1.6">${esc(res.advice)}</p>
+      ${compare}
+      <div class="row" style="justify-content:flex-end;margin-top:18px;gap:8px">
+        <button class="btn btn-ghost" id="tr-history">Усі результати</button>
+        <button class="btn btn-primary" id="tr-ok">Дякую 🌿</button>
+      </div>`);
+    $("#tr-ok").onclick = () => { closeModal(); if (route === "analytics" || route === "profile") render(); };
+    $("#tr-history").onclick = () => { closeModal(); openTestHistory(); };
+  }
+
+  function openTestHistory() {
+    const tests = (S.state.tests || []).slice().reverse();
+    const max = C.TEST.questions.length * 3;
+    openModal(`
+      <h2>🧪 Результати тестів</h2>
+      <p class="muted" style="margin:0 0 14px">Історія твоїх проходжень тесту тривожності.</p>
+      ${tests.length ? `<div class="stack">${tests.map(t => {
+        const r = C.TEST.interpret(t.score);
+        return `<div class="test-row">
+          <div><b>${t.score}/${t.max || max}</b> <span class="pill ${r.pill}" style="margin-left:6px">${esc(t.level || r.level)}</span></div>
+          <span class="faint">${fmtDate(t.date)}</span>
+        </div>`;
+      }).join("")}</div>` : emptyBlock("🧪", "Ти ще не проходила тест. Пройди його, щоб бачити динаміку.")}
+      <div class="row" style="justify-content:flex-end;margin-top:16px">
+        <button class="btn btn-primary" id="th-retake">Пройти тест зараз</button>
+      </div>`);
+    $("#th-retake").onclick = () => { closeModal(); startTest(); };
   }
 
   /* ===================== РЕНДЕР ===================== */
@@ -1921,11 +2459,12 @@
     if (affTimer) { clearInterval(affTimer); affTimer = null; }
     const map = {
       home: viewHome, types: viewTypes, typeTest: viewTypeTest, new: viewNew, reminders: viewReminders, evidence: viewEvidence,
-      resources: viewResources, treasure: viewTreasure, analytics: viewAnalytics, joys: viewJoys, friend: viewFriendPractice,
+      resources: viewResources, treasure: viewTreasure, analytics: viewAnalytics, joys: viewJoys, good: viewGoodEvents, friend: viewFriendPractice,
       history: viewHistory, library: viewLibrary, achievements: viewAchievements, profile: viewProfile
     };
     (map[route] || viewHome)();
     mountSongBar();
+    genderizeDOM($("#view"));
   }
 
   /* ===================== АВТОРИЗАЦІЯ ===================== */
@@ -1933,15 +2472,20 @@
     $("#auth-screen").classList.add("hidden");
     $("#app").classList.remove("hidden");
     renderNav();
-    // початковий тест при першому вході
-    if (!S.state.tests.length) {
-      setTimeout(() => {
-        confirmModal("Вітаю у «Спокій» 🌿", "Пройдімо короткий тест тривожності (1 хв). Це стане твоєю стартовою точкою, щоб згодом бачити прогрес.", startTest, "Пройти тест");
-      }, 500);
+    // якщо стать не вказана (старий акаунт) — запитати один раз
+    if (!S.state.profile.gender) {
+      setTimeout(() => askGender(g => { S.setGender(g); render(); startOnboarding(); }), 400);
+    } else {
+      startOnboarding();
     }
     checkAchievements(true);
     go("home");
     notifyReminders();
+  }
+
+  function startOnboarding() {
+    // Старт тепер не з тесту, а з м'якої шкали самопочуття на головній.
+    // Якщо рівень високий — сайт сам запропонує тести та SOS-практики.
   }
 
   // Нагадування у день відкриття (браузерне сповіщення + бейдж у меню)
@@ -1956,18 +2500,85 @@
     else if (Notification.permission !== "denied") Notification.requestPermission().then(p => { if (p === "granted") fire(); });
   }
 
+  let authGender = null;
   function initAuth() {
-    const doLogin = (provider) => {
+    // вибір статі (обов'язково при реєстрації)
+    $$("#auth-gender .gender-opt").forEach(b => b.onclick = () => {
+      authGender = b.dataset.gender;
+      $$("#auth-gender .gender-opt").forEach(x => x.classList.toggle("sel", x === b));
+    });
+
+    const emailSignup = () => {
       const name = $("#auth-name").value.trim();
-      let email = $("#auth-email").value.trim();
-      if (provider === "google" && !email) email = "user.google@gmail.com";
+      const email = $("#auth-email").value.trim().toLowerCase();
       if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("Введи коректний email", "warn"); return; }
-      S.login({ name: name || email.split("@")[0], email, provider });
+      // якщо акаунт уже існує — стать беремо збережену; інакше вимагаємо вибір
+      const existing = S.hasAccount(email);
+      if (!existing && !authGender) { toast("Будь ласка, обери стать 🌿", "warn"); return; }
+      S.login({ name: name || email.split("@")[0], email, provider: "email", gender: authGender || undefined });
       showApp();
     };
-    $("#auth-email-btn").onclick = () => doLogin("email");
-    $("#auth-google-btn").onclick = () => doLogin("google");
-    $("#auth-email").addEventListener("keydown", e => { if (e.key === "Enter") doLogin("email"); });
+    $("#auth-email-btn").onclick = emailSignup;
+    $("#auth-email").addEventListener("keydown", e => { if (e.key === "Enter") emailSignup(); });
+
+    // Google: справжній OAuth через Google Identity Services
+    $("#auth-google-btn").onclick = () => {
+      if (!GOOGLE_CLIENT_ID) {
+        confirmModal("Google-вхід ще не налаштовано",
+          "Щоб увімкнути вхід через Google, потрібен власний Client ID із Google Cloud Console (OAuth 2.0). Додай його у файл js/app.js (константа GOOGLE_CLIENT_ID) і додай свій домен у дозволені. Поки що скористайся входом через Email.", () => {}, "Зрозуміло");
+        return;
+      }
+      if (window.google && google.accounts && google.accounts.id) google.accounts.id.prompt();
+    };
+    initGoogle();
+  }
+
+  function parseJwt(token) {
+    try {
+      const base = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      const json = decodeURIComponent(atob(base).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+      return JSON.parse(json);
+    } catch (e) { return null; }
+  }
+
+  function askGender(cb) {
+    openModal(`<h2>Ще один крок 🌿</h2>
+      <p class="muted" style="margin:0 0 14px">Щоб тексти зверталися саме до тебе — обери стать.</p>
+      <div class="gender-pick">
+        <button type="button" class="gender-opt" data-g="female"><span class="gender-symbol">♀</span> Жінка</button>
+        <button type="button" class="gender-opt" data-g="male"><span class="gender-symbol">♂</span> Чоловік</button>
+      </div>`);
+    $$("#modal-root .gender-opt").forEach(b => b.onclick = () => { closeModal(); cb(b.dataset.g); });
+  }
+
+  function initGoogle() {
+    if (!GOOGLE_CLIENT_ID) return;
+    let tries = 0;
+    const tryInit = () => {
+      if (!(window.google && google.accounts && google.accounts.id)) {
+        if (tries++ < 20) return setTimeout(tryInit, 300);
+        return;
+      }
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (resp) => {
+          const data = parseJwt(resp.credential);
+          if (!data || !data.email) { toast("Не вдалося увійти через Google", "warn"); return; }
+          const proceed = (gender) => {
+            S.login({ name: data.name || data.email.split("@")[0], email: data.email, provider: "google", picture: data.picture, gender });
+            showApp();
+          };
+          if (S.hasAccount(data.email) && S.accountGender(data.email)) proceed(S.accountGender(data.email));
+          else askGender(proceed);
+        }
+      });
+      const box = $("#google-btn-box");
+      if (box) {
+        google.accounts.id.renderButton(box, { theme: "outline", size: "large", width: 320, text: "continue_with", shape: "pill" });
+        const fb = $("#auth-google-btn"); if (fb) fb.classList.add("hidden");
+      }
+    };
+    tryInit();
   }
 
   /* ===================== СТАРТ ===================== */
