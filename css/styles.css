@@ -257,7 +257,7 @@ a { color: var(--primary); }
 .toast.celebrate { background: linear-gradient(135deg, #6b5bd2, #38b6a0); }
 
 /* ---------- Modal ---------- */
-.modal-root { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; padding: 20px; background: rgba(30,24,60,.5); backdrop-filter: blur(4px); }
+.modal-root { position: fixed; inset: 0; z-index: 600; display: grid; place-items: center; padding: 20px; background: rgba(30,24,60,.5); backdrop-filter: blur(4px); }
 .modal { background: var(--surface); border-radius: 24px; padding: 26px; width: 100%; max-width: 520px; box-shadow: var(--shadow); animation: rise .35s cubic-bezier(.2,.8,.2,1); max-height: 88vh; overflow-y: auto; }
 .modal h2 { margin: 0 0 6px; font-size: 21px; font-weight: 700; line-height: 1.2; }
 .modal-x { position: absolute; top: 14px; right: 16px; font-size: 22px; color: var(--ink-faint); }
@@ -442,7 +442,7 @@ a { color: var(--primary); }
 .nav-item.nav-sos { color: #cf8a82; font-weight: 700; }
 .nav-item.nav-sos:hover { background: #fbeee9; color: #c47e76; }
 
-/* Пісня дня (вгорі екрану) */
+/* Музика настрою (вгорі екрану) */
 .song-bar {
   position: sticky; top: 0; z-index: 40;
   display: flex; align-items: center; gap: 14px;
@@ -455,6 +455,10 @@ a { color: var(--primary); }
 .song-bar .song-main { flex: 1; min-width: 0; }
 .song-bar .song-label { font-size: 12px; color: var(--ink-faint); font-weight: 600; }
 .song-bar .song-name { font-size: 16px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song-progress {
+  display: grid; grid-template-columns: auto minmax(140px, 1fr) auto; align-items: center; gap: 8px;
+  margin-top: 7px; color: var(--ink-faint); font-size: 11px; font-weight: 700;
+}
 .song-bar .song-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .song-btn {
   border: none; cursor: pointer; font-weight: 700; font-size: 13px;
@@ -463,6 +467,10 @@ a { color: var(--primary); }
 .song-btn:hover { background: var(--primary-d); }
 .song-btn.ghost { background: rgba(255,255,255,.7); color: var(--ink-soft); border: 1px solid var(--line); }
 .song-btn.ghost:hover { background: #fff; color: var(--primary-d); }
+.song-btn.song-round { width: 36px; height: 36px; padding: 0; font-size: 20px; line-height: 1; }
+.song-btn.song-play { min-width: 74px; }
+.song-status { color: var(--ink-faint); font-size: 12px; font-weight: 700; min-width: 48px; }
+.song-bar.playing .song-ico, .song-bar.playing .song-status { color: var(--primary-d); }
 
 /* Вибір статі */
 .gender-pick { display: flex; gap: 10px; }
@@ -484,62 +492,12 @@ a { color: var(--primary); }
 /* Історія результатів тесту */
 .test-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
 
-/* Музичний плеєр (докований всередині сайту) */
-.player {
-  position: fixed; right: 22px; bottom: 22px; z-index: 70; width: 390px; max-width: calc(100vw - 32px);
-  background: var(--surface); border: 1px solid var(--line); border-radius: 20px;
-  box-shadow: var(--shadow); padding: 16px 18px;
-  animation: rise .25s ease;
-}
-.pl-info { display: flex; align-items: center; gap: 12px; }
-.pl-art { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; font-size: 24px;
-  background: linear-gradient(135deg, var(--primary), var(--accent)); color: #fff; flex-shrink: 0; }
-.pl-meta { flex: 1; min-width: 0; }
-.pl-title { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pl-artist { font-size: 12px; color: var(--ink-faint); }
-.pl-x { font-size: 22px; color: var(--ink-faint); width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; }
-.pl-x:hover { background: var(--surface-2); color: var(--ink); }
-.pl-seek { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 11px; color: var(--ink-faint); }
-.pl-seek input[type="range"] { flex: 1; }
-.pl-controls { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-.pl-btn { width: 40px; height: 40px; border-radius: 50%; font-size: 16px; background: var(--surface-2); color: var(--ink); transition: .14s; }
-.pl-btn:hover { background: var(--primary-soft); color: var(--primary-d); }
-.pl-btn.pl-play { width: 50px; height: 50px; font-size: 20px; background: var(--primary); color: #fff; }
-.pl-btn.pl-play:hover { background: var(--primary-d); }
-.pl-vol { display: flex; align-items: center; gap: 6px; margin-left: auto; }
-.pl-vol input[type="range"] { width: 80px; }
-.pl-list-title {
-  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
-  color: var(--ink-faint); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
-}
-.pl-list {
-  display: grid; gap: 7px; margin-top: 8px; max-height: 240px; overflow-y: auto; padding-right: 4px;
-}
-.pl-track {
-  display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 10px;
-  width: 100%; padding: 9px 10px; border-radius: 12px; text-align: left;
-  background: var(--surface-2); border: 1px solid transparent; color: var(--ink);
-  transition: .14s;
-}
-.pl-track:hover { border-color: var(--primary); background: var(--surface); }
-.pl-track.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-d); }
-.pl-track-num {
-  font-size: 12px; font-weight: 700; color: var(--ink-faint);
-}
-.pl-track-main { min-width: 0; display: grid; gap: 1px; }
-.pl-track-main b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pl-track-main small { font-size: 11.5px; color: var(--ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pl-track-state { font-size: 11px; font-weight: 700; color: var(--ink-faint); }
-.pl-track.active .pl-track-state { color: var(--primary-d); }
 input[type="range"] {
   -webkit-appearance: none; appearance: none; height: 5px; border-radius: 999px;
   background: var(--line); outline: none; cursor: pointer;
 }
 input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; background: var(--primary); cursor: pointer; }
 input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border: none; border-radius: 50%; background: var(--primary); cursor: pointer; }
-@media (max-width: 880px) {
-  .player { right: 12px; left: 12px; bottom: 12px; width: auto; }
-}
 
 /* Інструкція про сайт */
 .guide-list { display: flex; flex-direction: column; gap: 10px; max-height: 56vh; overflow-y: auto; padding-right: 4px; }

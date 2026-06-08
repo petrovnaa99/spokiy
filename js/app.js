@@ -240,7 +240,7 @@
       { ico: "□", t: "Скарбничка підтримки", d: "Цитати, афірмації, теплі слова, спогади й перемоги — щоб дістати їх у складний момент." },
       { ico: "§", t: "Бібліотека", d: "Короткі статті: як працює тривога, дихання, заземлення, кордони, робота з думками тощо." },
       { ico: "↑", t: "Прогрес і досягнення", d: "Маленькі перемоги відзначаються — за серії днів, перші доказі, перший лист собі." },
-      { ico: "♪", t: "Пісня дня та теми", d: "Музика для настрою вгорі екрана (можна додати свою) і перемикання денної/нічної теми." },
+      { ico: "♪", t: "Музика настрою та теми", d: "Музика для настрою вгорі екрана: можна слухати прямо на сайті, перемикати треки й змінювати денну/нічну тему." },
       { ico: "⌧", t: "Приватність", d: "Усі записи зберігаються лише на твоєму пристрої. Нічого не публікується без твоєї згоди." }
     ];
     openModal(`
@@ -277,7 +277,7 @@
     </button>`;
   }
 
-  /* ===================== ПІСНЯ ДНЯ ===================== */
+  /* ===================== МУЗИКА НАСТРОЮ ===================== */
   function randomSong(exclude) {
     const list = C.SONGS || [];
     if (list.length <= 1) return list[0] || "";
@@ -285,49 +285,62 @@
     do { s = list[Math.floor(Math.random() * list.length)]; } while (s === exclude);
     return s;
   }
+  function currentTrack() {
+    const list = C.PLAYLIST || [];
+    return list[plIndex] || list[0] || { title: currentSongText(), artist: "Музика настрою", url: "" };
+  }
+  function trackText(track = currentTrack()) {
+    return track.artist ? `${track.title} — ${track.artist}` : track.title;
+  }
   function currentSongText() {
-    const custom = (S.state && S.state.settings && S.state.settings.songReminder || "").trim();
-    if (custom) return custom;
     if (!songCurrent) songCurrent = randomSong();
     return songCurrent;
   }
   function songBarHTML() {
-    const mine = !!(S.state.settings.songReminder || "").trim();
-    const song = currentSongText();
+    const track = currentTrack();
+    const a = audioEl();
+    const playing = a && !a.paused;
     return `
       <div class="song-bar" id="song-bar">
         <span class="song-ico">♪</span>
         <div class="song-main">
-          <div class="song-label">${mine ? "Твоя пісня настрою" : "Пісня дня"} · увімкни щось, що підіймає тобі настрій</div>
-          <div class="song-name">${esc(song)}</div>
+          <div class="song-label">Музика для настрою · слухай прямо тут</div>
+          <div class="song-name" id="song-name">${esc(trackText(track))}</div>
+          <div class="song-progress">
+            <span id="song-cur">0:00</span>
+            <input type="range" id="song-progress" min="0" max="100" value="0" step="0.1" aria-label="Прогрес треку">
+            <span id="song-dur">0:00</span>
+          </div>
         </div>
         <div class="song-actions">
-          <button class="song-btn" id="song-player" title="Відкрити плеєр">♪ Плеєр</button>
-          <button class="song-btn ghost" id="song-find" title="Знайти на YouTube">Пошук</button>
-          ${mine ? "" : `<button class="song-btn ghost" id="song-next" title="Інша пісня">↻</button>`}
-          <button class="song-btn ghost" id="song-mine" title="Моя пісня">${mine ? "✎" : "♪ Моя"}</button>
-          ${mine ? `<button class="song-btn ghost" id="song-clear" title="Прибрати мою пісню">✕</button>` : ""}
+          <button class="song-btn ghost song-round" id="song-prev" title="Попередній трек">‹</button>
+          <button class="song-btn song-play" id="song-play" title="Грати / пауза">${playing ? "Пауза" : "Грати"}</button>
+          <button class="song-btn ghost song-round" id="song-next" title="Наступний трек">›</button>
+          <span class="song-status" id="song-status">${playing ? "Грає" : "Готово"}</span>
           ${themeToggleHTML()}
         </div>
       </div>`;
   }
   function wireSongBar() {
-    const find = $("#song-find");
-    if (find) find.onclick = () => window.open("https://www.youtube.com/results?search_query=" + encodeURIComponent(currentSongText()), "_blank");
+    playerInitOnce();
+    const prev = $("#song-prev");
+    if (prev) prev.onclick = playerPrev;
+    const play = $("#song-play");
+    if (play) play.onclick = playerToggle;
     const next = $("#song-next");
-    if (next) next.onclick = () => { songCurrent = randomSong(songCurrent); refreshSongBar(); };
-    const mine = $("#song-mine");
-    if (mine) mine.onclick = openSongModal;
-    const clear = $("#song-clear");
-    if (clear) clear.onclick = () => { S.state.settings.songReminder = ""; S.save(); refreshSongBar(); toast("Повернула пісні дня"); };
+    if (next) next.onclick = playerNext;
+    const prog = $("#song-progress");
+    if (prog) prog.oninput = () => {
+      const a = audioEl();
+      if (a.duration) a.currentTime = (prog.value / 100) * a.duration;
+    };
     const theme = $("#theme-toggle");
     if (theme) theme.onclick = toggleTheme;
-    const pl = $("#song-player");
-    if (pl) pl.onclick = playerOpen;
+    playerSync();
   }
 
-  /* ===================== МУЗИЧНИЙ ПЛЕЄР ===================== */
-  let plIndex = 0, plInited = false, plOpen = false;
+  /* ===================== АУДІО ДЛЯ ВЕРХНЬОЇ ПАНЕЛІ ===================== */
+  let plIndex = 0, plInited = false;
   function audioEl() { return $("#audio"); }
   function fmtTime(s) {
     if (!isFinite(s) || s < 0) s = 0;
@@ -343,104 +356,50 @@
     a.addEventListener("play", playerSyncButtons);
     a.addEventListener("pause", playerSyncButtons);
     a.addEventListener("ended", () => playerNext());
-    a.addEventListener("error", () => { if (plOpen) toast("Не вдалося завантажити трек. Спробуй інший", "warn"); });
+    a.addEventListener("error", () => toast("Не вдалося завантажити трек. Спробуй інший", "warn"));
     a.volume = 0.8;
   }
   function playerLoad(i, autoplay) {
-    const list = C.PLAYLIST;
+    const list = C.PLAYLIST || [];
+    if (!list.length) return;
+    playerInitOnce();
     plIndex = (i + list.length) % list.length;
     const a = audioEl();
     a.src = list[plIndex].url;
     a.load();
     if (autoplay) a.play().catch(() => {});
-    playerRender();
-  }
-  function playerOpen() {
-    playerInitOnce();
-    plOpen = true;
-    const a = audioEl();
-    if (!a.src) playerLoad(plIndex, true);
-    else { playerRender(); if (a.paused) a.play().catch(() => {}); }
-    $("#player").classList.remove("hidden");
-  }
-  function playerClose() {
-    const a = audioEl(); a.pause();
-    plOpen = false;
-    $("#player").classList.add("hidden");
+    refreshSongBar();
   }
   function playerToggle() {
+    playerInitOnce();
     const a = audioEl();
+    if (!a.src) { playerLoad(plIndex, true); return; }
     if (a.paused) a.play().catch(() => {}); else a.pause();
   }
   function playerNext() { playerLoad(plIndex + 1, true); }
   function playerPrev() {
+    playerInitOnce();
     const a = audioEl();
     if (a.currentTime > 3) { a.currentTime = 0; return; }
     playerLoad(plIndex - 1, true);
   }
-  function playerRender() {
-    const t = C.PLAYLIST[plIndex];
-    const a = audioEl();
-    const playing = !a.paused;
-    $("#player").innerHTML = `
-      <div class="pl-info">
-        <div class="pl-art">♪</div>
-        <div class="pl-meta">
-          <div class="pl-title" id="pl-title">${esc(t.title)}</div>
-          <div class="pl-artist">${esc(t.artist)} · ${plIndex + 1}/${C.PLAYLIST.length}</div>
-        </div>
-        <button class="pl-x" id="pl-close" title="Сховати">×</button>
-      </div>
-      <div class="pl-seek">
-        <span id="pl-cur">0:00</span>
-        <input type="range" id="pl-progress" min="0" max="100" value="0" step="0.1">
-        <span id="pl-dur">0:00</span>
-      </div>
-      <div class="pl-controls">
-        <button class="pl-btn" id="pl-prev" title="Попередній">‹</button>
-        <button class="pl-btn pl-play" id="pl-play" title="Грати / пауза">${playing ? "⏸" : "▶"}</button>
-        <button class="pl-btn" id="pl-next" title="Наступний">›</button>
-        <div class="pl-vol">
-          <span>Vol</span>
-          <input type="range" id="pl-volume" min="0" max="1" step="0.01" value="${a.volume}">
-        </div>
-      </div>
-      <div class="pl-list-title">Плейлист</div>
-      <div class="pl-list" id="pl-list">
-        ${C.PLAYLIST.map((track, i) => `
-          <button class="pl-track ${i === plIndex ? "active" : ""}" data-track="${i}">
-            <span class="pl-track-num">${String(i + 1).padStart(2, "0")}</span>
-            <span class="pl-track-main">
-              <b>${esc(track.title)}</b>
-              <small>${esc(track.artist)}</small>
-            </span>
-            <span class="pl-track-state">${i === plIndex && playing ? "Грає" : "Увімкнути"}</span>
-          </button>`).join("")}
-      </div>`;
-    $("#pl-close").onclick = playerClose;
-    $("#pl-play").onclick = playerToggle;
-    $("#pl-prev").onclick = playerPrev;
-    $("#pl-next").onclick = playerNext;
-    $$(".pl-track", $("#player")).forEach(b => b.onclick = () => playerLoad(+b.dataset.track, true));
-    const prog = $("#pl-progress");
-    prog.oninput = () => { if (a.duration) a.currentTime = (prog.value / 100) * a.duration; };
-    $("#pl-volume").oninput = (e) => { a.volume = +e.target.value; };
-    playerSync();
-  }
   function playerSync() {
-    if (!plOpen) return;
     const a = audioEl();
-    const cur = $("#pl-cur"), dur = $("#pl-dur"), prog = $("#pl-progress");
+    const cur = $("#song-cur"), dur = $("#song-dur"), prog = $("#song-progress");
     if (cur) cur.textContent = fmtTime(a.currentTime);
     if (dur) dur.textContent = fmtTime(a.duration);
     if (prog && a.duration) prog.value = (a.currentTime / a.duration) * 100;
     playerSyncButtons();
   }
   function playerSyncButtons() {
-    const btn = $("#pl-play");
-    if (btn) btn.textContent = audioEl().paused ? "▶" : "⏸";
-    const state = $(".pl-track.active .pl-track-state");
-    if (state) state.textContent = audioEl().paused ? "Увімкнути" : "Грає";
+    const a = audioEl();
+    const playing = a && !a.paused;
+    const btn = $("#song-play");
+    if (btn) btn.textContent = playing ? "Пауза" : "Грати";
+    const state = $("#song-status");
+    if (state) state.textContent = playing ? "Грає" : "Готово";
+    const bar = $("#song-bar");
+    if (bar) bar.classList.toggle("playing", playing);
   }
   function refreshSongBar() {
     const bar = $("#song-bar");
@@ -618,7 +577,7 @@
   function homeWellbeingCard() {
     const today = S.todayWellbeing();
     const level = today ? today.level : null;
-    const song = currentSongText();
+    const song = trackText();
     const scale = Array.from({ length: 10 }, (_, i) => {
       const v = i + 1;
       return `<button class="well-btn ${level === v ? "sel" : ""}" data-well="${v}">${v}</button>`;
@@ -645,7 +604,7 @@
           <p>Увімкни музику, яка піднімає настрій, і зафіксуй щось приємне. Гарний день можна зробити ще кращим маленькими теплими ситуаціями — це стане опорою проти майбутніх тривог.</p>
           <div class="song-mini">
             <span>Рекомендація:</span><b>${esc(song)}</b>
-            <button class="btn btn-ghost btn-sm" id="well-player">Плеєр</button>
+            <button class="btn btn-ghost btn-sm" id="well-player">Увімкнути</button>
           </div>
           <div class="row" style="gap:8px;margin-top:10px">
             <input id="good-home-input" class="quick-input" placeholder="Що приємного або цікавого сьогодні сталося?" />
@@ -656,11 +615,11 @@
       recommendation = `
         <div class="well-result mid">
           <b>Стан середній: ${esc(wellbeingLabel(level))}.</b>
-          <p>Можна обрати один маленький крок: записати думку, увімкнути плеєр або зберегти приємну подію дня.</p>
+          <p>Можна обрати один маленький крок: записати думку, увімкнути музику або зберегти приємну подію дня.</p>
           <div class="row" style="gap:8px;margin-top:10px">
             <input id="good-home-input" class="quick-input" placeholder="Маленька хороша подія сьогодні..." />
             <button class="btn btn-primary btn-sm" id="good-home-save">Зберегти</button>
-            <button class="btn btn-ghost btn-sm" id="well-player">Плеєр</button>
+            <button class="btn btn-ghost btn-sm" id="well-player">Увімкнути музику</button>
           </div>
         </div>`;
     }
@@ -689,7 +648,7 @@
     });
     const types = $("#well-types"); if (types) types.onclick = () => go("types");
     const sos = $("#well-sos"); if (sos) sos.onclick = () => startCalm("quick");
-    const player = $("#well-player"); if (player) player.onclick = playerOpen;
+    const player = $("#well-player"); if (player) player.onclick = playerToggle;
     const good = $("#well-good"); if (good) good.onclick = () => go("good");
     const save = $("#good-home-save");
     if (save) save.onclick = () => {
