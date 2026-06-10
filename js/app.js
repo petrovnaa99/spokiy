@@ -93,6 +93,23 @@
   function isMale() {
     return !!(S.state && S.state.profile && S.state.profile.gender === "male");
   }
+  function applyGenderTheme() {
+    const gender = S.state && S.state.profile && S.state.profile.gender;
+    if (gender) document.documentElement.setAttribute("data-gender", gender);
+    else document.documentElement.removeAttribute("data-gender");
+  }
+  function uiText(text) {
+    if (!isMale()) return text;
+    const map = {
+      "🌿": "◆", "🍃": "◆", "🌤️": "▣", "💗": "■", "💚": "◆", "🤍": "□", "💞": "■",
+      "🛡️": "▣", "🛡": "▣", "💪": "▲", "🌱": "◆", "💝": "▣", "🌟": "◆", "✨": "◆",
+      "🫁": "◌", "🌍": "◎", "🫧": "○", "🌈": "▣", "🏆": "▲", "🔥": "▲", "🎉": "▲",
+      "🧭": "⌁", "🧪": "∿", "⚙️": "⚙", "👤": "ID", "💾": "▣", "☁️": "☁", "🔒": "▣",
+      "📚": "§", "📜": "≡", "📄": "□", "🖨️": "□", "🗑": "×", "⬇️": "↓", "⬆️": "↑",
+      "☺": "•", "🙂": "•", "😟": "!", "📈": "↑", "📉": "↓"
+    };
+    return String(text).replace(/🌤️|🛡️|⚙️|☁️|🖨️|⬇️|⬆️|[🌿🍃💗💚🤍💞🛡💪🌱💝🌟✨🫁🌍🫧🌈🏆🔥🎉🧭🧪👤💾🔒📚📜📄🗑☺🙂😟📈📉]/g, m => map[m] || m);
+  }
   function genderizeDOM(root) {
     if (!root || !isMale()) return;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
@@ -107,7 +124,7 @@
     let cur;
     while ((cur = walker.nextNode())) nodes.push(cur);
     nodes.forEach(n => {
-      const next = genderize(n.nodeValue);
+      const next = uiText(genderize(n.nodeValue));
       if (next !== n.nodeValue) n.nodeValue = next;
     });
   }
@@ -134,7 +151,7 @@
   function toast(msg, type = "", ms = 3800) {
     const t = document.createElement("div");
     t.className = "toast " + type;
-    t.innerHTML = `<span>${genderize(msg)}</span>`;
+    t.innerHTML = `<span>${uiText(genderize(msg))}</span>`;
     $("#toasts").appendChild(t);
     setTimeout(() => { t.style.opacity = "0"; t.style.transform = "translateY(8px)"; setTimeout(() => t.remove(), 300); }, ms);
   }
@@ -202,6 +219,7 @@
     { id: "analytics", icon: "∿", label: "Аналітика" },
     { id: "joys", icon: "◇", label: "Мої радощі" },
     { id: "good", icon: "☺", label: "Хороші події" },
+    { id: "gratitude", icon: "∴", label: "За що я вдячна" },
     { id: "friend", icon: "✉", label: "Порада подрузі" },
     { id: "history", icon: "≡", label: "Моя історія" }
   ];
@@ -235,12 +253,13 @@
       { ico: "◌", t: "Мої ресурси", d: "Сайт сам збирає те, що тобі допомагає, і показує рейтинг найдієвіших способів заспокоєння." },
       { ico: "∿", t: "Аналітика / Мій прогрес", d: "Динаміка тривоги, настрою та енергії, серії днів, тригери й порівняння зі стартом." },
       { ico: "◇", t: "Мої маленькі радощі", d: "Збережи книги, фільми, музику, прогулянки, хобі — сайт час від часу нагадає про них." },
+      { ico: "∴", t: "За що я сьогодні вдячна", d: "Коротко записуй одну-дві речі, які сьогодні дали опору, тепло або відчуття сенсу." },
       { ico: "✉", t: "Порада подрузі", d: "Поглянь на ситуацію очима доброї подруги — і подаруй цю ж підтримку собі." },
       { ico: "⌁", t: "Типи тривоги + тести", d: "Заспокійливі тести під різні тривоги, а для фінансової — окремий «Фінансовий потік»." },
       { ico: "□", t: "Скарбничка підтримки", d: "Цитати, афірмації, теплі слова, спогади й перемоги — щоб дістати їх у складний момент." },
       { ico: "§", t: "Бібліотека", d: "Короткі статті: як працює тривога, дихання, заземлення, кордони, робота з думками тощо." },
       { ico: "↑", t: "Прогрес і досягнення", d: "Маленькі перемоги відзначаються — за серії днів, перші доказі, перший лист собі." },
-      { ico: "♪", t: "Музика настрою та теми", d: "Музика для настрою вгорі екрана: можна слухати прямо на сайті, перемикати треки й змінювати денну/нічну тему." },
+      { ico: "♪", t: "Музика настрою та теми", d: "Рядок із позитивною іноземною музикою вгорі екрана: перемикай рекомендації й швидко знаходь пісню для прослуховування." },
       { ico: "⌧", t: "Приватність", d: "Усі записи зберігаються лише на твоєму пристрої. Нічого не публікується без твоєї згоди." }
     ];
     openModal(`
@@ -285,121 +304,47 @@
     do { s = list[Math.floor(Math.random() * list.length)]; } while (s === exclude);
     return s;
   }
-  function currentTrack() {
-    const list = C.PLAYLIST || [];
-    return list[plIndex] || list[0] || { title: currentSongText(), artist: "Музика настрою", url: "" };
-  }
-  function trackText(track = currentTrack()) {
-    return track.artist ? `${track.title} — ${track.artist}` : track.title;
-  }
   function currentSongText() {
     if (!songCurrent) songCurrent = randomSong();
     return songCurrent;
   }
+  function switchSong(dir = 1) {
+    const list = C.SONGS || [];
+    if (!list.length) return;
+    let idx = list.indexOf(currentSongText());
+    if (idx < 0) idx = 0;
+    songCurrent = list[(idx + dir + list.length) % list.length];
+    refreshSongBar();
+  }
+  function openSongSearch() {
+    window.open("https://www.youtube.com/results?search_query=" + encodeURIComponent(currentSongText()), "_blank");
+  }
   function songBarHTML() {
-    const track = currentTrack();
-    const a = audioEl();
-    const playing = a && !a.paused;
+    const song = currentSongText();
     return `
       <div class="song-bar" id="song-bar">
         <span class="song-ico">♪</span>
         <div class="song-main">
-          <div class="song-label">Музика для настрою · слухай прямо тут</div>
-          <div class="song-name" id="song-name">${esc(trackText(track))}</div>
-          <div class="song-progress">
-            <span id="song-cur">0:00</span>
-            <input type="range" id="song-progress" min="0" max="100" value="0" step="0.1" aria-label="Прогрес треку">
-            <span id="song-dur">0:00</span>
-          </div>
+          <div class="song-label">Рекомендована позитивна іноземна музика</div>
+          <div class="song-name" id="song-name">${esc(song)}</div>
         </div>
         <div class="song-actions">
-          <button class="song-btn ghost song-round" id="song-prev" title="Попередній трек">‹</button>
-          <button class="song-btn song-play" id="song-play" title="Грати / пауза">${playing ? "Пауза" : "Грати"}</button>
-          <button class="song-btn ghost song-round" id="song-next" title="Наступний трек">›</button>
-          <span class="song-status" id="song-status">${playing ? "Грає" : "Готово"}</span>
+          <button class="song-btn ghost song-round" id="song-prev" title="Попередня рекомендація">‹</button>
+          <button class="song-btn" id="song-listen" title="Знайти й послухати">Слухати</button>
+          <button class="song-btn ghost song-round" id="song-next" title="Наступна рекомендація">›</button>
           ${themeToggleHTML()}
         </div>
       </div>`;
   }
   function wireSongBar() {
-    playerInitOnce();
     const prev = $("#song-prev");
-    if (prev) prev.onclick = playerPrev;
-    const play = $("#song-play");
-    if (play) play.onclick = playerToggle;
+    if (prev) prev.onclick = () => switchSong(-1);
+    const listen = $("#song-listen");
+    if (listen) listen.onclick = openSongSearch;
     const next = $("#song-next");
-    if (next) next.onclick = playerNext;
-    const prog = $("#song-progress");
-    if (prog) prog.oninput = () => {
-      const a = audioEl();
-      if (a.duration) a.currentTime = (prog.value / 100) * a.duration;
-    };
+    if (next) next.onclick = () => switchSong(1);
     const theme = $("#theme-toggle");
     if (theme) theme.onclick = toggleTheme;
-    playerSync();
-  }
-
-  /* ===================== АУДІО ДЛЯ ВЕРХНЬОЇ ПАНЕЛІ ===================== */
-  let plIndex = 0, plInited = false;
-  function audioEl() { return $("#audio"); }
-  function fmtTime(s) {
-    if (!isFinite(s) || s < 0) s = 0;
-    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
-    return m + ":" + String(sec).padStart(2, "0");
-  }
-  function playerInitOnce() {
-    if (plInited) return;
-    plInited = true;
-    const a = audioEl();
-    a.addEventListener("timeupdate", playerSync);
-    a.addEventListener("loadedmetadata", playerSync);
-    a.addEventListener("play", playerSyncButtons);
-    a.addEventListener("pause", playerSyncButtons);
-    a.addEventListener("ended", () => playerNext());
-    a.addEventListener("error", () => toast("Не вдалося завантажити трек. Спробуй інший", "warn"));
-    a.volume = 0.8;
-  }
-  function playerLoad(i, autoplay) {
-    const list = C.PLAYLIST || [];
-    if (!list.length) return;
-    playerInitOnce();
-    plIndex = (i + list.length) % list.length;
-    const a = audioEl();
-    a.src = list[plIndex].url;
-    a.load();
-    if (autoplay) a.play().catch(() => {});
-    refreshSongBar();
-  }
-  function playerToggle() {
-    playerInitOnce();
-    const a = audioEl();
-    if (!a.src) { playerLoad(plIndex, true); return; }
-    if (a.paused) a.play().catch(() => {}); else a.pause();
-  }
-  function playerNext() { playerLoad(plIndex + 1, true); }
-  function playerPrev() {
-    playerInitOnce();
-    const a = audioEl();
-    if (a.currentTime > 3) { a.currentTime = 0; return; }
-    playerLoad(plIndex - 1, true);
-  }
-  function playerSync() {
-    const a = audioEl();
-    const cur = $("#song-cur"), dur = $("#song-dur"), prog = $("#song-progress");
-    if (cur) cur.textContent = fmtTime(a.currentTime);
-    if (dur) dur.textContent = fmtTime(a.duration);
-    if (prog && a.duration) prog.value = (a.currentTime / a.duration) * 100;
-    playerSyncButtons();
-  }
-  function playerSyncButtons() {
-    const a = audioEl();
-    const playing = a && !a.paused;
-    const btn = $("#song-play");
-    if (btn) btn.textContent = playing ? "Пауза" : "Грати";
-    const state = $("#song-status");
-    if (state) state.textContent = playing ? "Грає" : "Готово";
-    const bar = $("#song-bar");
-    if (bar) bar.classList.toggle("playing", playing);
   }
   function refreshSongBar() {
     const bar = $("#song-bar");
@@ -577,14 +522,16 @@
   function homeWellbeingCard() {
     const today = S.todayWellbeing();
     const level = today ? today.level : null;
-    const song = trackText();
+    const song = currentSongText();
+    const angle = level == null ? -90 : -90 + ((level - 1) / 9) * 180;
+    const meterLabel = level == null ? "обери рівень" : wellbeingLabel(level);
     const scale = Array.from({ length: 10 }, (_, i) => {
       const v = i + 1;
       return `<button class="well-btn ${level === v ? "sel" : ""}" data-well="${v}">${v}</button>`;
     }).join("");
     let recommendation = `
       <div class="well-result muted">
-        Обери число: <b>1</b> — майже спокійно, <b>10</b> — дуже тривожно. Це не тест, а коротка перевірка стану.
+        Обери рівень на спідометрі: <b>1</b> — майже спокійно, <b>10</b> — напруга на максимумі. Це не тест, а швидкий замір стану.
       </div>`;
 
     if (level != null && level >= 7) {
@@ -604,7 +551,7 @@
           <p>Увімкни музику, яка піднімає настрій, і зафіксуй щось приємне. Гарний день можна зробити ще кращим маленькими теплими ситуаціями — це стане опорою проти майбутніх тривог.</p>
           <div class="song-mini">
             <span>Рекомендація:</span><b>${esc(song)}</b>
-            <button class="btn btn-ghost btn-sm" id="well-player">Увімкнути</button>
+            <button class="btn btn-ghost btn-sm" id="well-player">Слухати</button>
           </div>
           <div class="row" style="gap:8px;margin-top:10px">
             <input id="good-home-input" class="quick-input" placeholder="Що приємного або цікавого сьогодні сталося?" />
@@ -619,7 +566,7 @@
           <div class="row" style="gap:8px;margin-top:10px">
             <input id="good-home-input" class="quick-input" placeholder="Маленька хороша подія сьогодні..." />
             <button class="btn btn-primary btn-sm" id="good-home-save">Зберегти</button>
-            <button class="btn btn-ghost btn-sm" id="well-player">Увімкнути музику</button>
+            <button class="btn btn-ghost btn-sm" id="well-player">Слухати музику</button>
           </div>
         </div>`;
     }
@@ -628,12 +575,23 @@
       <div class="card wellbeing-card">
         <div class="row spread" style="align-items:flex-start;gap:12px">
           <div>
-            <div class="card-title" style="margin:0">Як ти зараз почуваєшся?</div>
-            <p class="muted" style="margin:6px 0 0">Коротко відміть рівень тривоги перед будь-якими практиками.</p>
+            <div class="card-title" style="margin:0">Спідометр напруги</div>
+            <p class="muted" style="margin:6px 0 0">Швидко виміряй рівень тривоги й напруги перед будь-якими практиками.</p>
           </div>
           ${level != null ? `<span class="pill ${level >= 7 ? "pill-red" : level <= 4 ? "pill-green" : "pill-warn"}">${level}/10 · ${esc(wellbeingLabel(level))}</span>` : ""}
         </div>
-        <div class="well-scale" style="margin-top:14px">${scale}</div>
+        <div class="tension-meter ${level == null ? "meter-empty" : ""}" style="--needle-angle:${angle}deg">
+          <div class="meter-arc">
+            <div class="meter-needle"></div>
+            <div class="meter-hub"></div>
+            <div class="meter-value">
+              <strong>${level == null ? "—" : level}</strong>
+              <span>${esc(meterLabel)}</span>
+            </div>
+          </div>
+          <div class="meter-labels"><span>1 · спокій</span><span>10 · максимум</span></div>
+        </div>
+        <div class="well-scale meter-scale">${scale}</div>
         ${recommendation}
         <div class="row" style="justify-content:flex-end;margin-top:12px">
           <button class="btn btn-ghost btn-sm" id="well-good">Хороші події та календар</button>
@@ -648,7 +606,7 @@
     });
     const types = $("#well-types"); if (types) types.onclick = () => go("types");
     const sos = $("#well-sos"); if (sos) sos.onclick = () => startCalm("quick");
-    const player = $("#well-player"); if (player) player.onclick = playerToggle;
+    const player = $("#well-player"); if (player) player.onclick = openSongSearch;
     const good = $("#well-good"); if (good) good.onclick = () => go("good");
     const save = $("#good-home-save");
     if (save) save.onclick = () => {
@@ -709,8 +667,8 @@
 
     $("#view").innerHTML = `
       <div class="welcome">
-        <h1>Привіт</h1>
-        <p>Тут не потрібно бути сильною чи ідеальною.<br>Зроби один маленький крок до себе.</p>
+        <h1>${isMale() ? "Привіт, друже" : "Привіт"}</h1>
+        <p>${isMale() ? "Тут можна видихнути без пояснень.<br>Я поруч як друг: спокійно розберемося і зробимо один реальний крок." : "Тут не потрібно бути сильною чи ідеальною.<br>Зроби один маленький крок до себе."}</p>
       </div>
       ${banners}
       ${reminderCard}
@@ -737,7 +695,7 @@
       <div class="grid grid-2" style="margin-top:16px">
         <div class="stat streak-stat"><div class="s-ico">↑</div><div class="s-val">${streak}</div><div class="s-lbl">${pluralUk(streak,"день поспіль","дні поспіль","днів поспіль")}</div></div>
         <div class="card aff-card">
-          <div class="card-title">Афірмація дня</div>
+          <div class="card-title">${isMale() ? "Опора дня" : "Афірмація дня"}</div>
           <p id="aff-text" class="aff-text">${esc(shownAff)}</p>
           <div class="row">
             <button class="btn btn-primary btn-sm" id="next-aff">↻ Інша</button>
@@ -758,7 +716,8 @@
         <button class="more-link" id="more-guide"><span>?</span>Інструкція</button>
         <button class="more-link" data-route="types"><span>⌁</span>Типи тривоги</button>
         <button class="more-link" data-route="analytics"><span>∿</span>Мій прогрес</button>
-        <button class="more-link" data-route="good"><span>☺</span>Хороші події</button>
+        <button class="more-link" data-route="good"><span>${isMale() ? "•" : "☺"}</span>Хороші події</button>
+        <button class="more-link" data-route="gratitude"><span>∴</span>Вдячність</button>
         <button class="more-link" data-route="treasure"><span>□</span>Скарбничка</button>
         <button class="more-link" data-route="library"><span>§</span>Бібліотека</button>
         <button class="more-link" data-route="achievements"><span>↑</span>Прогрес</button>
@@ -1612,6 +1571,62 @@
     });
   }
 
+  function viewGratitude() {
+    const all = S.state.gratitude || [];
+    const today = todayKey();
+    const todayItems = all.filter(x => x.dayKey === today);
+    const title = isMale() ? "За що я сьогодні вдячний" : "За що я сьогодні вдячна";
+    const prompt = isMale()
+      ? "Запиши одну конкретну річ, за яку ти сьогодні вдячний. Не треба шукати щось велике — достатньо чесної дрібниці."
+      : "Запиши одну конкретну річ, за яку ти сьогодні вдячна. Не треба шукати щось велике — достатньо чесної дрібниці.";
+    $("#view").innerHTML = `
+      <div class="page-head"><h1>${esc(title)}</h1>
+        <p>Цей розділ допомагає мозку бачити не лише тривогу, а й те, що підтримує тебе сьогодні.</p></div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="card-title">Сьогоднішня вдячність</div>
+          <p class="muted">${esc(prompt)}</p>
+          <label class="field" style="margin-top:12px"><span>${isMale() ? "Я вдячний за..." : "Я вдячна за..."}</span>
+            <textarea id="gratitude-text" rows="4" placeholder="${isMale() ? "Наприклад: за спокійну розмову, прогулянку, підтримку друга..." : "Наприклад: за спокійну розмову, прогулянку, підтримку подруги..."}"></textarea></label>
+          <div class="row" style="justify-content:flex-end;margin-top:12px">
+            <button class="btn btn-primary btn-sm" id="gratitude-save">Зберегти</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Сьогодні вже записано</div>
+          ${todayItems.length ? `<div class="stack">${todayItems.map(x => `
+            <div class="item" style="box-shadow:none">
+              <div class="item-body">${esc(x.text)}</div>
+            </div>`).join("")}</div>` : emptyBlock("∴", "Поки немає записів за сьогодні. Почни з однієї простої речі.")}
+        </div>
+      </div>
+
+      <h2 class="section-title">Усі записи вдячності (${all.length})</h2>
+      <div class="stack" id="gratitude-list">
+        ${all.length ? all.map(x => `
+          <div class="item">
+            <div class="item-head">
+              <span class="pill pill-violet">${fmtDate(x.date)}</span>
+              <button class="btn btn-ghost btn-sm" data-del-gratitude="${x.id}">Прибрати</button>
+            </div>
+            <div class="item-body">${esc(x.text)}</div>
+          </div>`).join("") : emptyBlock("∴", "Тут з'являться твої записи вдячності.")}
+      </div>`;
+
+    $("#gratitude-save").onclick = () => {
+      const text = $("#gratitude-text").value.trim();
+      if (!text) { toast(isMale() ? "Напиши, за що ти вдячний сьогодні" : "Напиши, за що ти вдячна сьогодні", "warn"); return; }
+      S.addGratitude(text);
+      toast("Запис вдячності збережено ∴", "good");
+      render();
+    };
+    $$("[data-del-gratitude]", $("#view")).forEach(b => b.onclick = () => {
+      S.removeGratitude(b.dataset.delGratitude);
+      render();
+    });
+  }
+
   /* ===================== ПРАКТИКА «ПОРАДА ПОДРУЗІ» ===================== */
   function viewFriendPractice() {
     const notes = S.state.friendNotes || [];
@@ -2004,42 +2019,44 @@
     const firstTest = tests[0], lastTest = tests[tests.length - 1];
 
     $("#view").innerHTML = `
+      <div class="analytics-page">
       <div class="page-head"><h1>📊 Аналітика</h1><p>Твоя історія зберігається без обмежень. Ось що вона показує.</p></div>
 
-      <div class="grid grid-4" style="margin-bottom:6px">
+      <div class="grid grid-4 analytics-stats">
         <div class="stat"><div class="s-ico">🔥</div><div class="s-val">${streak}</div><div class="s-lbl">серія днів</div></div>
         <div class="stat"><div class="s-ico">📝</div><div class="s-val">${filledDays()}</div><div class="s-lbl">заповнено днів</div></div>
         <div class="stat"><div class="s-ico">🛡️</div><div class="s-val">${S.state.evidence.length}</div><div class="s-lbl">страхів не справдилось</div></div>
         <div class="stat"><div class="s-ico">📈</div><div class="s-val">${entries.length}</div><div class="s-lbl">усього записів</div></div>
       </div>
 
-      <div class="grid grid-2">
-        <div class="card"><div class="card-title">📉 Прогрес тривоги</div>
-          <div class="row spread" style="padding:6px 0"><span>За 7 днів (vs попередні 7)</span><b>${trend(a7,p7)}</b></div>
-          <div class="row spread" style="padding:6px 0"><span>За 30 днів (vs попередні 30)</span><b>${trend(a30,p30)}</b></div>
+      <div class="grid grid-2 analytics-grid">
+        <div class="card analytics-card"><div class="card-title">📉 Прогрес тривоги</div>
+          <div class="analytics-row"><span>За 7 днів (vs попередні 7)</span><b>${trend(a7,p7)}</b></div>
+          <div class="analytics-row"><span>За 30 днів (vs попередні 30)</span><b>${trend(a30,p30)}</b></div>
         </div>
-        <div class="card"><div class="card-title">🧪 Тест тривожності: старт vs зараз</div>
-          ${firstTest ? `<div class="row spread" style="padding:6px 0"><span>Перший тест (${fmtDate(firstTest.date)})</span><b>${firstTest.score} балів</b></div>
-          <div class="row spread" style="padding:6px 0"><span>Останній тест (${fmtDate(lastTest.date)})</span><b>${lastTest.score} балів ${lastTest.score<firstTest.score?'<span class="pill pill-green">покращення</span>':lastTest.score>firstTest.score?'<span class="pill pill-warn">вище</span>':''}</b></div>
+        <div class="card analytics-card"><div class="card-title">🧪 Тест тривожності: старт vs зараз</div>
+          ${firstTest ? `<div class="analytics-row"><span>Перший тест (${fmtDate(firstTest.date)})</span><b>${firstTest.score} балів</b></div>
+          <div class="analytics-row"><span>Останній тест (${fmtDate(lastTest.date)})</span><b>${lastTest.score} балів ${lastTest.score<firstTest.score?'<span class="pill pill-green">покращення</span>':lastTest.score>firstTest.score?'<span class="pill pill-warn">вище</span>':''}</b></div>
           <button class="btn btn-ghost btn-sm" id="retake" style="margin-top:8px">Пройти тест знову</button>`
           : `<p class="muted">Тест ще не пройдено.</p><button class="btn btn-primary btn-sm" id="retake">Пройти тест</button>`}
         </div>
       </div>
 
-      <div class="grid grid-2" style="margin-top:16px">
-        <div class="card"><div class="card-title">Рівень тривоги по днях</div><canvas id="ch-anxiety" height="170"></canvas></div>
-        <div class="card"><div class="card-title">Динаміка настрою та енергії</div><canvas id="ch-mood" height="170"></canvas></div>
+      <div class="grid grid-2 analytics-grid">
+        <div class="card analytics-card chart-card"><div class="card-title">Рівень тривоги по днях</div><div class="chart-box"><canvas id="ch-anxiety"></canvas></div></div>
+        <div class="card analytics-card chart-card"><div class="card-title">Динаміка настрою та енергії</div><div class="chart-box"><canvas id="ch-mood"></canvas></div></div>
       </div>
 
-      <div class="grid grid-2" style="margin-top:16px">
-        <div class="card"><div class="card-title">Тривога по тижнях</div><canvas id="ch-weeks" height="170"></canvas></div>
-        <div class="card"><div class="card-title">Найчастіші категорії</div><canvas id="ch-cats" height="170"></canvas></div>
+      <div class="grid grid-2 analytics-grid">
+        <div class="card analytics-card chart-card"><div class="card-title">Тривога по тижнях</div><div class="chart-box"><canvas id="ch-weeks"></canvas></div></div>
+        <div class="card analytics-card chart-card"><div class="card-title">Найчастіші категорії</div><div class="chart-box"><canvas id="ch-cats"></canvas></div></div>
       </div>
 
-      <div class="grid grid-3" style="margin-top:16px">
-        <div class="card"><div class="card-title">Найчастіші причини</div>${listOrEmpty(causes)}</div>
-        <div class="card"><div class="card-title">Найчастіші тригери</div>${listOrEmpty(triggers)}</div>
-        <div class="card"><div class="card-title">Найефективніша підтримка</div>${ranking.length?ranking.map(r=>`<div class="row spread" style="padding:5px 0"><span>${esc(r.name)}</span><span class="faint">ефект ${r.avg||"–"}/5</span></div>`).join(""):'<p class="muted">Немає даних</p>'}</div>
+      <div class="grid grid-3 analytics-grid">
+        <div class="card analytics-card"><div class="card-title">Найчастіші причини</div>${listOrEmpty(causes)}</div>
+        <div class="card analytics-card"><div class="card-title">Найчастіші тригери</div>${listOrEmpty(triggers)}</div>
+        <div class="card analytics-card"><div class="card-title">Найефективніша підтримка</div>${ranking.length?ranking.map(r=>`<div class="analytics-row"><span>${esc(r.name)}</span><span class="faint">ефект ${r.avg||"–"}/5</span></div>`).join(""):'<p class="muted">Немає даних</p>'}</div>
+      </div>
       </div>
     `;
 
@@ -2090,7 +2107,7 @@
     }));
   }
   function listOrEmpty(arr) {
-    return arr.length ? arr.map((c,i)=>`<div class="row spread" style="padding:5px 0"><span>${i+1}. ${esc(c[0])}</span><span class="faint">${c[1]} ${pluralUk(c[1],"раз","рази","разів")}</span></div>`).join("") : '<p class="muted">Немає даних</p>';
+    return arr.length ? arr.map((c,i)=>`<div class="analytics-row"><span>${i+1}. ${esc(c[0])}</span><span class="faint">${c[1]} ${pluralUk(c[1],"раз","рази","разів")}</span></div>`).join("") : '<p class="muted">Немає даних</p>';
   }
   function weekKey(iso) {
     const d = new Date(iso); const onejan = new Date(d.getFullYear(), 0, 1);
@@ -2191,6 +2208,7 @@
 
   /* ===================== ПРОФІЛЬ / КОНФІДЕНЦІЙНІСТЬ ===================== */
   function viewProfile() {
+    applyGenderTheme();
     const p = S.state.profile;
     $("#view").innerHTML = `
       <div class="page-head"><h1>⚙️ Профіль і дані</h1><p>Керуй своїми даними. Усе залишається приватним.</p></div>
@@ -2273,6 +2291,7 @@
     }
     $$("#prof-gender .gender-opt").forEach(b => b.onclick = () => {
       S.setGender(b.dataset.g);
+      applyGenderTheme();
       toast("Збережено 🌿", "good");
       render();
     });
@@ -2418,7 +2437,7 @@
     if (affTimer) { clearInterval(affTimer); affTimer = null; }
     const map = {
       home: viewHome, types: viewTypes, typeTest: viewTypeTest, new: viewNew, reminders: viewReminders, evidence: viewEvidence,
-      resources: viewResources, treasure: viewTreasure, analytics: viewAnalytics, joys: viewJoys, good: viewGoodEvents, friend: viewFriendPractice,
+      resources: viewResources, treasure: viewTreasure, analytics: viewAnalytics, joys: viewJoys, good: viewGoodEvents, gratitude: viewGratitude, friend: viewFriendPractice,
       history: viewHistory, library: viewLibrary, achievements: viewAchievements, profile: viewProfile
     };
     (map[route] || viewHome)();
@@ -2428,12 +2447,13 @@
 
   /* ===================== АВТОРИЗАЦІЯ ===================== */
   function showApp() {
+    applyGenderTheme();
     $("#auth-screen").classList.add("hidden");
     $("#app").classList.remove("hidden");
     renderNav();
     // якщо стать не вказана (старий акаунт) — запитати один раз
     if (!S.state.profile.gender) {
-      setTimeout(() => askGender(g => { S.setGender(g); render(); startOnboarding(); }), 400);
+      setTimeout(() => askGender(g => { S.setGender(g); applyGenderTheme(); render(); startOnboarding(); }), 400);
     } else {
       startOnboarding();
     }
@@ -2443,17 +2463,54 @@
   }
 
   function startOnboarding() {
-    // Старт тепер не з тесту, а з м'якої шкали самопочуття на головній.
-    // Якщо рівень високий — сайт сам запропонує тести та SOS-практики.
+    // Одразу після входу — швидкий замір самопочуття: шкала тривожності 1–10
+    // (SUDS з КПТ). Називання рівня саме по собі знижує напругу (affect labeling),
+    // тому питаємо м'яко, раз на день і з можливістю відкласти — без примусу.
+    if (S.todayWellbeing()) return;
+    const scale = Array.from({ length: 10 }, (_, i) =>
+      `<button class="well-btn" data-onb-well="${i + 1}">${i + 1}</button>`).join("");
+    openModal(`
+      <h2>${isMale() ? "Як ти зараз, друже?" : "Як ти зараз?"} ${uiText("🌿")}</h2>
+      <p class="muted" style="margin:0 0 14px;line-height:1.55">
+        Оціни свій рівень тривоги просто зараз: <b>1</b> — спокійно, <b>10</b> — напруга на максимумі.
+        Це не тест і тут немає правильних відповідей — просто чесний замір стану.
+      </p>
+      <div class="well-scale">${scale}</div>
+      <div class="row spread" style="margin-top:8px;color:var(--ink-faint);font-size:12px;font-weight:700">
+        <span>1 · спокій</span><span>10 · максимум</span>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost btn-sm" data-close>Пізніше</button>
+      </div>`);
+    $$("#modal-root [data-onb-well]").forEach(b => b.onclick = () => {
+      const v = +b.dataset.onbWell;
+      S.setWellbeing(v);
+      closeModal();
+      render();
+      if (v >= 7) {
+        // Висока напруга: спершу стабілізація нервової системи, аналіз — потім.
+        confirmModal(uiText("Схоже, зараз непросто 🌿"),
+          isMale()
+            ? "Дякую за чесність. Не треба нічого розбирати просто зараз — спершу дамо тілу заспокоїтися. Хочеш коротку SOS-практику дихання?"
+            : "Дякую за чесність. Не треба нічого розбирати просто зараз — спершу дай тілу заспокоїтися. Хочеш коротку SOS-практику дихання?",
+          () => startCalm("quick"), "Так, заспокоїтись");
+      } else if (v <= 4) {
+        toast(uiText("Гарний стан. Зафіксуй щось хороше сьогодні 🙂"), "good");
+      } else {
+        toast("Записано. Один маленький крок сьогодні — вже достатньо", "good");
+      }
+    });
   }
 
   // Нагадування у день відкриття (браузерне сповіщення + бейдж у меню)
   function notifyReminders() {
     const pend = pendingReminders();
     if (!pend.length || !("Notification" in window)) return;
-    const fire = () => new Notification("Спокій 🌿 — час відкрити запис", {
+    const fire = () => new Notification(uiText("Спокій 🌿 — час відкрити запис"), {
       body: `Настав день відкриття для ${pend.length} ${pluralUk(pend.length, "запису", "записів", "записів")}. Перевір, чи справдилися твої страхи.`,
-      icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>"
+      icon: isMale()
+        ? "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='18' y='18' width='64' height='64' rx='12' fill='%233f6f8f'/><text x='50' y='62' text-anchor='middle' font-size='38' fill='white' font-family='Arial'>S</text></svg>"
+        : "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>"
     });
     if (Notification.permission === "granted") fire();
     else if (Notification.permission !== "denied") Notification.requestPermission().then(p => { if (p === "granted") fire(); });
@@ -2549,6 +2606,11 @@
     $("#menu-toggle").onclick = () => { $("#sidebar").classList.toggle("open"); $("#scrim").classList.toggle("show"); };
     $("#scrim").onclick = closeSidebar;
     document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); closeCrisis(); if (calmState) closeCalm(); } });
+
+    // Дані підтягнулися з бекенда (SQLite) — оновити інтерфейс «на льоту».
+    window.addEventListener("spokiy:synced", () => {
+      if (S.isAuthed() && !$("#app").classList.contains("hidden")) { renderNav(); render(); }
+    });
 
     if (S.isAuthed()) showApp();
   }

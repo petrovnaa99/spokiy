@@ -638,17 +638,5 @@ window.CONTENT = (function () {
     "Lana Del Rey — Radio"
   ];
 
-  // Вбудований плеєр — спокійні інструментальні треки (вільні для прослуховування)
-  const PLAYLIST = [
-    { title: "Світанок", artist: "Спокій · інструментал", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
-    { title: "Тиха вода", artist: "Спокій · інструментал", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" },
-    { title: "Легкий вітер", artist: "Спокій · інструментал", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3" },
-    { title: "Тепле проміння", artist: "Спокій · інструментал", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3" },
-    { title: "Перший сніг", artist: "Спокій · інструментал", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3" },
-    { title: "Дорога додому", artist: "Спокій · інструментал", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3" },
-    { title: "Нічне небо", artist: "Спокій · інструментал", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-15.mp3" },
-    { title: "Новий день", artist: "Спокій · інструментал", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-16.mp3" }
-  ];
-
-  return { AFFIRMATIONS, QUOTES, BREATHING, GROUNDING, LIBRARY, TEST, CATEGORIES, TRIGGERS, RESOURCE_SUGGESTIONS, ACHIEVEMENTS, ANXIETY_TYPES, CALM, FINANCE, SONGS, PLAYLIST };
+  return { AFFIRMATIONS, QUOTES, BREATHING, GROUNDING, LIBRARY, TEST, CATEGORIES, TRIGGERS, RESOURCE_SUGGESTIONS, ACHIEVEMENTS, ANXIETY_TYPES, CALM, FINANCE, SONGS };
 })();

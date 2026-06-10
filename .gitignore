@@ -1,0 +1,20 @@
+# Залежності
+node_modules/
+
+# База даних SQLite (локальні дані користувачів)
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Секрети / середовище (не комітити реальні ключі)
+.env
+.env.local
+.env.*.local
+
+# Vercel
+.vercel
+
+# Системне
+.DS_Store
+*.log

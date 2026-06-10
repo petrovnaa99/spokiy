@@ -17,6 +17,7 @@ window.Store = (function () {
       friendNotes: [],                      // практика «порада подрузі» { id, situation, advice, date }
       wellbeing: {},                        // щоденна шкала самопочуття { YYYY-MM-DD: { level, date } }
       goodEvents: [],                       // хороші події дня { id, text, date, dayKey }
+      gratitude: [],                        // вдячність дня { id, text, date, dayKey }
       achievements: {},                     // { id: ISOдата }
       checkins: {},                         // { 'YYYY-MM-DD': true } для серій
       draft: null,                          // незавершений запис
@@ -31,6 +32,60 @@ window.Store = (function () {
   }
   function saveDb(obj) { localStorage.setItem(ROOT, JSON.stringify(obj)); }
 
+  /* ---- Хмарна синхронізація з бекендом SQLite (serve.js) ----
+     Працює лише коли сайт відкрито через http(s). При відкритті файлу напряму
+     (file://) або без сервера тихо вмикається офлайн-режим (тільки localStorage). */
+  const API = "/api/state";
+  let pushTimer = null;
+  const Cloud = {
+    enabled: (location.protocol === "http:" || location.protocol === "https:"),
+    async pull(email) {
+      if (!this.enabled || !email) return null;
+      try {
+        const r = await fetch(API + "/" + encodeURIComponent(email), { headers: { Accept: "application/json" } });
+        if (!r.ok) return null;
+        const j = await r.json();
+        return j && j.ok && j.data ? j.data : null;
+      } catch (e) { return null; }
+    },
+    push(email, data) {
+      if (!this.enabled || !email || !data) return;
+      clearTimeout(pushTimer);
+      const payload = JSON.stringify(data);
+      pushTimer = setTimeout(() => {
+        fetch(API + "/" + encodeURIComponent(email), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          keepalive: true
+        }).catch(() => {});
+      }, 600);
+    },
+    remove(email) {
+      if (!this.enabled || !email) return;
+      fetch(API + "/" + encodeURIComponent(email), { method: "DELETE" }).catch(() => {});
+    }
+  };
+
+  // Підтягнути дані акаунта з бекенда. Перемагає новіша версія (за updatedAt).
+  // preferRemote=true — акаунт щойно створено на цьому пристрої: якщо в базі вже
+  // є дані цього email, вони важливіші за порожній локальний стан.
+  async function syncFromCloud(preferRemote) {
+    if (!Cloud.enabled || !currentEmail || !state) return;
+    const remote = await Cloud.pull(currentEmail);
+    if (!remote) { Cloud.push(currentEmail, state); return; }
+    const localT = Date.parse(state.updatedAt || 0) || 0;
+    const remoteT = Date.parse(remote.updatedAt || 0) || 0;
+    if (preferRemote || remoteT > localT) {
+      clearTimeout(pushTimer); // скасувати відкладене відправлення застарілого стану
+      state = remote;
+      const all = db(); all[currentEmail] = state; saveDb(all);
+      try { window.dispatchEvent(new CustomEvent("spokiy:synced")); } catch (e) {}
+    } else if (localT > remoteT) {
+      Cloud.push(currentEmail, state);
+    }
+  }
+
   let currentEmail = localStorage.getItem(SESSION) || null;
   let state = null;
 
@@ -40,13 +95,15 @@ window.Store = (function () {
     state = all[currentEmail] || emptyState();
     return state;
   }
-  if (currentEmail) load();
+  if (currentEmail) { load(); syncFromCloud(); }
 
   function persist() {
     if (!currentEmail || !state) return;
+    state.updatedAt = new Date().toISOString();
     const all = db();
     all[currentEmail] = state;
     saveDb(all);
+    Cloud.push(currentEmail, state);
   }
 
   return {
@@ -57,6 +114,7 @@ window.Store = (function () {
       currentEmail = profile.email.trim().toLowerCase();
       localStorage.setItem(SESSION, currentEmail);
       const all = db();
+      const isNewOnDevice = !all[currentEmail];
       if (all[currentEmail]) {
         state = all[currentEmail];
         // оновити ім'я/провайдера/стать/аватар, якщо змінилися
@@ -68,6 +126,8 @@ window.Store = (function () {
         state = emptyState({ ...profile, email: currentEmail, createdAt: new Date().toISOString() });
       }
       persist();
+      // На новому пристрої дані з бази важливіші за щойно створений порожній стан.
+      syncFromCloud(isNewOnDevice);
       return state;
     },
 
@@ -227,6 +287,20 @@ window.Store = (function () {
       state.goodEvents = (state.goodEvents || []).filter(x => x.id !== id); persist();
     },
 
+    addGratitude(text, date) {
+      text = (text || "").trim(); if (!text) return null;
+      const iso = date || new Date().toISOString();
+      const dayKey = iso.slice(0, 10);
+      if (!Array.isArray(state.gratitude)) state.gratitude = [];
+      const rec = { id: "gr" + Date.now() + Math.random().toString(36).slice(2, 5), text, date: iso, dayKey };
+      state.gratitude.unshift(rec);
+      persist();
+      return rec;
+    },
+    removeGratitude(id) {
+      state.gratitude = (state.gratitude || []).filter(x => x.id !== id); persist();
+    },
+
     // ---- Серії (check-ins) ----
     markCheckin(iso) {
       const d = new Date(iso || Date.now());
@@ -255,9 +329,11 @@ window.Store = (function () {
 
     deleteAllData() {
       if (!currentEmail) return;
+      const email = currentEmail;
       const all = db();
       delete all[currentEmail];
       saveDb(all);
+      Cloud.remove(email);
       this.logout();
     }
   };
