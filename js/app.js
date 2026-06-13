@@ -31,7 +31,10 @@
     ["у твоєї кращої подруги", "у твого кращого друга"],
     ["твоєї кращої подруги", "твого кращого друга"],
     ["у моєї кращої подруги", "у мого кращого друга"],
+    ["з моєю кращою подругою", "з моїм другом"],
     ["моєї кращої подруги", "мого кращого друга"],
+    ["Порада подрузі", "Лист другові"],
+    ["порада подрузі", "лист другові"],
     ["очима доброї подруги", "очима доброго друга"],
     ["доброї подруги", "доброго друга"],
     ["кращої подруги", "кращого друга"],
@@ -40,7 +43,8 @@
     ["сама собі", "сам собі"],
     ["Ти не сама", "Ти не сам"],
     ["ти не сама", "ти не сам"],
-    ["побудь сама", "побудь сам"]
+    ["побудь сама", "побудь сам"],
+    ["як фахівчині", "як фахівця"]
   ];
   const G_WORDS = [
     // дієслова минулого часу
@@ -50,8 +54,8 @@
     ["впоралася","впорався"],["впоралась","впорався"],["засмутилася","засмутився"],["втомилася","втомився"],
     ["заспокоїлася","заспокоївся"],["зосередилася","зосередився"],["пишалася","пишався"],["зрозуміла","зрозумів"],
     ["сказала","сказав"],["написала","написав"],["помітила","помітив"],["дозволила","дозволив"],["відпочила","відпочив"],
-    ["поговорила","поговорив"],["дочекалася","дочекався"],["спробувала","спробував"],["вирішила","вирішив"],
-    ["переживала","переживав"],["мала","мав"],
+    ["поговорила","поговорив"],["почула","почув"],["забувала","забував"],["дочекалася","дочекався"],["спробувала","спробував"],["вирішила","вирішив"],
+    ["переживала","переживав"],["карала","карав"],["доросла","дорослий"],["мала","мав"],
     // прикметники / стани (називний)
     ["сама","сам"],["готова","готовий"],["впевнена","впевнений"],["вдячна","вдячний"],["відкрита","відкритий"],
     ["спокійна","спокійний"],["цінна","цінний"],["винна","винен"],["зобов'язана","зобов'язаний"],["зобовʼязана","зобовʼязаний"],
@@ -60,7 +64,7 @@
     ["втомлена","втомлений"],["налаштована","налаштований"],["самотня","самотній"],
     // прикметники в орудному (-ою → -им)
     ["сильною","сильним"],["ідеальною","ідеальним"],["впевненою","впевненим"],["спокійною","спокійним"],
-    ["вдячною","вдячним"],["відкритою","відкритим"],["готовою","готовим"],["щасливою","щасливим"],["вільною","вільним"],
+    ["вдячною","вдячним"],["відкритою","відкритим"],["готовою","готовим"],["щасливою","щасливим"],["вільною","вільним"],["м'якою","м'яким"],
     // дружба
     ["подругою","другом"],["подрузі","другу"],["подругу","друга"],["подруга","друг"]
   ];
@@ -99,8 +103,15 @@
     else document.documentElement.removeAttribute("data-gender");
   }
   function uiText(text) {
-    if (!isMale()) return text;
-    const map = {
+    const calmMap = {
+      "🌿": "◇", "🍃": "◇", "🌤️": "◌", "💗": "♡", "💚": "♡", "🤍": "♡", "💞": "♡",
+      "🌱": "◇", "💝": "♡", "🌟": "✧", "✨": "✧", "🫁": "◌", "🌍": "◎", "🫧": "○",
+      "🌈": "◇", "🏆": "△", "🔥": "△", "🎉": "✧", "🛡️": "◇", "🛡": "◇", "💪": "△",
+      "🧭": "⌁", "🧪": "∿", "⚙️": "⚙", "👤": "ID", "💾": "□", "☁️": "☁", "🔒": "◇",
+      "📚": "§", "📜": "≡", "📄": "□", "🖨️": "□", "🗑": "×", "⬇️": "↓", "⬆️": "↑",
+      "☺": "•", "🙂": "•", "😟": "!", "📈": "↑", "📉": "↓"
+    };
+    const maleMap = {
       "🌿": "◆", "🍃": "◆", "🌤️": "▣", "💗": "■", "💚": "◆", "🤍": "□", "💞": "■",
       "🛡️": "▣", "🛡": "▣", "💪": "▲", "🌱": "◆", "💝": "▣", "🌟": "◆", "✨": "◆",
       "🫁": "◌", "🌍": "◎", "🫧": "○", "🌈": "▣", "🏆": "▲", "🔥": "▲", "🎉": "▲",
@@ -108,10 +119,11 @@
       "📚": "§", "📜": "≡", "📄": "□", "🖨️": "□", "🗑": "×", "⬇️": "↓", "⬆️": "↑",
       "☺": "•", "🙂": "•", "😟": "!", "📈": "↑", "📉": "↓"
     };
+    const map = isMale() ? maleMap : calmMap;
     return String(text).replace(/🌤️|🛡️|⚙️|☁️|🖨️|⬇️|⬆️|[🌿🍃💗💚🤍💞🛡💪🌱💝🌟✨🫁🌍🫧🌈🏆🔥🎉🧭🧪👤💾🔒📚📜📄🗑☺🙂😟📈📉]/g, m => map[m] || m);
   }
   function genderizeDOM(root) {
-    if (!root || !isMale()) return;
+    if (!root) return;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode(n) {
         if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
@@ -126,6 +138,14 @@
     nodes.forEach(n => {
       const next = uiText(genderize(n.nodeValue));
       if (next !== n.nodeValue) n.nodeValue = next;
+    });
+    $$("[placeholder],[title],[aria-label],[alt]", root).forEach(el => {
+      ["placeholder", "title", "aria-label", "alt"].forEach(attr => {
+        if (!el.hasAttribute(attr)) return;
+        const prev = el.getAttribute(attr);
+        const next = uiText(genderize(prev));
+        if (next !== prev) el.setAttribute(attr, next);
+      });
     });
   }
 
@@ -230,7 +250,7 @@
   let songCurrent = null;
 
   function randomAff(exclude) {
-    const list = C.AFFIRMATIONS;
+    const list = (isMale() && C.MALE_AFFIRMATIONS && C.MALE_AFFIRMATIONS.length) ? C.MALE_AFFIRMATIONS : C.AFFIRMATIONS;
     if (list.length <= 1) return list[0];
     let a;
     do { a = list[Math.floor(Math.random() * list.length)]; } while (a === exclude);
@@ -412,7 +432,7 @@
 
   function go(r, param = null) {
     route = r; routeParam = param;
-    $("#topbar-title").textContent = (NAV.find(n => n.id === r) || {}).label || "Спокій";
+    $("#topbar-title").textContent = uiText(genderize((NAV.find(n => n.id === r) || {}).label || "Спокій"));
     renderNav();
     render();
     $("#view").scrollTo?.(0, 0);
@@ -667,8 +687,8 @@
 
     $("#view").innerHTML = `
       <div class="welcome">
-        <h1>${isMale() ? "Привіт, друже" : "Привіт"}</h1>
-        <p>${isMale() ? "Тут можна видихнути без пояснень.<br>Я поруч як друг: спокійно розберемося і зробимо один реальний крок." : "Тут не потрібно бути сильною чи ідеальною.<br>Зроби один маленький крок до себе."}</p>
+        <h1>${isMale() ? "Привіт. Тут можна зібратися без тиску" : "Привіт"}</h1>
+        <p>${isMale() ? "Без пафосу і без оцінок. Видихни, подивимось на стан чесно й оберемо один нормальний крок далі." : "Тут не потрібно бути сильною чи ідеальною.<br>Зроби один маленький крок до себе."}</p>
       </div>
       ${banners}
       ${reminderCard}
@@ -871,7 +891,7 @@
   }
 
   function testOutroHTML(type) {
-    const aff = C.AFFIRMATIONS[Math.floor(Math.random() * C.AFFIRMATIONS.length)];
+    const aff = randomAff();
     return `
       <div class="page-head"><h1>${type.icon} Ти молодець 🤍</h1></div>
       <div class="card" style="background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;border:none">
@@ -894,6 +914,7 @@
           <p class="muted" style="margin-top:10px;font-size:13px">Тривога завжди тимчасова. Повертайся сюди щоразу, коли потрібна опора.</p>
         </div>
       </div>
+      ${type.id === "post-event" ? postEventToolkitHTML() : ""}
       ${type.id === "finances" ? financeToolkitHTML() : ""}`;
   }
   function wireTestOutro(type) {
@@ -902,7 +923,48 @@
     $("#o-entry").onclick = () => { testState = null; go("new"); };
     $("#o-again").onclick = () => { testState = { typeId: type.id, step: 0, picked: null }; paintType(type, true); };
     $("#o-types").onclick = () => { testState = null; go("types"); };
+    if (type.id === "post-event") wirePostEventToolkit($("#tt-stage"));
     if (type.id === "finances") wireFinanceToolkit($("#tt-stage"));
+  }
+
+  function postEventToolkitHTML() {
+    return `
+      <div class="card fin-toolkit" style="margin-top:16px">
+        <div class="card-title">Протокол: «я сказала щось не те»</div>
+        <p class="muted" style="margin-top:0">
+          Це CBT-схема для післяситуаційного прокручування: спершу факти, потім одна дія, потім завершення циклу.
+        </p>
+        <div class="fin-tool-grid">
+          <div class="fin-tool">
+            <b>1. Назви петлю</b>
+            <p>«Я зараз руміную, а не вирішую проблему». Назва процесу зменшує його силу.</p>
+          </div>
+          <div class="fin-tool">
+            <b>2. Факти vs припущення</b>
+            <p>Факт: що реально було сказано/зроблено. Припущення: «вони точно подумали...».</p>
+          </div>
+          <div class="fin-tool">
+            <b>3. Одна корекція</b>
+            <p>Якщо є реальна помилка — коротко уточнити або вибачитись. Якщо доказів нема — не писати зайве.</p>
+          </div>
+          <div class="fin-tool">
+            <b>4. Закрити цикл</b>
+            <p>10 хвилин на запис думок, потім дія тілом: вода, прогулянка, душ, проста справа.</p>
+          </div>
+        </div>
+        <div class="advice" style="margin-top:14px">
+          <div class="advice-ico">◇</div>
+          <div><b>Фраза для зупинки:</b> «Я перевірила факти. Якщо потрібна дія — я зроблю одну дію. Якщо ні — я повертаюсь у своє життя».</div>
+        </div>
+        <div class="row" style="justify-content:flex-end;margin-top:14px">
+          <button class="btn btn-primary btn-sm" id="post-event-entry">Записати ситуацію в щоденник</button>
+        </div>
+      </div>`;
+  }
+
+  function wirePostEventToolkit(root) {
+    const btn = $("#post-event-entry", root);
+    if (btn) btn.onclick = () => { testState = null; go("new"); };
   }
 
   /* ===================== ФІНАНСОВИЙ НАБІР ===================== */
@@ -1332,7 +1394,7 @@
   let breathTimer = null;
   function openCrisis() {
     const ov = $("#crisis-overlay");
-    const aff = C.AFFIRMATIONS[Math.floor(Math.random() * C.AFFIRMATIONS.length)];
+    const aff = randomAff();
     const lastFears = S.state.evidence.slice(0, 5);
     const ranking = S.resourceRanking().slice(0, 3);
     const treasures = S.state.treasure;
@@ -1528,16 +1590,22 @@
   function viewGoodEvents() {
     const events = S.state.goodEvents || [];
     const today = S.todayWellbeing();
+    const goodDesc = isMale()
+      ? "Це твій банк приємних фактів. У тривожні періоди він нагадує: хороше теж стається, навіть якщо мозок тимчасово фокусується на загрозах."
+      : "Це твоя колекція приємних фактів. У тривожні періоди вона нагадує: хороше теж стається, навіть якщо мозок тимчасово фокусується на загрозах.";
+    const goodPrompt = isMale()
+      ? "Наприклад: була нормальна прогулянка, добре поговорив, почув класну пісню..."
+      : "Наприклад: була гарна прогулянка, добре поговорила, почула класну пісню...";
     $("#view").innerHTML = `
       <div class="page-head"><h1>Хороші події</h1>
-        <p>Це твоя колекція приємних фактів. У тривожні періоди вона нагадує: хороше теж стається, навіть якщо мозок тимчасово фокусується на загрозах.</p></div>
+        <p>${goodDesc}</p></div>
 
       <div class="grid grid-2">
         <div class="card">
           <div class="card-title">Додати подію сьогодні</div>
           <p class="muted">Якщо день гарний — зроби його ще кращим: поміть маленьку приємність, цікаву розмову, добрий жест, смачну каву, прогулянку чи будь-яку теплу деталь.</p>
           <label class="field" style="margin-top:12px"><span>Що приємного або цікавого сталося?</span>
-            <textarea id="good-text" rows="3" placeholder="Наприклад: була гарна прогулянка, добре поговорила, почула класну пісню..."></textarea></label>
+            <textarea id="good-text" rows="3" placeholder="${esc(goodPrompt)}"></textarea></label>
           <div class="row" style="justify-content:space-between;margin-top:12px;gap:10px">
             ${today ? `<span class="pill ${today.level >= 7 ? "pill-red" : today.level <= 4 ? "pill-green" : "pill-warn"}">Самопочуття: ${today.level}/10</span>` : `<span class="faint">Сьогодні ще немає оцінки самопочуття</span>`}
             <button class="btn btn-primary btn-sm" id="good-save">Зберегти</button>
@@ -1630,16 +1698,27 @@
   /* ===================== ПРАКТИКА «ПОРАДА ПОДРУЗІ» ===================== */
   function viewFriendPractice() {
     const notes = S.state.friendNotes || [];
+    const title = isMale() ? "Якби це сталося з моїм другом" : "Якби це сталося у моєї кращої подруги";
+    const situationPlaceholder = isMale()
+      ? "Уяви, що це сталося з твоїм другом. Опиши, що відбувається..."
+      : "Уяви, що це сталося з твоєю найкращою подругою. Опиши, що відбувається...";
+    const adviceLabel = isMale() ? "Що б ти йому порадив?" : "Що б ти їй порадила?";
+    const advicePlaceholder = isMale()
+      ? "Які спокійні, чесні слова ти б сказав йому? Як би підтримав?"
+      : "Які теплі, мудрі слова ти б сказала їй? Як би заспокоїла та підтримала?";
+    const emptyText = isMale()
+      ? "Поки порожньо. Спробуй поглянути на свою ситуацію очима доброго друга."
+      : "Поки порожньо. Спробуй поглянути на свою ситуацію очима доброї подруги.";
     $("#view").innerHTML = `
-      <div class="page-head"><h1>Якби це сталося у моєї кращої подруги</h1>
+      <div class="page-head"><h1>${esc(title)}</h1>
         <p>Ми часто буваємо добрішими до інших, ніж до себе. Опиши ситуацію збоку — і подаруй собі ту саму підтримку.</p></div>
 
       <div class="card">
         <label class="field"><span>Ситуація</span>
-          <textarea id="fp-situation" rows="3" placeholder="Уяви, що це сталося з твоєю найкращою подругою. Опиши, що відбувається..."></textarea></label>
+          <textarea id="fp-situation" rows="3" placeholder="${esc(situationPlaceholder)}"></textarea></label>
 
-        <label class="field" style="margin-top:14px"><span>Що б ти їй порадила?</span>
-          <textarea id="fp-advice" rows="3" placeholder="Які теплі, мудрі слова ти б сказала їй? Як би заспокоїла та підтримала?"></textarea></label>
+        <label class="field" style="margin-top:14px"><span>${esc(adviceLabel)}</span>
+          <textarea id="fp-advice" rows="3" placeholder="${esc(advicePlaceholder)}"></textarea></label>
 
         <div class="row" style="justify-content:flex-end;margin-top:16px">
           <button class="btn btn-primary" id="fp-save">Зберегти 💚</button>
@@ -1668,7 +1747,7 @@
 
     const list = $("#fp-list");
     if (!notes.length) {
-      list.innerHTML = emptyBlock("✉", "Поки порожньо. Спробуй поглянути на свою ситуацію очима доброї подруги.");
+      list.innerHTML = emptyBlock("✉", emptyText);
       return;
     }
     list.innerHTML = `<h2 class="section-title">Мої поради собі (${notes.length})</h2>` + notes.map(n => `

@@ -1,31 +1,31 @@
 :root {
-  /* Денна тема — тепла, затишна, універсальна (сепія + спокійний шавлієвий) */
-  --bg: #f5f1ea;
-  --bg-2: #ece5da;
-  --surface: #fffdf9;
-  --surface-2: #f3eee4;
-  --ink: #2f2a25;
-  --ink-soft: #6a625a;
-  --ink-faint: #a79d90;
-  --primary: #5d9580;
-  --primary-d: #487a67;
-  --primary-soft: #e4efe9;
-  --accent: #cf8e6c;
-  --accent-soft: #f5e7dc;
+  /* Денна жіноча тема — ніжна лаванда з м'яким рожевим акцентом */
+  --bg: #f1edf8;
+  --bg-2: #e5def2;
+  --surface: #fffaff;
+  --surface-2: #f0eaf7;
+  --ink: #2f2938;
+  --ink-soft: #665d72;
+  --ink-faint: #9c91aa;
+  --primary: #8a78ad;
+  --primary-d: #6f5d94;
+  --primary-soft: #e9e2f4;
+  --accent: #bd86a1;
+  --accent-soft: #f2e4ec;
   --warn: #d29a52;
   --warn-soft: #f7ecd8;
-  --danger: #d6818b;
-  --danger-soft: #f8e6e8;
-  --line: #e6ddd0;
-  --shadow: 0 12px 40px -14px rgba(74, 60, 45, .22);
-  --shadow-sm: 0 5px 18px -10px rgba(74, 60, 45, .25);
+  --danger: #c97888;
+  --danger-soft: #f4e1e6;
+  --line: #ded4ea;
+  --shadow: 0 12px 40px -14px rgba(72, 55, 98, .2);
+  --shadow-sm: 0 5px 18px -10px rgba(72, 55, 98, .23);
   --radius: 22px;
   --radius-sm: 16px;
   --sb-w: 264px;
   /* фонові плями */
-  --blob-1: #e7ddcb;
-  --blob-2: #dfeae3;
-  --blob-3: #f6f1e8;
+  --blob-1: #dfd4f0;
+  --blob-2: #eee2ec;
+  --blob-3: #f6f1fb;
   --font-body: 'Comfortaa', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   --font-hand: 'Caveat', 'Comfortaa', cursive;
   font-family: var(--font-body);
@@ -256,9 +256,33 @@ a { color: var(--primary); }
 /* analytics */
 .analytics-page { display: grid; gap: 16px; }
 .analytics-page .page-head { margin-bottom: 6px; }
-.analytics-grid, .analytics-stats { align-items: stretch; }
+.analytics-grid, .analytics-stats {
+  align-items: stretch;
+  grid-auto-rows: 1fr;
+}
 .analytics-card, .analytics-stats .stat {
   height: 100%; min-width: 0;
+}
+.analytics-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+.analytics-card .card-title {
+  min-height: 2.55em;
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+.analytics-stats .stat {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  align-content: stretch;
+}
+.analytics-stats .stat .s-val {
+  display: flex;
+  align-items: center;
 }
 .analytics-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -270,9 +294,14 @@ a { color: var(--primary); }
 .analytics-row b, .analytics-row span:last-child {
   flex: none; text-align: right;
 }
-.chart-card { display: grid; grid-template-rows: auto 1fr; min-height: 300px; }
+.chart-card {
+  display: grid;
+  grid-template-rows: minmax(2.55em, auto) 1fr;
+  min-height: 330px;
+}
 .chart-box {
-  position: relative; height: 230px; width: 100%; min-width: 0;
+  position: relative; height: 250px; width: 100%; min-width: 0;
+  align-self: stretch;
 }
 .chart-box canvas {
   display: block; width: 100% !important; height: 100% !important;
