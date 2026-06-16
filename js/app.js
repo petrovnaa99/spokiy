@@ -1482,6 +1482,74 @@
     document.body.style.overflow = "";
   }
 
+  // SOS до входу: легке заспокоєння без залежності від акаунта (S.state).
+  function openQuickCalm() {
+    const ov = $("#crisis-overlay");
+    ov.innerHTML = `
+      <div class="crisis-wrap">
+        <div class="crisis-top">
+          <h2 style="margin:0">Ти в безпеці. Дихаймо разом 🤍</h2>
+          <button class="crisis-close" id="qc-close">×</button>
+        </div>
+
+        <div class="crisis-card">
+          <h3>🫁 ${C.BREATHING.name}</h3>
+          <div class="sub">${C.BREATHING.desc}</div>
+          <div class="breath-stage"><div class="breath-ball" id="qc-ball">Натисни «Почати»</div></div>
+          <div class="row" style="justify-content:center"><button class="btn" style="background:#fff;color:#1f9579" id="qc-breath">Почати дихати</button></div>
+        </div>
+
+        <div class="crisis-card g54321">
+          <h3>🌍 Техніка заземлення 5-4-3-2-1</h3>
+          <div class="sub" style="margin-bottom:6px">Торкнись кожного пункту, коли виконаєш його.</div>
+          ${C.GROUNDING.map((g,i)=>`<div class="g-step" data-g="${i}"><div class="g-num">${g.n}</div><div>Назви <b>${g.n}</b> ${esc(g.text)}</div></div>`).join("")}
+        </div>
+
+        <div class="crisis-card">
+          <h3>🌿 Нагадування</h3>
+          <p style="font-size:17px;line-height:1.5;margin:0">Більшість тривожних думок так і не стають реальністю. Зараз твоя єдина задача — повільно дихати. Усе інше зачекає.</p>
+        </div>
+
+        <div class="row" style="justify-content:center;margin-top:8px">
+          <button class="btn" style="background:rgba(255,255,255,.18);color:#fff" id="qc-signup">Завести щоденник</button>
+          <button class="btn" style="background:#fff;color:#1f9579" id="qc-done">Мені вже легше 🤍</button>
+        </div>
+      </div>`;
+    ov.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+
+    $$(".g-step", ov).forEach(s => s.onclick = () => s.classList.toggle("done"));
+
+    const ball = $("#qc-ball", ov);
+    const btn = $("#qc-breath", ov);
+    let running = false, idx = 0;
+    function stopBreath() { running = false; clearTimeout(breathTimer); ball.className = "breath-ball"; ball.textContent = "Натисни «Почати»"; btn.textContent = "Почати дихати"; }
+    function step() {
+      if (!running) return;
+      const ph = C.BREATHING.phases[idx % C.BREATHING.phases.length];
+      ball.className = "breath-ball " + ph.cls;
+      let left = ph.sec;
+      ball.textContent = `${ph.label} · ${left}`;
+      const tick = () => {
+        if (!running) return;
+        left--;
+        if (left > 0) { ball.textContent = `${ph.label} · ${left}`; breathTimer = setTimeout(tick, 1000); }
+        else { idx++; step(); }
+      };
+      breathTimer = setTimeout(tick, 1000);
+    }
+    btn.onclick = () => { if (running) { stopBreath(); } else { running = true; idx = 0; btn.textContent = "Зупинити"; step(); } };
+
+    $("#qc-close", ov).onclick = closeCrisis;
+    $("#qc-done", ov).onclick = () => { closeCrisis(); };
+    $("#qc-signup", ov).onclick = () => {
+      closeCrisis();
+      const reg = $("#auth-reg");
+      if (reg) reg.scrollIntoView({ behavior: "smooth", block: "start" });
+      setTimeout(() => { const n = $("#auth-name"); if (n) n.focus(); }, 480);
+    };
+  }
+
   /* ===================== МОЇ МАЛЕНЬКІ РАДОЩІ ===================== */
   function viewJoys() {
     const types = C.CALM.joyTypes;
@@ -2602,6 +2670,16 @@
       authGender = b.dataset.gender;
       $$("#auth-gender .gender-opt").forEach(x => x.classList.toggle("sel", x === b));
     });
+
+    // Лендинг: «Почати щоденник» — плавно до форми реєстрації
+    const startBtn = $("#landing-start");
+    if (startBtn) startBtn.onclick = () => {
+      const reg = $("#auth-reg");
+      if (reg) reg.scrollIntoView({ behavior: "smooth", block: "start" });
+      setTimeout(() => { const n = $("#auth-name"); if (n) n.focus(); }, 480);
+    };
+    // Лендинг: «Мені зараз тривожно» — швидке заспокоєння без реєстрації
+    [$("#landing-sos"), $("#landing-sos2")].forEach(b => { if (b) b.onclick = openQuickCalm; });
 
     const emailSignup = () => {
       const name = $("#auth-name").value.trim();
