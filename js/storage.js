@@ -1,5 +1,6 @@
-/* Рівень зберігання даних: автозбереження в localStorage, чернетки, експорт/імпорт.
-   Дані прив'язані до email користувача (мультипрофіль на одному пристрої). */
+/* Рівень зберігання даних: cloud-first через /api/state/:email (Supabase на Vercel,
+   SQLite локально через serve.js). localStorage використовується тільки як кеш,
+   сесія й офлайн-страховка, а не як основне сховище. */
 window.Store = (function () {
   const ROOT = "spokiy:v1";
   const SESSION = "spokiy:session";
@@ -32,9 +33,10 @@ window.Store = (function () {
   }
   function saveDb(obj) { localStorage.setItem(ROOT, JSON.stringify(obj)); }
 
-  /* ---- Хмарна синхронізація з бекендом SQLite (serve.js) ----
-     Працює лише коли сайт відкрито через http(s). При відкритті файлу напряму
-     (file://) або без сервера тихо вмикається офлайн-режим (тільки localStorage). */
+  /* ---- Основне сховище через backend API ----
+     На Vercel цей API пише в Supabase. Локально serve.js пише в SQLite.
+     При відкритті файлу напряму (file://) API недоступний, тож лишається кеш
+     localStorage як офлайн-режим для розробки/аварійного доступу. */
   const API = "/api/state";
   let pushTimer = null;
   const Cloud = {
@@ -67,7 +69,8 @@ window.Store = (function () {
     }
   };
 
-  // Підтягнути дані акаунта з бекенда. Перемагає новіша версія (за updatedAt).
+  // Підтягнути дані акаунта з основного backend-сховища.
+  // Перемагає новіша версія (за updatedAt).
   // preferRemote=true — акаунт щойно створено на цьому пристрої: якщо в базі вже
   // є дані цього email, вони важливіші за порожній локальний стан.
   async function syncFromCloud(preferRemote) {
@@ -100,6 +103,7 @@ window.Store = (function () {
   function persist() {
     if (!currentEmail || !state) return;
     state.updatedAt = new Date().toISOString();
+    // Кеш потрібен для швидкого відкриття й офлайн-режиму; головне збереження — Cloud.push().
     const all = db();
     all[currentEmail] = state;
     saveDb(all);

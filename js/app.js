@@ -2144,6 +2144,8 @@
     destroyCharts();
     const entries = S.state.entries.slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     const streak = computeStreak();
+    const enoughRecords = entries.length >= 3;
+    const emptyAnalyticsText = "Поки недостатньо записів для аналітики";
 
     const causes = topCounts(entries.map(e => e.cause), 3);
     const triggers = topCounts(entries.map(e => e.trigger), 3);
@@ -2164,6 +2166,7 @@
 
     const tests = S.state.tests;
     const firstTest = tests[0], lastTest = tests[tests.length - 1];
+    const chartPlaceholder = `<div class="analytics-empty">${emptyAnalyticsText}</div>`;
 
     $("#view").innerHTML = `
       <div class="analytics-page">
@@ -2178,8 +2181,8 @@
 
       <div class="grid grid-2 analytics-grid">
         <div class="card analytics-card"><div class="card-title">📉 Прогрес тривоги</div>
-          <div class="analytics-row"><span>За 7 днів (vs попередні 7)</span><b>${trend(a7,p7)}</b></div>
-          <div class="analytics-row"><span>За 30 днів (vs попередні 30)</span><b>${trend(a30,p30)}</b></div>
+          ${enoughRecords ? `<div class="analytics-row"><span>За 7 днів (vs попередні 7)</span><b>${trend(a7,p7)}</b></div>
+          <div class="analytics-row"><span>За 30 днів (vs попередні 30)</span><b>${trend(a30,p30)}</b></div>` : chartPlaceholder}
         </div>
         <div class="card analytics-card"><div class="card-title">🧪 Тест тривожності: старт vs зараз</div>
           ${firstTest ? `<div class="analytics-row"><span>Перший тест (${fmtDate(firstTest.date)})</span><b>${firstTest.score} балів</b></div>
@@ -2190,19 +2193,19 @@
       </div>
 
       <div class="grid grid-2 analytics-grid">
-        <div class="card analytics-card chart-card"><div class="card-title">Рівень тривоги по днях</div><div class="chart-box"><canvas id="ch-anxiety"></canvas></div></div>
-        <div class="card analytics-card chart-card"><div class="card-title">Динаміка настрою та енергії</div><div class="chart-box"><canvas id="ch-mood"></canvas></div></div>
+        <div class="card analytics-card chart-card"><div class="card-title">Рівень тривоги по днях</div>${enoughRecords ? `<div class="chart-box"><canvas id="ch-anxiety"></canvas></div>` : chartPlaceholder}</div>
+        <div class="card analytics-card chart-card"><div class="card-title">Динаміка настрою та енергії</div>${enoughRecords ? `<div class="chart-box"><canvas id="ch-mood"></canvas></div>` : chartPlaceholder}</div>
       </div>
 
       <div class="grid grid-2 analytics-grid">
-        <div class="card analytics-card chart-card"><div class="card-title">Тривога по тижнях</div><div class="chart-box"><canvas id="ch-weeks"></canvas></div></div>
-        <div class="card analytics-card chart-card"><div class="card-title">Найчастіші категорії</div><div class="chart-box"><canvas id="ch-cats"></canvas></div></div>
+        <div class="card analytics-card chart-card"><div class="card-title">Тривога по тижнях</div>${enoughRecords ? `<div class="chart-box"><canvas id="ch-weeks"></canvas></div>` : chartPlaceholder}</div>
+        <div class="card analytics-card chart-card"><div class="card-title">Найчастіші категорії</div>${enoughRecords && cats.length ? `<div class="chart-box"><canvas id="ch-cats"></canvas></div>` : chartPlaceholder}</div>
       </div>
 
       <div class="grid grid-3 analytics-grid">
-        <div class="card analytics-card"><div class="card-title">Найчастіші причини</div>${listOrEmpty(causes)}</div>
-        <div class="card analytics-card"><div class="card-title">Найчастіші тригери</div>${listOrEmpty(triggers)}</div>
-        <div class="card analytics-card"><div class="card-title">Найефективніша підтримка</div>${ranking.length?ranking.map(r=>`<div class="analytics-row"><span>${esc(r.name)}</span><span class="faint">ефект ${r.avg||"–"}/5</span></div>`).join(""):'<p class="muted">Немає даних</p>'}</div>
+        <div class="card analytics-card"><div class="card-title">Найчастіші причини</div>${listOrEmpty(causes, emptyAnalyticsText)}</div>
+        <div class="card analytics-card"><div class="card-title">Найчастіші тригери</div>${listOrEmpty(triggers, emptyAnalyticsText)}</div>
+        <div class="card analytics-card"><div class="card-title">Найефективніша підтримка</div>${ranking.length?ranking.map(r=>`<div class="analytics-row"><span>${esc(r.name)}</span><span class="faint">ефект ${r.avg||"–"}/5</span></div>`).join(""):`<div class="analytics-empty">${emptyAnalyticsText}</div>`}</div>
       </div>
       </div>
     `;
@@ -2210,14 +2213,15 @@
     const rt = $("#retake"); if (rt) rt.onclick = startTest;
     $$("[data-route]", $("#view")).forEach(b => b.onclick = () => go(b.dataset.route));
 
-    if (!window.Chart) { return; }
+    if (!window.Chart || !enoughRecords) { return; }
     const purple = "#2fae8e", teal = "#5cc9aa", warn = "#e0a050";
 
     // тривога по днях (останні 21 запис по днях — макс на день)
     const byDay = {};
     entries.forEach(e => { if (typeof e.anxiety==="number"){ const k=new Date(e.createdAt).toISOString().slice(0,10); byDay[k]= byDay[k]?Math.max(byDay[k],e.anxiety):e.anxiety; }});
     const dayKeys = Object.keys(byDay).sort().slice(-21);
-    charts.push(new Chart($("#ch-anxiety"), {
+    const anxietyCanvas = $("#ch-anxiety");
+    if (anxietyCanvas) charts.push(new Chart(anxietyCanvas, {
       type: "line",
       data: { labels: dayKeys.map(k=>k.slice(5)), datasets: [{ label:"Тривога", data: dayKeys.map(k=>byDay[k]), borderColor: purple, backgroundColor:"rgba(47,174,142,.14)", fill:true, tension:.35, pointRadius:3 }] },
       options: chartOpts(10)
@@ -2227,7 +2231,8 @@
     const moodDays = Object.keys(byDay).sort().slice(-21);
     const moodMap = {}, energyMap = {};
     entries.forEach(e => { const k=new Date(e.createdAt).toISOString().slice(0,10); if(e.mood) moodMap[k]=e.mood; if(e.energy) energyMap[k]=e.energy; });
-    charts.push(new Chart($("#ch-mood"), {
+    const moodCanvas = $("#ch-mood");
+    if (moodCanvas) charts.push(new Chart(moodCanvas, {
       type:"line",
       data:{ labels: moodDays.map(k=>k.slice(5)), datasets:[
         { label:"Настрій", data: moodDays.map(k=>moodMap[k]??null), borderColor: teal, tension:.35, spanGaps:true, pointRadius:3 },
@@ -2239,7 +2244,8 @@
     const byWeek = {};
     entries.forEach(e => { if(typeof e.anxiety==="number"){ const k=weekKey(e.createdAt); (byWeek[k]=byWeek[k]||[]).push(e.anxiety); }});
     const weekKeys = Object.keys(byWeek).sort().slice(-8);
-    charts.push(new Chart($("#ch-weeks"), {
+    const weeksCanvas = $("#ch-weeks");
+    if (weeksCanvas) charts.push(new Chart(weeksCanvas, {
       type:"bar",
       data:{ labels: weekKeys, datasets:[{ label:"Сер. тривога", data: weekKeys.map(k=>+(byWeek[k].reduce((s,x)=>s+x,0)/byWeek[k].length).toFixed(1)), backgroundColor: purple, borderRadius:8 }]},
       options: chartOpts(10)
@@ -2247,14 +2253,15 @@
 
     // категорії
     const catData = topCounts(entries.map(e=>e.category), 6);
-    charts.push(new Chart($("#ch-cats"), {
+    const catsCanvas = $("#ch-cats");
+    if (catsCanvas && catData.length) charts.push(new Chart(catsCanvas, {
       type:"doughnut",
       data:{ labels: catData.map(c=>c[0]), datasets:[{ data: catData.map(c=>c[1]), backgroundColor:["#2fae8e","#5cc9aa","#e0a050","#df7081","#67c89a","#8fd6b8"] }]},
       options:{ plugins:{ legend:{ position:"bottom", labels:{ boxWidth:12, font:{ family:"Comfortaa" } } } }, responsive:true, maintainAspectRatio:false }
     }));
   }
-  function listOrEmpty(arr) {
-    return arr.length ? arr.map((c,i)=>`<div class="analytics-row"><span>${i+1}. ${esc(c[0])}</span><span class="faint">${c[1]} ${pluralUk(c[1],"раз","рази","разів")}</span></div>`).join("") : '<p class="muted">Немає даних</p>';
+  function listOrEmpty(arr, emptyText = "Поки недостатньо записів для аналітики") {
+    return arr.length ? arr.map((c,i)=>`<div class="analytics-row"><span>${i+1}. ${esc(c[0])}</span><span class="faint">${c[1]} ${pluralUk(c[1],"раз","рази","разів")}</span></div>`).join("") : `<div class="analytics-empty">${emptyText}</div>`;
   }
   function weekKey(iso) {
     const d = new Date(iso); const onejan = new Date(d.getFullYear(), 0, 1);
