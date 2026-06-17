@@ -2166,46 +2166,65 @@
 
     const tests = S.state.tests;
     const firstTest = tests[0], lastTest = tests[tests.length - 1];
-    const chartPlaceholder = `<div class="analytics-empty">${emptyAnalyticsText}</div>`;
+
+    // Дані для графіків готуємо до рендера, щоб не показувати порожні координатні сітки.
+    const anxietyEntries = entries.filter(e => typeof e.anxiety === "number");
+    const byDay = {};
+    anxietyEntries.forEach(e => {
+      const k = new Date(e.createdAt).toISOString().slice(0, 10);
+      byDay[k] = byDay[k] ? Math.max(byDay[k], e.anxiety) : e.anxiety;
+    });
+    const dayKeys = Object.keys(byDay).sort().slice(-21);
+    const moodMap = {}, energyMap = {};
+    entries.forEach(e => {
+      const k = new Date(e.createdAt).toISOString().slice(0, 10);
+      if (e.mood) moodMap[k] = e.mood;
+      if (e.energy) energyMap[k] = e.energy;
+    });
+    const moodDays = Object.keys({ ...moodMap, ...energyMap }).sort().slice(-21);
+    const byWeek = {};
+    anxietyEntries.forEach(e => { const k = weekKey(e.createdAt); (byWeek[k] = byWeek[k] || []).push(e.anxiety); });
+    const weekKeys = Object.keys(byWeek).sort().slice(-8);
+    const catData = topCounts(entries.map(e => e.category), 6);
+    const hasAnxietyChart = enoughRecords && anxietyEntries.length >= 3 && dayKeys.length >= 2;
+    const hasMoodChart = enoughRecords && moodDays.length >= 2;
+    const hasWeekChart = enoughRecords && anxietyEntries.length >= 3 && weekKeys.length >= 1;
+    const hasCategoryChart = enoughRecords && catData.reduce((sum, c) => sum + c[1], 0) >= 3;
+
+    const chartPlaceholder = `<div class="analytics-empty"><b>📊 Недостатньо даних</b><span>Створи ще кілька записів для появи аналітики.</span></div>`;
+    const chartCards = enoughRecords ? `
+        <div class="card analytics-card chart-card analytics-span-6"><div class="card-title">Рівень тривоги по днях</div>${hasAnxietyChart ? `<div class="chart-box"><canvas id="ch-anxiety"></canvas></div>` : chartPlaceholder}</div>
+        <div class="card analytics-card chart-card analytics-span-6"><div class="card-title">Динаміка настрою та енергії</div>${hasMoodChart ? `<div class="chart-box"><canvas id="ch-mood"></canvas></div>` : chartPlaceholder}</div>
+        <div class="card analytics-card chart-card analytics-span-6"><div class="card-title">Тривога по тижнях</div>${hasWeekChart ? `<div class="chart-box"><canvas id="ch-weeks"></canvas></div>` : chartPlaceholder}</div>
+        <div class="card analytics-card chart-card analytics-span-6"><div class="card-title">Найчастіші категорії</div>${hasCategoryChart ? `<div class="chart-box"><canvas id="ch-cats"></canvas></div>` : chartPlaceholder}</div>`
+      : `<div class="card analytics-card analytics-chart-notice analytics-span-12"><div class="card-title">Графіки</div>${chartPlaceholder}</div>`;
 
     $("#view").innerHTML = `
       <div class="analytics-page">
       <div class="page-head"><h1>📊 Аналітика</h1><p>Твоя історія зберігається без обмежень. Ось що вона показує.</p></div>
 
-      <div class="grid grid-4 analytics-stats">
-        <div class="stat"><div class="s-ico">🔥</div><div class="s-val">${streak}</div><div class="s-lbl">серія днів</div></div>
-        <div class="stat"><div class="s-ico">📝</div><div class="s-val">${filledDays()}</div><div class="s-lbl">заповнено днів</div></div>
-        <div class="stat"><div class="s-ico">🛡️</div><div class="s-val">${S.state.evidence.length}</div><div class="s-lbl">страхів не справдилось</div></div>
-        <div class="stat"><div class="s-ico">📈</div><div class="s-val">${entries.length}</div><div class="s-lbl">усього записів</div></div>
-      </div>
+      <div class="analytics-dashboard">
+        <div class="card analytics-card analytics-metric analytics-span-3"><div class="s-ico">🔥</div><div class="s-val">${streak}</div><div class="s-lbl">серія днів</div></div>
+        <div class="card analytics-card analytics-metric analytics-span-3"><div class="s-ico">📝</div><div class="s-val">${filledDays()}</div><div class="s-lbl">заповнено днів</div></div>
+        <div class="card analytics-card analytics-metric analytics-span-3"><div class="s-ico">🛡️</div><div class="s-val">${S.state.evidence.length}</div><div class="s-lbl">страхів не справдилось</div></div>
+        <div class="card analytics-card analytics-metric analytics-span-3"><div class="s-ico">📈</div><div class="s-val">${entries.length}</div><div class="s-lbl">усього записів</div></div>
 
-      <div class="grid grid-2 analytics-grid">
-        <div class="card analytics-card"><div class="card-title">📉 Прогрес тривоги</div>
+        <div class="card analytics-card analytics-span-6"><div class="card-title">📉 Прогрес тривоги</div>
           ${enoughRecords ? `<div class="analytics-row"><span>За 7 днів (vs попередні 7)</span><b>${trend(a7,p7)}</b></div>
           <div class="analytics-row"><span>За 30 днів (vs попередні 30)</span><b>${trend(a30,p30)}</b></div>` : chartPlaceholder}
         </div>
-        <div class="card analytics-card"><div class="card-title">🧪 Тест тривожності: старт vs зараз</div>
+        <div class="card analytics-card analytics-span-6"><div class="card-title">🧪 Тест тривожності: старт vs зараз</div>
           ${firstTest ? `<div class="analytics-row"><span>Перший тест (${fmtDate(firstTest.date)})</span><b>${firstTest.score} балів</b></div>
           <div class="analytics-row"><span>Останній тест (${fmtDate(lastTest.date)})</span><b>${lastTest.score} балів ${lastTest.score<firstTest.score?'<span class="pill pill-green">покращення</span>':lastTest.score>firstTest.score?'<span class="pill pill-warn">вище</span>':''}</b></div>
           <button class="btn btn-ghost btn-sm" id="retake" style="margin-top:8px">Пройти тест знову</button>`
           : `<p class="muted">Тест ще не пройдено.</p><button class="btn btn-primary btn-sm" id="retake">Пройти тест</button>`}
         </div>
-      </div>
 
-      <div class="grid grid-2 analytics-grid">
-        <div class="card analytics-card chart-card"><div class="card-title">Рівень тривоги по днях</div>${enoughRecords ? `<div class="chart-box"><canvas id="ch-anxiety"></canvas></div>` : chartPlaceholder}</div>
-        <div class="card analytics-card chart-card"><div class="card-title">Динаміка настрою та енергії</div>${enoughRecords ? `<div class="chart-box"><canvas id="ch-mood"></canvas></div>` : chartPlaceholder}</div>
-      </div>
+        ${chartCards}
 
-      <div class="grid grid-2 analytics-grid">
-        <div class="card analytics-card chart-card"><div class="card-title">Тривога по тижнях</div>${enoughRecords ? `<div class="chart-box"><canvas id="ch-weeks"></canvas></div>` : chartPlaceholder}</div>
-        <div class="card analytics-card chart-card"><div class="card-title">Найчастіші категорії</div>${enoughRecords && cats.length ? `<div class="chart-box"><canvas id="ch-cats"></canvas></div>` : chartPlaceholder}</div>
-      </div>
-
-      <div class="grid grid-3 analytics-grid">
-        <div class="card analytics-card"><div class="card-title">Найчастіші причини</div>${listOrEmpty(causes, emptyAnalyticsText)}</div>
-        <div class="card analytics-card"><div class="card-title">Найчастіші тригери</div>${listOrEmpty(triggers, emptyAnalyticsText)}</div>
-        <div class="card analytics-card"><div class="card-title">Найефективніша підтримка</div>${ranking.length?ranking.map(r=>`<div class="analytics-row"><span>${esc(r.name)}</span><span class="faint">ефект ${r.avg||"–"}/5</span></div>`).join(""):`<div class="analytics-empty">${emptyAnalyticsText}</div>`}</div>
+        <div class="card analytics-card analytics-span-4"><div class="card-title">Найчастіші причини</div>${listOrEmpty(causes, emptyAnalyticsText)}</div>
+        <div class="card analytics-card analytics-span-4"><div class="card-title">Найчастіші тригери</div>${listOrEmpty(triggers, emptyAnalyticsText)}</div>
+        <div class="card analytics-card analytics-span-4"><div class="card-title">Найефективніша підтримка</div>${ranking.length?ranking.map(r=>`<div class="analytics-row"><span>${esc(r.name)}</span><span class="faint">ефект ${r.avg||"–"}/5</span></div>`).join(""):chartPlaceholder}</div>
       </div>
       </div>
     `;
@@ -2216,10 +2235,6 @@
     if (!window.Chart || !enoughRecords) { return; }
     const purple = "#2fae8e", teal = "#5cc9aa", warn = "#e0a050";
 
-    // тривога по днях (останні 21 запис по днях — макс на день)
-    const byDay = {};
-    entries.forEach(e => { if (typeof e.anxiety==="number"){ const k=new Date(e.createdAt).toISOString().slice(0,10); byDay[k]= byDay[k]?Math.max(byDay[k],e.anxiety):e.anxiety; }});
-    const dayKeys = Object.keys(byDay).sort().slice(-21);
     const anxietyCanvas = $("#ch-anxiety");
     if (anxietyCanvas) charts.push(new Chart(anxietyCanvas, {
       type: "line",
@@ -2227,10 +2242,6 @@
       options: chartOpts(10)
     }));
 
-    // настрій / енергія
-    const moodDays = Object.keys(byDay).sort().slice(-21);
-    const moodMap = {}, energyMap = {};
-    entries.forEach(e => { const k=new Date(e.createdAt).toISOString().slice(0,10); if(e.mood) moodMap[k]=e.mood; if(e.energy) energyMap[k]=e.energy; });
     const moodCanvas = $("#ch-mood");
     if (moodCanvas) charts.push(new Chart(moodCanvas, {
       type:"line",
@@ -2240,10 +2251,6 @@
       ]}, options: chartOpts(5, true)
     }));
 
-    // по тижнях
-    const byWeek = {};
-    entries.forEach(e => { if(typeof e.anxiety==="number"){ const k=weekKey(e.createdAt); (byWeek[k]=byWeek[k]||[]).push(e.anxiety); }});
-    const weekKeys = Object.keys(byWeek).sort().slice(-8);
     const weeksCanvas = $("#ch-weeks");
     if (weeksCanvas) charts.push(new Chart(weeksCanvas, {
       type:"bar",
@@ -2251,8 +2258,6 @@
       options: chartOpts(10)
     }));
 
-    // категорії
-    const catData = topCounts(entries.map(e=>e.category), 6);
     const catsCanvas = $("#ch-cats");
     if (catsCanvas && catData.length) charts.push(new Chart(catsCanvas, {
       type:"doughnut",
@@ -2261,7 +2266,7 @@
     }));
   }
   function listOrEmpty(arr, emptyText = "Поки недостатньо записів для аналітики") {
-    return arr.length ? arr.map((c,i)=>`<div class="analytics-row"><span>${i+1}. ${esc(c[0])}</span><span class="faint">${c[1]} ${pluralUk(c[1],"раз","рази","разів")}</span></div>`).join("") : `<div class="analytics-empty">${emptyText}</div>`;
+    return arr.length ? arr.map((c,i)=>`<div class="analytics-row"><span>${i+1}. ${esc(c[0])}</span><span class="faint">${c[1]} ${pluralUk(c[1],"раз","рази","разів")}</span></div>`).join("") : `<div class="analytics-empty"><b>📊 Недостатньо даних</b><span>${esc(emptyText)}</span></div>`;
   }
   function weekKey(iso) {
     const d = new Date(iso); const onejan = new Date(d.getFullYear(), 0, 1);

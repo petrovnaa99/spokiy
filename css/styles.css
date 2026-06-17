@@ -326,111 +326,132 @@ a { color: var(--primary); }
 .stat .s-ico { font-size: 20px; }
 
 /* analytics */
-.analytics-page { display: grid; gap: 14px; }
-.analytics-page .page-head { margin-bottom: 6px; }
-.analytics-grid, .analytics-stats {
+.analytics-page {
+  --analytics-gap: 12px;
+  --analytics-card-h: 184px;
+  display: grid;
+  gap: 12px;
+}
+.analytics-page .page-head { margin-bottom: 2px; }
+.analytics-page .page-head h1 { margin-bottom: 2px; }
+.analytics-dashboard {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: var(--analytics-card-h);
+  gap: var(--analytics-gap);
   align-items: stretch;
-  grid-auto-rows: 1fr;
-  gap: 14px;
 }
-.analytics-card, .analytics-stats .stat {
-  height: 100%; min-width: 0;
-}
+.analytics-span-3 { grid-column: span 3; }
+.analytics-span-4 { grid-column: span 4; }
+.analytics-span-6 { grid-column: span 6; }
+.analytics-span-12 { grid-column: span 12; }
 .analytics-card {
+  height: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0;
   overflow: hidden;
-  justify-content: flex-start;
-  padding: 18px;
+  padding: 16px;
+  border-radius: 18px;
 }
 .analytics-card .card-title {
-  min-height: 38px;
+  min-height: 32px;
   display: flex;
   align-items: center;
-  margin: 0 0 4px;
+  margin: 0 0 6px;
+  font-size: 15px;
   line-height: 1.25;
 }
-.analytics-stats .stat {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 132px;
-  aspect-ratio: 1 / .78;
-  text-align: center;
-  padding: 18px 14px;
-}
-.analytics-stats .stat .s-val {
-  display: flex;
-  justify-content: center;
+.analytics-metric {
   align-items: center;
-  min-height: 42px;
+  justify-content: center;
+  text-align: center;
+  gap: 5px;
 }
-.analytics-stats .stat .s-ico {
-  min-height: 24px;
+.analytics-metric .s-ico {
+  font-size: 19px;
+  line-height: 1;
 }
-.analytics-stats .stat .s-lbl {
+.analytics-metric .s-val {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+}
+.analytics-metric .s-lbl {
   min-height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1.35;
 }
 .analytics-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 9px 0;
+  gap: 10px;
+  padding: 8px 0;
   min-width: 0;
   border-top: 1px solid var(--line);
+  font-size: 13px;
 }
-.analytics-row:first-of-type {
-  border-top: 0;
-}
+.analytics-row:first-of-type,
 .analytics-card .card-title + .analytics-row {
   border-top: 0;
 }
 .analytics-row span:first-child {
-  min-width: 0; overflow-wrap: anywhere; line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
-.analytics-row b, .analytics-row span:last-child {
+.analytics-row b,
+.analytics-row span:last-child {
   text-align: right;
   white-space: nowrap;
 }
-.analytics-grid > .analytics-card:not(.chart-card) {
-  min-height: 168px;
-}
-.analytics-page .grid-3.analytics-grid > .analytics-card {
-  min-height: 210px;
-}
 .chart-card {
   display: grid;
-  grid-template-rows: 38px minmax(0, 1fr);
-  min-height: 300px;
+  grid-template-rows: 32px minmax(0, 1fr);
 }
 .chart-box {
-  position: relative; height: 230px; width: 100%; min-width: 0;
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  height: 132px;
   align-self: stretch;
 }
 .chart-box canvas {
-  display: block; width: 100% !important; height: 100% !important;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
 }
 .analytics-empty {
+  margin-top: 2px;
+  display: flex;
   flex: 1;
-  min-height: 118px;
-  display: grid;
-  place-items: center;
-  padding: 18px;
-  border-radius: 14px;
-  border: 1px dashed var(--line);
-  background: var(--surface-2);
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.38);
   color: var(--ink-soft);
   text-align: center;
-  font-size: 13.5px;
-  line-height: 1.5;
+  font-size: 12.5px;
+  line-height: 1.45;
 }
-.chart-card .analytics-empty {
-  min-height: 210px;
+.analytics-empty b {
+  color: var(--ink);
+  font-size: 13px;
+}
+.analytics-chart-notice .analytics-empty {
+  max-width: 360px;
+  margin: auto;
 }
 
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-soft); }
@@ -829,6 +850,16 @@ input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border: none;
 }
 
 @media (max-width: 480px) {
+  .analytics-page { --analytics-card-h: 156px; }
+  .analytics-dashboard { grid-template-columns: 1fr; }
+  .analytics-span-3,
+  .analytics-span-4,
+  .analytics-span-6,
+  .analytics-span-12,
+  .analytics-metric.analytics-span-3 { grid-column: span 1; }
+  .analytics-metric .s-lbl { min-height: 0; }
+  .analytics-card .card-title { min-height: 28px; font-size: 14px; }
+  .chart-box { height: 104px; }
   .tension-meter { padding-left: 0; padding-right: 0; }
   .meter-arc { height: 200px; }
   .meter-arc::before { width: 320px; height: 320px; bottom: -160px; box-shadow: inset 0 0 0 30px var(--surface), var(--shadow-sm); }
@@ -972,14 +1003,15 @@ input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border: none;
   .content { padding: 18px 16px 90px; }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
-  .analytics-page .grid-2,
-  .analytics-page .grid-3,
-  .analytics-page .grid-4 { grid-template-columns: 1fr; }
-  .analytics-stats { grid-template-columns: repeat(2, 1fr) !important; }
-  .analytics-stats .stat { min-height: 112px; aspect-ratio: auto; }
-  .chart-card { min-height: 250px; }
-  .chart-box { height: 190px; }
-  .chart-card .analytics-empty { min-height: 170px; }
+  .analytics-page { --analytics-card-h: 168px; --analytics-gap: 10px; }
+  .analytics-dashboard { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .analytics-span-3,
+  .analytics-span-4,
+  .analytics-span-6,
+  .analytics-span-12 { grid-column: span 2; }
+  .analytics-metric.analytics-span-3 { grid-column: span 1; }
+  .analytics-card { padding: 14px; border-radius: 16px; }
+  .chart-box { height: 116px; }
   .analytics-row { align-items: flex-start; grid-template-columns: 1fr; gap: 4px; }
   .analytics-row b, .analytics-row span:last-child { text-align: left; white-space: normal; }
   .home-actions { grid-template-columns: 1fr; }
