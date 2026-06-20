@@ -234,11 +234,11 @@
     { id: "sos", icon: "SOS", label: "SOS", action: true },
     { id: "history", icon: "≡", label: "Щоденник" },
     { id: "analytics", icon: "∿", label: "Мої зміни" },
-    { id: "support", icon: "♡", label: "Підтримка" }
+    { id: "support", icon: "♡", label: "Опора" }
   ];
   const SUPPORT_ROUTES = ["support", "resources", "friend", "treasure", "library", "joys", "gratitude", "evidence", "profile"];
   const ROUTE_TITLES = {
-    home: "Сьогодні", history: "Щоденник", analytics: "Мої зміни", support: "Підтримка",
+    home: "Сьогодні", history: "Щоденник", analytics: "Мої зміни", support: "Опора",
     new: "Новий запис", types: "Типи тривоги", typeTest: "Розбір ситуації", reminders: "Нагадування",
     evidence: "Банк доказів", resources: "Мої ресурси", treasure: "Скарбничка", joys: "Мої радощі",
     good: "Хороші події", gratitude: "Вдячність", friend: "Порада подрузі", library: "Бібліотека",
@@ -851,7 +851,7 @@
       { route: "types", icon: "⌁", title: "Типи тривоги", desc: "М'які тести та розбір" }
     ];
     $("#view").innerHTML = `
-      <div class="page-head"><h1>Підтримка</h1><p>Інструменти, які допомагають повернутися до спокою й опори.</p></div>
+      <div class="page-head"><h1>Опора</h1><p>Практики та інструменти, які допомагають повернутися до спокою.</p></div>
       <div class="support-grid">
         ${links.map(l => `
           <button class="support-link" type="button" data-route="${l.route}">
