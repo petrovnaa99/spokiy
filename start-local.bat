@@ -24,8 +24,20 @@ if errorlevel 1 (
 
 echo.
 echo Спокій запускається локально (SQLite, без Vercel).
-echo Відкрий у браузері: http://127.0.0.1:3000
+echo Ноутбук: http://127.0.0.1:3000
+for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /R /C:"IPv4.*:"') do (
+  set "LAN_IP=%%a"
+  goto :ip_found
+)
+:ip_found
+if defined LAN_IP (
+  set "LAN_IP=%LAN_IP: =%"
+  echo Телефон у тій самій Wi-Fi мережі: http://%LAN_IP%:3000
+)
+echo Якщо Windows Firewall спитає доступ — натисни Allow.
 echo Зупинити сервер: Ctrl+C
 echo.
 
+set HOST=0.0.0.0
+set PORT=3000
 node serve.js
