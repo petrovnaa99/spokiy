@@ -229,20 +229,21 @@
   }
 
   /* ===================== Навігація ===================== */
-  // Скорочене меню для першої версії. Решта розділів доступні з головної.
   const NAV = [
-    { id: "home", icon: "⌂", label: "Головна" },
-    { id: "new", icon: "+", label: "Новий запис" },
+    { id: "home", icon: "☀", label: "Сьогодні" },
     { id: "sos", icon: "SOS", label: "SOS", action: true },
-    { id: "evidence", icon: "✓", label: "Банк доказів" },
-    { id: "resources", icon: "◌", label: "Мої ресурси" },
-    { id: "analytics", icon: "∿", label: "Аналітика" },
-    { id: "joys", icon: "◇", label: "Мої радощі" },
-    { id: "good", icon: "☺", label: "Хороші події" },
-    { id: "gratitude", icon: "∴", label: "За що я вдячна" },
-    { id: "friend", icon: "✉", label: "Порада подрузі" },
-    { id: "history", icon: "≡", label: "Моя історія" }
+    { id: "history", icon: "≡", label: "Щоденник" },
+    { id: "analytics", icon: "∿", label: "Мої зміни" },
+    { id: "support", icon: "♡", label: "Підтримка" }
   ];
+  const SUPPORT_ROUTES = ["support", "resources", "friend", "treasure", "library", "joys", "gratitude", "evidence", "profile"];
+  const ROUTE_TITLES = {
+    home: "Сьогодні", history: "Щоденник", analytics: "Мої зміни", support: "Підтримка",
+    new: "Новий запис", types: "Типи тривоги", typeTest: "Розбір ситуації", reminders: "Нагадування",
+    evidence: "Банк доказів", resources: "Мої ресурси", treasure: "Скарбничка", joys: "Мої радощі",
+    good: "Хороші події", gratitude: "Вдячність", friend: "Порада подрузі", library: "Бібліотека",
+    achievements: "Прогрес", profile: "Профіль"
+  };
 
   let route = "home";
   let routeParam = null;
@@ -410,10 +411,10 @@
   function renderNav() {
     const nav = $("#nav");
     nav.innerHTML = NAV.map(n => {
-      const active = route === n.id;
+      const active = navItemActive(n.id);
       const cls = "nav-item" + (active ? " active" : "") + (n.action ? " nav-sos" : "");
-      return `<button class="${cls}" data-route="${n.id}">
-        <span class="ico">${n.icon}</span><span>${n.label}</span></button>`;
+      return `<button class="${cls}" data-route="${n.id}" type="button">
+        <span class="ico">${n.icon}</span><span>${uiText(genderize(n.label))}</span></button>`;
     }).join("");
     $$(".nav-item", nav).forEach(b => b.onclick = () => {
       closeSidebar();
@@ -428,11 +429,35 @@
       <div class="user-avatar">${esc(initials)}</div>
       <div class="user-meta"><b>${esc(p.name || "Користувач")}</b><span>${esc(p.email)}</span></div>`;
     $("#user-chip").onclick = () => go("profile");
+
+    renderBottomNav();
+  }
+
+  function renderBottomNav() {
+    const bar = $("#bottom-nav");
+    if (!bar) return;
+    bar.innerHTML = NAV.map(n => {
+      const active = n.action ? false : navItemActive(n.id);
+      const cls = "bottom-nav-item" + (active ? " active" : "") + (n.action ? " bottom-nav-sos" : "");
+      return `<button class="${cls}" type="button" data-route="${n.id}">
+        <span class="bn-ico">${n.icon}</span><span class="bn-lbl">${uiText(genderize(n.label))}</span></button>`;
+    }).join("");
+    $$(".bottom-nav-item", bar).forEach(b => b.onclick = () => {
+      if (b.dataset.route === "sos") { startCalm("quick"); return; }
+      go(b.dataset.route);
+    });
+    genderizeDOM(bar);
+  }
+
+  function navItemActive(id) {
+    if (id === "support") return SUPPORT_ROUTES.includes(route);
+    return route === id;
   }
 
   function go(r, param = null) {
     route = r; routeParam = param;
-    $("#topbar-title").textContent = uiText(genderize((NAV.find(n => n.id === r) || {}).label || "Спокій"));
+    const title = ROUTE_TITLES[r] || NAV.find(n => n.id === r)?.label || "Спокій";
+    $("#topbar-title").textContent = uiText(genderize(title));
     renderNav();
     render();
     $("#view").scrollTo?.(0, 0);
@@ -640,129 +665,203 @@
     };
   }
 
-  /* ===================== ГОЛОВНА ===================== */
-  function viewHome() {
-    const streak = computeStreak();
-    const pend = pendingReminders();
-    const ranking = S.resourceRanking();
+  /* ===================== ГОЛОВНА (СЬОГОДНІ) ===================== */
+  function monthRouteInfo() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const prefix = `${y}-${m}`;
+    const day = now.getDate();
+    const daysInMonth = new Date(y, now.getMonth() + 1, 0).getDate();
+    const monthDays = Object.keys(S.state.checkins || {}).filter(k => k.startsWith(prefix)).length;
+    return { day, daysInMonth, monthDays, pct: Math.min(100, Math.round((monthDays / day) * 100)) };
+  }
 
-    let banners = "";
-    // Червоний прапорець
+  function weekDynamics() {
+    const out = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const k = d.toISOString().slice(0, 10);
+      const w = S.state.wellbeing && !Array.isArray(S.state.wellbeing) ? S.state.wellbeing[k] : null;
+      out.push({ key: k, level: w ? w.level : null, label: d.getDate() });
+    }
+    return out;
+  }
+
+  function lastUnfinishedTask() {
+    const draft = S.getDraft();
+    if (draft && (draft.fear || draft.cause)) {
+      return { kind: "draft", title: "Незавершений запис дня", text: (draft.fear || draft.cause || "").slice(0, 72), action: () => go("new") };
+    }
+    const pend = pendingReminders();
+    if (pend.length) {
+      return { kind: "reminder", title: "Час відкрити запис", text: (pend[0].fear || "").slice(0, 72), action: () => go("reminders") };
+    }
+    if (testState && testState.typeId) {
+      return { kind: "test", title: "Незавершений розбір", text: "Тест типу тривоги ще не завершено", action: () => go("typeTest", testState.typeId) };
+    }
+    return null;
+  }
+
+  function selfSupportMomentsCount() {
+    const reviewed = S.state.entries.filter(e => e.reviewed).length;
+    const evidence = S.state.evidence.length;
+    const achievements = Object.keys(S.state.achievements || {}).length;
+    const wellbeingDays = S.state.wellbeing && !Array.isArray(S.state.wellbeing) ? Object.keys(S.state.wellbeing).length : 0;
+    return reviewed + evidence + achievements + wellbeingDays;
+  }
+
+  function continueHomeAction() {
+    const task = lastUnfinishedTask();
+    if (task) { task.action(); return; }
+    const last = S.state.entries[0];
+    if (last && !last.reviewed) { go("history"); return; }
+    go("new");
+  }
+
+  function weekBarsHTML(days) {
+    return `<div class="week-bars">${days.map(d => {
+      const h = d.level == null ? 8 : Math.max(12, Math.round((d.level / 10) * 100));
+      const cls = d.level == null ? "empty" : d.level >= 7 ? "high" : d.level <= 4 ? "low" : "mid";
+      return `<div class="week-bar-col" title="${d.level == null ? "немає запису" : d.level + "/10"}">
+        <i class="week-bar-fill ${cls}" style="height:${h}%"></i><span>${d.label}</span></div>`;
+    }).join("")}</div>`;
+  }
+
+  function viewHome() {
+    const routeInfo = monthRouteInfo();
+    const lastEntry = S.state.entries[0] || null;
+    const unfinished = lastUnfinishedTask();
+    const week = weekDynamics();
+    const tip = randomAff();
+    const supportCount = selfSupportMomentsCount();
+    const todayWell = S.todayWellbeing();
+    const pend = pendingReminders();
+
+    let alert = "";
     if (checkRedFlag() && S.state.settings.dismissedRedFlag !== todayKey()) {
-      banners += `<div class="banner banner-red">
+      alert = `<div class="today-alert banner banner-red">
         <div class="b-ico">!</div>
-        <div style="flex:1"><b>Ти проходиш складний період</b>
-        <p>Останні дні рівень тривоги високий. Можливо, зараз тобі допоможе підтримка психолога або близької людини. Ти не сама.</p></div>
+        <div style="flex:1"><b>Складний період</b><p>Останні дні тривога висока. Можливо, варто звернутися до близької людини або спеціаліста.</p></div>
         <button class="btn btn-sm btn-ghost" id="dismiss-red">Зрозуміло</button>
       </div>`;
-    }
-    // Нагадування про маленькі радощі / способи заспокоєння
-    const litJoys = S.randomLittleJoys(2);
-    if (litJoys.length) {
-      const jl = litJoys.map(j => j.text).join(" або ");
-      banners += `<div class="banner banner-violet">
-        <div class="b-ico">◇</div>
-        <div style="flex:1"><b>Маленька радість на сьогодні</b><p>Колись тебе тішило <b>${esc(jl)}</b>. Може, варто повернутися до цього сьогодні?</p></div>
-        <button class="btn btn-sm btn-ghost" data-route="joys">Мої радощі</button>
-      </div>`;
-    } else if (ranking.length) {
-      const list = ranking.slice(0, 2).map(r => r.name).join(" та ");
-      banners += `<div class="banner banner-violet">
-        <div class="b-ico">i</div>
-        <div><b>Нагадування</b><p>У минулому тобі допомагало <b>${esc(list)}</b>. Спробуй це знову.</p></div>
-      </div>`;
-    }
-
-    const reminderCard = pend.length ? `
-      <div class="banner banner-warn">
+    } else if (pend.length) {
+      alert = `<div class="today-alert banner banner-warn">
         <div class="b-ico">!</div>
-        <div style="flex:1"><b>Час повернутися до ${pend.length} ${pluralUk(pend.length,"запису","записів","записів")}</b>
-        <p>Настав день відкриття. Перевір, чи справдилися твої страхи.</p></div>
+        <div style="flex:1"><b>${pend.length} ${pluralUk(pend.length, "запис", "записи", "записів")} чекають відкриття</b></div>
         <button class="btn btn-sm btn-primary" data-route="reminders">Відкрити</button>
-      </div>` : "";
+      </div>`;
+    }
 
-    let shownAff = randomAff();
-
-    const litCount = (S.state.littleJoys || []).length;
+    const sub = todayWell
+      ? `Сьогодні ${todayWell.level}/10 · ${wellbeingLabel(todayWell.level)}`
+      : (isMale() ? "Без тиску. Один крок за раз." : "Достатньо одного маленького кроку до себе.");
 
     $("#view").innerHTML = `
-      <div class="welcome">
-        <h1>${isMale() ? "Привіт. Тут можна зібратися без тиску" : "Привіт"}</h1>
-        <p>${isMale() ? "Без пафосу і без оцінок. Видихни, подивимось на стан чесно й оберемо один нормальний крок далі." : "Тут не потрібно бути сильною чи ідеальною.<br>Зроби один маленький крок до себе."}</p>
-      </div>
-      ${banners}
-      ${reminderCard}
-      ${homeWellbeingCard()}
+      <div class="today-page">
+        ${alert}
+        <header class="today-head">
+          <h1>Як ти зараз?</h1>
+          <p>${esc(sub)}</p>
+        </header>
 
-      <button class="sos-button" id="sos-btn">
-        <span class="sos-ico">SOS</span>
-        <span class="sos-text"><b>SOS: мені зараз тривожно</b><span>Дихання, заземлення та підтримка — прямо зараз</span></span>
-      </button>
+        <div class="today-actions">
+          <button class="today-action today-action-sos" id="ta-sos" type="button">
+            <span class="ta-ico">SOS</span><span class="ta-title">Мені тривожно зараз</span>
+          </button>
+          <button class="today-action" id="ta-diary" type="button">
+            <span class="ta-ico">+</span><span class="ta-title">Зробити запис дня</span>
+          </button>
+          <button class="today-action" id="ta-situation" type="button">
+            <span class="ta-ico">⌁</span><span class="ta-title">Розібрати ситуацію</span>
+          </button>
+        </div>
 
-      <div class="home-actions two">
-        <button class="big-action act-calm" id="act-calm">
-          <span class="ba-ico">01</span>
-          <span class="ba-title">Мені тривожно</span>
-          <span class="ba-sub">Спокійно розберемося й повернемося до життя</span>
-        </button>
-        <button class="big-action act-new" id="act-new">
-          <span class="ba-ico">+</span>
-          <span class="ba-title">Новий запис</span>
-          <span class="ba-sub">Записати думку чи лист собі</span>
-        </button>
-      </div>
+        <div class="today-blocks">
+          <div class="today-tile">
+            <div class="today-tile-label">Місячний маршрут</div>
+            <div class="today-tile-main">День ${routeInfo.day} з ${routeInfo.daysInMonth}</div>
+            <div class="bar today-bar"><i style="width:${routeInfo.pct}%"></i></div>
+            <div class="today-tile-meta">${routeInfo.monthDays} ${pluralUk(routeInfo.monthDays, "день", "дні", "днів")} із записами</div>
+          </div>
 
-      <div class="grid grid-2" style="margin-top:16px">
-        <div class="stat streak-stat"><div class="s-ico">↑</div><div class="s-val">${streak}</div><div class="s-lbl">${pluralUk(streak,"день поспіль","дні поспіль","днів поспіль")}</div></div>
-        <div class="card aff-card">
-          <div class="card-title">${isMale() ? "Опора дня" : "Афірмація дня"}</div>
-          <p id="aff-text" class="aff-text">${esc(shownAff)}</p>
-          <div class="row">
-            <button class="btn btn-primary btn-sm" id="next-aff">↻ Інша</button>
-            <button class="btn btn-ghost btn-sm" id="save-aff">Зберегти</button>
+          <div class="today-tile">
+            <div class="today-tile-label">Останній запис</div>
+            ${lastEntry
+              ? `<div class="today-tile-main today-tile-clamp">${esc((lastEntry.fear || "").slice(0, 80))}</div>
+                 <div class="today-tile-meta">${fmtDate(lastEntry.createdAt)} · ${lastEntry.anxiety ? lastEntry.anxiety + "/10" : "запис"}</div>`
+              : `<div class="today-tile-main muted">Ще немає записів</div><div class="today-tile-meta">Почни з одного рядка про страх</div>`}
+          </div>
+
+          <div class="today-tile">
+            <div class="today-tile-label">Незавершена вправа</div>
+            ${unfinished
+              ? `<div class="today-tile-main today-tile-clamp">${esc(unfinished.title)}</div>
+                 <div class="today-tile-meta today-tile-clamp">${esc(unfinished.text)}</div>`
+              : `<div class="today-tile-main muted">Немає незавершеного</div><div class="today-tile-meta">Можна відпочити або зробити новий крок</div>`}
+          </div>
+
+          <div class="today-tile today-tile-wide">
+            <div class="today-tile-label">Стан за 7 днів</div>
+            ${weekBarsHTML(week)}
+          </div>
+
+          <div class="today-tile">
+            <div class="today-tile-label">${isMale() ? "Підказка дня" : "Персональна підказка"}</div>
+            <p class="today-tip">${esc(tip)}</p>
+          </div>
+
+          <div class="today-tile">
+            <div class="today-tile-label">Моменти самопідтримки</div>
+            <div class="today-tile-main today-tile-num">${supportCount}</div>
+            <div class="today-tile-meta">завершених кроків і опор</div>
           </div>
         </div>
-      </div>
 
-      <div class="card joys-card" id="joys-card" style="margin-top:16px">
-        <div class="row spread">
-          <div class="card-title" style="margin:0">Мої маленькі радощі</div>
-          <span class="faint">${litCount}</span>
-        </div>
-        <p class="muted" style="margin:8px 0 0">Збережи те, що тебе тішить — книги, фільми, музику, прогулянки, хобі. Я нагадуватиму про це.</p>
-      </div>
+        <button class="btn btn-primary btn-block today-continue" id="today-continue" type="button">Продовжити</button>
+      </div>`;
 
-      <div class="more-grid" style="margin-top:16px">
-        <button class="more-link" id="more-guide"><span>?</span>Інструкція</button>
-        <button class="more-link" data-route="types"><span>⌁</span>Типи тривоги</button>
-        <button class="more-link" data-route="analytics"><span>∿</span>Мій прогрес</button>
-        <button class="more-link" data-route="good"><span>${isMale() ? "•" : "☺"}</span>Хороші події</button>
-        <button class="more-link" data-route="gratitude"><span>∴</span>Вдячність</button>
-        <button class="more-link" data-route="treasure"><span>□</span>Скарбничка</button>
-        <button class="more-link" data-route="library"><span>§</span>Бібліотека</button>
-        <button class="more-link" data-route="achievements"><span>↑</span>Прогрес</button>
-      </div>
-    `;
-
+    $("#ta-sos").onclick = () => startCalm("quick");
+    $("#ta-diary").onclick = () => go("new");
+    $("#ta-situation").onclick = () => startCalm("full");
+    $("#today-continue").onclick = continueHomeAction;
+    if (unfinished) {
+      const tiles = $$(".today-tile", $("#view"));
+      if (tiles[2]) { tiles[2].classList.add("is-clickable"); tiles[2].onclick = unfinished.action; }
+    }
+    if (lastEntry) {
+      const tiles = $$(".today-tile", $("#view"));
+      if (tiles[1]) { tiles[1].classList.add("is-clickable"); tiles[1].onclick = () => go("history"); }
+    }
     $$("[data-route]", $("#view")).forEach(b => b.onclick = () => go(b.dataset.route));
-    $("#sos-btn").onclick = () => startCalm("quick");
-    $("#act-calm").onclick = () => startCalm("full");
-    $("#act-new").onclick = () => go("new");
-    $("#joys-card").onclick = () => go("joys");
-    $("#more-guide").onclick = openGuide;
-    wireWellbeingCard();
-    const dr = $("#dismiss-red"); if (dr) dr.onclick = () => { S.state.settings.dismissedRedFlag = todayKey(); S.save(); render(); };
+    const dr = $("#dismiss-red");
+    if (dr) dr.onclick = () => { S.state.settings.dismissedRedFlag = todayKey(); S.save(); render(); };
+  }
 
-    const affEl = $("#aff-text");
-    const showNextAff = () => {
-      shownAff = randomAff(shownAff);
-      affEl.style.opacity = "0";
-      setTimeout(() => { affEl.textContent = shownAff; affEl.style.opacity = "1"; }, 220);
-    };
-    $("#next-aff").onclick = showNextAff;
-    $("#save-aff").onclick = () => { S.addTreasure({ type: "affirmation", content: shownAff }); toast("Додано у скарбничку 💝", "good"); };
-    // автоматичне оновлення кожні 12 секунд, поки відкрита головна
-    affTimer = setInterval(() => { if (document.body.contains(affEl)) showNextAff(); else { clearInterval(affTimer); affTimer = null; } }, 12000);
+  function viewSupport() {
+    const links = [
+      { route: "resources", icon: "◌", title: "Мої ресурси", desc: "Що допомагає заспокоїтися" },
+      { route: "friend", icon: "✉", title: isMale() ? "Лист другові" : "Порада подрузі", desc: "Погляд на ситуацію з теплом" },
+      { route: "gratitude", icon: "∴", title: isMale() ? "За що я вдячний" : "За що я вдячна", desc: "Короткі нотатки опори" },
+      { route: "joys", icon: "◇", title: "Мої радощі", desc: "Книги, музика, прогулянки" },
+      { route: "treasure", icon: "□", title: "Скарбничка", desc: "Теплі слова та перемоги" },
+      { route: "evidence", icon: "✓", title: "Банк доказів", desc: "Страхи, що не справдилися" },
+      { route: "library", icon: "§", title: "Бібліотека", desc: "Короткі статті про тривогу" },
+      { route: "types", icon: "⌁", title: "Типи тривоги", desc: "М'які тести та розбір" }
+    ];
+    $("#view").innerHTML = `
+      <div class="page-head"><h1>Підтримка</h1><p>Інструменти, які допомагають повернутися до спокою й опори.</p></div>
+      <div class="support-grid">
+        ${links.map(l => `
+          <button class="support-link" type="button" data-route="${l.route}">
+            <span class="support-ico">${l.icon}</span>
+            <span class="support-body"><b>${esc(l.title)}</b><span>${esc(l.desc)}</span></span>
+          </button>`).join("")}
+      </div>
+      <button class="btn btn-ghost btn-sm" id="support-guide" type="button" style="margin-top:14px">Інструкція про сайт</button>`;
+    $$("[data-route]", $("#view")).forEach(b => b.onclick = () => go(b.dataset.route));
+    $("#support-guide").onclick = openGuide;
   }
 
   /* ===================== ТИПИ ТРИВОЖНОСТІ ===================== */
@@ -2140,16 +2239,27 @@
   let charts = [];
   function destroyCharts() { charts.forEach(c => { try { c.destroy(); } catch (e) {} }); charts = []; }
 
+  function analyticsNoticeBanner(entriesCount) {
+    const need = Math.max(0, 3 - entriesCount);
+    const needText = `ще ${need} ${pluralUk(need, "запис", "записи", "записів")}`;
+    return `<div class="card analytics-banner analytics-span-12">
+      <span class="analytics-banner-ico">📊</span>
+      <div class="analytics-banner-text">
+        <b>Недостатньо даних</b>
+        <span>Створи ${needText} для появи аналітики.</span>
+      </div>
+      <button class="btn btn-primary btn-sm" id="analytics-new">Новий запис</button>
+    </div>`;
+  }
+
   function viewAnalytics() {
     destroyCharts();
     const entries = S.state.entries.slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     const streak = computeStreak();
     const enoughRecords = entries.length >= 3;
-    const emptyAnalyticsText = "Поки недостатньо записів для аналітики";
 
     const causes = topCounts(entries.map(e => e.cause), 3);
     const triggers = topCounts(entries.map(e => e.trigger), 3);
-    const cats = topCounts(entries.map(e => e.category), 3);
     const ranking = S.resourceRanking().slice(0, 3);
 
     const last7 = entriesInLastDays(7), prev7 = S.state.entries.filter(e => { const t = new Date(e.createdAt).getTime(); return t < Date.now()-7*86400000 && t >= Date.now()-14*86400000; });
@@ -2167,7 +2277,6 @@
     const tests = S.state.tests;
     const firstTest = tests[0], lastTest = tests[tests.length - 1];
 
-    // Дані для графіків готуємо до рендера, щоб не показувати порожні координатні сітки.
     const anxietyEntries = entries.filter(e => typeof e.anxiety === "number");
     const byDay = {};
     anxietyEntries.forEach(e => {
@@ -2191,48 +2300,64 @@
     const hasWeekChart = enoughRecords && anxietyEntries.length >= 3 && weekKeys.length >= 1;
     const hasCategoryChart = enoughRecords && catData.reduce((sum, c) => sum + c[1], 0) >= 3;
 
-    const chartPlaceholder = `<div class="analytics-empty"><b>📊 Недостатньо даних</b><span>Створи ще кілька записів для появи аналітики.</span></div>`;
-    const chartCards = enoughRecords ? `
-        <div class="card analytics-card chart-card analytics-span-6"><div class="card-title">Рівень тривоги по днях</div>${hasAnxietyChart ? `<div class="chart-box"><canvas id="ch-anxiety"></canvas></div>` : chartPlaceholder}</div>
-        <div class="card analytics-card chart-card analytics-span-6"><div class="card-title">Динаміка настрою та енергії</div>${hasMoodChart ? `<div class="chart-box"><canvas id="ch-mood"></canvas></div>` : chartPlaceholder}</div>
-        <div class="card analytics-card chart-card analytics-span-6"><div class="card-title">Тривога по тижнях</div>${hasWeekChart ? `<div class="chart-box"><canvas id="ch-weeks"></canvas></div>` : chartPlaceholder}</div>
-        <div class="card analytics-card chart-card analytics-span-6"><div class="card-title">Найчастіші категорії</div>${hasCategoryChart ? `<div class="chart-box"><canvas id="ch-cats"></canvas></div>` : chartPlaceholder}</div>`
-      : `<div class="card analytics-card analytics-chart-notice analytics-span-12"><div class="card-title">Графіки</div>${chartPlaceholder}</div>`;
-
-    $("#view").innerHTML = `
-      <div class="analytics-page">
-      <div class="page-head"><h1>📊 Аналітика</h1><p>Твоя історія зберігається без обмежень. Ось що вона показує.</p></div>
-
-      <div class="analytics-dashboard">
+    const metricsHTML = `
         <div class="card analytics-card analytics-metric analytics-span-3"><div class="s-ico">🔥</div><div class="s-val">${streak}</div><div class="s-lbl">серія днів</div></div>
         <div class="card analytics-card analytics-metric analytics-span-3"><div class="s-ico">📝</div><div class="s-val">${filledDays()}</div><div class="s-lbl">заповнено днів</div></div>
         <div class="card analytics-card analytics-metric analytics-span-3"><div class="s-ico">🛡️</div><div class="s-val">${S.state.evidence.length}</div><div class="s-lbl">страхів не справдилось</div></div>
-        <div class="card analytics-card analytics-metric analytics-span-3"><div class="s-ico">📈</div><div class="s-val">${entries.length}</div><div class="s-lbl">усього записів</div></div>
+        <div class="card analytics-card analytics-metric analytics-span-3"><div class="s-ico">📈</div><div class="s-val">${entries.length}</div><div class="s-lbl">усього записів</div></div>`;
 
-        <div class="card analytics-card analytics-span-6"><div class="card-title">📉 Прогрес тривоги</div>
-          ${enoughRecords ? `<div class="analytics-row"><span>За 7 днів (vs попередні 7)</span><b>${trend(a7,p7)}</b></div>
-          <div class="analytics-row"><span>За 30 днів (vs попередні 30)</span><b>${trend(a30,p30)}</b></div>` : chartPlaceholder}
+    let bodyHTML = analyticsNoticeBanner(entries.length);
+
+    if (enoughRecords) {
+      const chartItems = [];
+      if (hasAnxietyChart) chartItems.push({ title: "Рівень тривоги по днях", canvas: "ch-anxiety" });
+      if (hasMoodChart) chartItems.push({ title: "Динаміка настрою та енергії", canvas: "ch-mood" });
+      if (hasWeekChart) chartItems.push({ title: "Тривога по тижнях", canvas: "ch-weeks" });
+      if (hasCategoryChart) chartItems.push({ title: "Найчастіші категорії", canvas: "ch-cats" });
+      const chartSpan = chartItems.length === 1 ? 12 : 6;
+      const chartsHTML = chartItems.length ? `
+        <div class="analytics-charts-row analytics-span-12">
+          ${chartItems.map(c => `
+            <div class="card analytics-card chart-card analytics-span-${chartSpan}">
+              <div class="card-title">${esc(c.title)}</div>
+              <div class="chart-box"><canvas id="${c.canvas}"></canvas></div>
+            </div>`).join("")}
+        </div>` : "";
+
+      bodyHTML = `
+        <div class="card analytics-card analytics-panel analytics-span-6">
+          <div class="card-title">📉 Прогрес тривоги</div>
+          <div class="analytics-row"><span>За 7 днів (vs попередні 7)</span><b>${trend(a7,p7)}</b></div>
+          <div class="analytics-row"><span>За 30 днів (vs попередні 30)</span><b>${trend(a30,p30)}</b></div>
         </div>
-        <div class="card analytics-card analytics-span-6"><div class="card-title">🧪 Тест тривожності: старт vs зараз</div>
+        <div class="card analytics-card analytics-panel analytics-span-6">
+          <div class="card-title">🧪 Тест тривожності: старт vs зараз</div>
           ${firstTest ? `<div class="analytics-row"><span>Перший тест (${fmtDate(firstTest.date)})</span><b>${firstTest.score} балів</b></div>
           <div class="analytics-row"><span>Останній тест (${fmtDate(lastTest.date)})</span><b>${lastTest.score} балів ${lastTest.score<firstTest.score?'<span class="pill pill-green">покращення</span>':lastTest.score>firstTest.score?'<span class="pill pill-warn">вище</span>':''}</b></div>
-          <button class="btn btn-ghost btn-sm" id="retake" style="margin-top:8px">Пройти тест знову</button>`
-          : `<p class="muted">Тест ще не пройдено.</p><button class="btn btn-primary btn-sm" id="retake">Пройти тест</button>`}
+          <button class="btn btn-ghost btn-sm analytics-panel-action" id="retake">Пройти тест знову</button>`
+          : `<p class="analytics-none">Тест ще не пройдено.</p><button class="btn btn-primary btn-sm analytics-panel-action" id="retake">Пройти тест</button>`}
         </div>
+        ${chartsHTML}
+        <div class="card analytics-card analytics-list analytics-span-4"><div class="card-title">Найчастіші причини</div>${listOrEmpty(causes)}</div>
+        <div class="card analytics-card analytics-list analytics-span-4"><div class="card-title">Найчастіші тригери</div>${listOrEmpty(triggers)}</div>
+        <div class="card analytics-card analytics-list analytics-span-4"><div class="card-title">Найефективніша підтримка</div>${ranking.length ? ranking.map(r => `<div class="analytics-row"><span>${esc(r.name)}</span><span class="faint">ефект ${r.avg || "–"}/5</span></div>`).join("") : `<p class="analytics-none">Ще немає оцінених способів</p>`}</div>`;
+    }
 
-        ${chartCards}
-
-        <div class="card analytics-card analytics-span-4"><div class="card-title">Найчастіші причини</div>${listOrEmpty(causes, emptyAnalyticsText)}</div>
-        <div class="card analytics-card analytics-span-4"><div class="card-title">Найчастіші тригери</div>${listOrEmpty(triggers, emptyAnalyticsText)}</div>
-        <div class="card analytics-card analytics-span-4"><div class="card-title">Найефективніша підтримка</div>${ranking.length?ranking.map(r=>`<div class="analytics-row"><span>${esc(r.name)}</span><span class="faint">ефект ${r.avg||"–"}/5</span></div>`).join(""):chartPlaceholder}</div>
+    $("#view").innerHTML = `
+      <div class="analytics-page">
+      <div class="page-head"><h1>📊 Аналітика</h1><p>Короткий огляд твоєї історії — без зайвого шуму.</p></div>
+      <div class="analytics-dashboard">
+        ${metricsHTML}
+        ${bodyHTML}
       </div>
       </div>
     `;
 
     const rt = $("#retake"); if (rt) rt.onclick = startTest;
+    const nb = $("#analytics-new"); if (nb) nb.onclick = () => go("new");
     $$("[data-route]", $("#view")).forEach(b => b.onclick = () => go(b.dataset.route));
 
-    if (!window.Chart || !enoughRecords) { return; }
+    if (!window.Chart) { return; }
     const purple = "#2fae8e", teal = "#5cc9aa", warn = "#e0a050";
 
     const anxietyCanvas = $("#ch-anxiety");
@@ -2265,8 +2390,10 @@
       options:{ plugins:{ legend:{ position:"bottom", labels:{ boxWidth:12, font:{ family:"Comfortaa" } } } }, responsive:true, maintainAspectRatio:false }
     }));
   }
-  function listOrEmpty(arr, emptyText = "Поки недостатньо записів для аналітики") {
-    return arr.length ? arr.map((c,i)=>`<div class="analytics-row"><span>${i+1}. ${esc(c[0])}</span><span class="faint">${c[1]} ${pluralUk(c[1],"раз","рази","разів")}</span></div>`).join("") : `<div class="analytics-empty"><b>📊 Недостатньо даних</b><span>${esc(emptyText)}</span></div>`;
+  function listOrEmpty(arr) {
+    return arr.length
+      ? arr.map((c, i) => `<div class="analytics-row"><span>${i + 1}. ${esc(c[0])}</span><span class="faint">${c[1]} ${pluralUk(c[1], "раз", "рази", "разів")}</span></div>`).join("")
+      : `<p class="analytics-none">Ще немає повторень</p>`;
   }
   function weekKey(iso) {
     const d = new Date(iso); const onejan = new Date(d.getFullYear(), 0, 1);
@@ -2597,7 +2724,7 @@
     const map = {
       home: viewHome, types: viewTypes, typeTest: viewTypeTest, new: viewNew, reminders: viewReminders, evidence: viewEvidence,
       resources: viewResources, treasure: viewTreasure, analytics: viewAnalytics, joys: viewJoys, good: viewGoodEvents, gratitude: viewGratitude, friend: viewFriendPractice,
-      history: viewHistory, library: viewLibrary, achievements: viewAchievements, profile: viewProfile
+      history: viewHistory, library: viewLibrary, achievements: viewAchievements, profile: viewProfile, support: viewSupport
     };
     (map[route] || viewHome)();
     mountSongBar();
@@ -2676,6 +2803,33 @@
   }
 
   let authGender = null;
+  let authMode = "signup";
+
+  function scrollToAuth(focusSel) {
+    const reg = $("#auth-reg");
+    if (reg) reg.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => { const el = $(focusSel); if (el) el.focus(); }, 480);
+  }
+
+  function setAuthMode(mode) {
+    authMode = mode;
+    const title = $("#auth-card-title");
+    const sub = $("#auth-card-sub");
+    const btn = $("#auth-email-btn");
+    const genderField = $("#auth-gender-field");
+    if (mode === "login") {
+      if (title) title.textContent = "Увійти";
+      if (sub) sub.textContent = "Введи email — і твій простір відкриється на цьому пристрої.";
+      if (btn) btn.textContent = "Увійти";
+      if (genderField) genderField.classList.add("hidden");
+    } else {
+      if (title) title.textContent = "Створити свій простір";
+      if (sub) sub.textContent = "Безкоштовно. Кілька секунд — і особистий простір тільки для тебе.";
+      if (btn) btn.textContent = "Продовжити з Email";
+      if (genderField) genderField.classList.remove("hidden");
+    }
+  }
+
   function initAuth() {
     // вибір статі (обов'язково при реєстрації)
     $$("#auth-gender .gender-opt").forEach(b => b.onclick = () => {
@@ -2683,23 +2837,33 @@
       $$("#auth-gender .gender-opt").forEach(x => x.classList.toggle("sel", x === b));
     });
 
-    // Лендинг: «Почати щоденник» — плавно до форми реєстрації
     const startBtn = $("#landing-start");
-    if (startBtn) startBtn.onclick = () => {
-      const reg = $("#auth-reg");
-      if (reg) reg.scrollIntoView({ behavior: "smooth", block: "start" });
-      setTimeout(() => { const n = $("#auth-name"); if (n) n.focus(); }, 480);
-    };
-    // Лендинг: «Мені зараз тривожно» — швидке заспокоєння без реєстрації
-    [$("#landing-sos"), $("#landing-sos2")].forEach(b => { if (b) b.onclick = openQuickCalm; });
+    if (startBtn) startBtn.onclick = () => { setAuthMode("signup"); scrollToAuth("#auth-name"); };
+    const loginBtn = $("#landing-login");
+    if (loginBtn) loginBtn.onclick = () => { setAuthMode("login"); scrollToAuth("#auth-email"); };
+    const sosBtn = $("#landing-sos");
+    if (sosBtn) sosBtn.onclick = openQuickCalm;
+
+    const emailInput = $("#auth-email");
+    if (emailInput) emailInput.addEventListener("input", () => {
+      if (authMode !== "login") return;
+      const email = emailInput.value.trim().toLowerCase();
+      const genderField = $("#auth-gender-field");
+      if (!genderField) return;
+      if (email && !S.hasAccount(email)) genderField.classList.remove("hidden");
+      else genderField.classList.add("hidden");
+    });
 
     const emailSignup = () => {
       const name = $("#auth-name").value.trim();
       const email = $("#auth-email").value.trim().toLowerCase();
       if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("Введи коректний email", "warn"); return; }
-      // якщо акаунт уже існує — стать беремо збережену; інакше вимагаємо вибір
       const existing = S.hasAccount(email);
-      if (!existing && !authGender) { toast("Будь ласка, обери стать 🌿", "warn"); return; }
+      if (!existing && !authGender) {
+        if ($("#auth-gender-field")) $("#auth-gender-field").classList.remove("hidden");
+        toast("Будь ласка, обери стать 🌿", "warn");
+        return;
+      }
       S.login({ name: name || email.split("@")[0], email, provider: "email", gender: authGender || undefined });
       showApp();
     };
@@ -2769,11 +2933,10 @@
   /* ===================== СТАРТ ===================== */
   function boot() {
     initAuth();
-    // глобальні кнопки
-    $("#crisis-pill").onclick = () => startCalm("quick");
-    $("#crisis-sidebar").onclick = () => { startCalm("quick"); closeSidebar(); };
-    $("#menu-toggle").onclick = () => { $("#sidebar").classList.toggle("open"); $("#scrim").classList.toggle("show"); };
-    $("#scrim").onclick = closeSidebar;
+    const profileBtn = $("#topbar-profile");
+    if (profileBtn) profileBtn.onclick = () => go("profile");
+    const scrim = $("#scrim");
+    if (scrim) scrim.onclick = closeSidebar;
     document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); closeCrisis(); if (calmState) closeCalm(); } });
 
     // Дані підтягнулися з бекенда (SQLite) — оновити інтерфейс «на льоту».
