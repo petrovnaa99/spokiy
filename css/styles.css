@@ -473,6 +473,7 @@ a { color: var(--primary); }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .spread { justify-content: space-between; }
 .stack { display: grid; gap: 14px; }
+.data-actions { gap: 8px; margin-top: 4px; }
 
 .empty { text-align: center; padding: 40px 20px; color: var(--ink-faint); }
 .empty .em-ico { font-size: 40px; margin-bottom: 8px; }

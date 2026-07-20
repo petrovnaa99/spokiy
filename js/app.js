@@ -2608,7 +2608,7 @@
       </div>`;
 
     $("#view").innerHTML = `
-      <div class="page-head"><h1>⚙️ Профіль і дані</h1><p>Керуй своїми даними. Усе залишається приватним.</p></div>
+      <div class="page-head"><h1>⚙️ Профіль</h1></div>
 
       <div class="card">
         <div class="card-title">👤 Обліковий запис</div>
@@ -2621,6 +2621,7 @@
             <button type="button" class="gender-opt ${p.gender==="male"?"sel":""}" data-g="male"><span class="gender-symbol">♂</span> Чоловік</button>
           </div>
         </div>
+        <button class="btn btn-ghost btn-sm" id="logout" type="button" style="margin-top:14px">Вийти</button>
       </div>
 
       ${window.Rituals ? Rituals.profileRemindersHTML() : ""}
@@ -2629,23 +2630,13 @@
 
       <div class="card">
         <div class="card-title">💾 Твої дані</div>
-        <p class="muted">Записи зберігаються автоматично. Якщо відкриєш сайт з іншого пристрою під тим самим email — вони підтягнуться самі.</p>
-        <div class="stack" style="gap:8px;margin-top:12px">
+        <div class="stack data-actions">
           <button class="btn btn-ghost btn-sm btn-block" id="exp-backup" type="button">⬇️ Завантажити копію даних</button>
           <button class="btn btn-ghost btn-sm btn-block" id="imp-json" type="button">⬆️ Перенести дані з файлу</button>
           <button class="btn btn-ghost btn-sm btn-block" id="exp-pdf" type="button">🖨️ Експорт у PDF</button>
+          <button class="btn btn-danger btn-sm btn-block" id="del-all" type="button">🗑 Видалити всі дані</button>
           <input type="file" id="imp-file" accept="application/json" class="hidden">
         </div>
-        <details class="backup-more" style="margin-top:14px">
-          <summary class="faint" style="cursor:pointer;font-size:13px;user-select:none">Додатково</summary>
-          <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:8px">
-            <button class="btn btn-ghost btn-sm" id="exp-json" type="button">JSON</button>
-            <button class="btn btn-ghost btn-sm" id="exp-csv" type="button">CSV</button>
-            ${CLOUD.endpoint ? `
-              <button class="btn btn-ghost btn-sm" id="cloud-save" type="button">☁️ В хмару</button>
-              <button class="btn btn-ghost btn-sm" id="cloud-load" type="button">☁️ З хмари</button>` : ""}
-          </div>
-        </details>
       </div>
 
       <div class="card">
@@ -2655,27 +2646,16 @@
           <button class="btn btn-primary btn-sm" id="do-test">Пройти тест зараз</button>
           <button class="btn btn-ghost btn-sm" id="see-tests">📊 Результати тестів</button>
         </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">🔒 Конфіденційність</div>
-        <p class="muted">Твої записи бачиш тільки ти.</p>
-        <div class="row">
-          <button class="btn btn-ghost btn-sm" id="logout">Вийти</button>
-          <button class="btn btn-danger btn-sm" id="del-all">🗑 Видалити всі дані</button>
-        </div>
       </div>`;
 
     $("#exp-backup").onclick = () => downloadFile("spokiy-backup.json", S.exportJSON(), "application/json");
-    $("#exp-json").onclick = () => downloadFile("spokiy-backup.json", S.exportJSON(), "application/json");
-    $("#exp-csv").onclick = exportCSV;
     $("#exp-pdf").onclick = exportPDF;
     $("#imp-json").onclick = () => $("#imp-file").click();
     $("#imp-file").onchange = (e) => {
       const file = e.target.files[0]; if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        confirmModal("Перенести дані з файлу?", "Поточні записи заміняться тими, що у файлі. Краще спершу зберегти копію.", () => {
+        confirmModal("Перенести дані з файлу?", "Поточні записи заміняться даними з файлу.", () => {
           try { S.importJSON(reader.result); toast("Дані успішно перенесено ✅", "good"); go("home"); }
           catch (err) { toast("Помилка: " + err.message, "warn"); }
         }, "Перенести");
@@ -2684,18 +2664,14 @@
     };
     $("#do-test").onclick = startTest;
     $("#see-tests").onclick = openTestHistory;
-    if (CLOUD.endpoint) {
-      $("#cloud-save").onclick = cloudSave;
-      $("#cloud-load").onclick = () => confirmModal("Відновити з хмари?", "Поточні дані буде замінено копією з хмари.", cloudLoad, "Відновити");
-    }
     $$("#prof-gender .gender-opt").forEach(b => b.onclick = () => {
       S.setGender(b.dataset.g);
       applyGenderTheme();
       toast("Збережено 🌿", "good");
       render();
     });
-    $("#logout").onclick = () => confirmModal("Вийти з акаунта?", "Твої дані залишаться збереженими на цьому пристрої.", () => { S.logout(); location.reload(); });
-    $("#del-all").onclick = () => confirmModal("Видалити ВСІ дані?", "Це назавжди видалить твій профіль і всі записи з цього пристрою. Дію не можна скасувати. Бажаєш спершу зробити резервну копію?", () => {
+    $("#logout").onclick = () => confirmModal("Вийти?", null, () => { S.logout(); location.reload(); });
+    $("#del-all").onclick = () => confirmModal("Видалити всі дані?", "Профіль і всі записи буде видалено назавжди.", () => {
       S.deleteAllData(); location.reload();
     }, "Видалити назавжди", true);
 
