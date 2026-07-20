@@ -17,6 +17,7 @@
 "use strict";
 
 const { configured, rest } = require("../_supabase");
+const { normalizeEmail, bearerToken, createAuthStore } = require("../_auth");
 const USERS_TABLE = "users";
 const ENTRIES_TABLE = "diary_entries";
 const EVIDENCE_TABLE = "evidence_records";
@@ -171,6 +172,17 @@ async function readBody(req) {
   });
 }
 
+async function assertSession(req, email) {
+  const token = bearerToken(req);
+  if (!token) return { ok: false, status: 401, error: "auth_required" };
+  const store = createAuthStore(rest, configured());
+  const session = await store.getSession(token);
+  if (!session || session.email !== email) {
+    return { ok: false, status: 403, error: "forbidden" };
+  }
+  return { ok: true };
+}
+
 module.exports = async (req, res) => {
   if (!configured()) {
     return res.status(500).json({ ok: false, error: "supabase_not_configured" });
@@ -178,6 +190,20 @@ module.exports = async (req, res) => {
 
   const email = normalizeEmail(req.query && req.query.email);
   if (!email) return res.status(400).json({ ok: false, error: "bad_email" });
+
+  if (req.method !== "GET") {
+    const auth = await assertSession(req, email);
+    if (!auth.ok) return res.status(auth.status).json({ ok: false, error: auth.error });
+  } else {
+    const token = bearerToken(req);
+    if (token) {
+      const auth = await assertSession(req, email);
+      if (!auth.ok) return res.status(auth.status).json({ ok: false, error: auth.error });
+    } else {
+      return res.status(401).json({ ok: false, error: "auth_required" });
+    }
+  }
+
   const eq = `email=eq.${encodeURIComponent(email)}`;
 
   try {

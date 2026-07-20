@@ -233,12 +233,12 @@
     { id: "home", icon: "☀", label: "Сьогодні" },
     { id: "sos", icon: "SOS", label: "SOS", action: true },
     { id: "history", icon: "≡", label: "Щоденник" },
-    { id: "analytics", icon: "∿", label: "Мої зміни" },
+    { id: "analytics", icon: "∿", label: "Моя динаміка" },
     { id: "support", icon: "♡", label: "Опора" }
   ];
   const SUPPORT_ROUTES = ["support", "resources", "friend", "treasure", "library", "joys", "gratitude", "evidence", "profile"];
   const ROUTE_TITLES = {
-    home: "Сьогодні", history: "Щоденник", analytics: "Мої зміни", support: "Опора",
+    home: "Сьогодні", history: "Щоденник", analytics: "Моя динаміка", support: "Опора",
     new: "Новий запис", types: "Типи тривоги", typeTest: "Розбір ситуації", reminders: "Нагадування",
     evidence: "Банк доказів", resources: "Мої ресурси", treasure: "Скарбничка", joys: "Мої радощі",
     good: "Хороші події", gratitude: "Вдячність", friend: "Порада подрузі", library: "Бібліотека",
@@ -467,16 +467,58 @@
   function closeSidebar() { $("#sidebar").classList.remove("open"); $("#scrim").classList.remove("show"); }
 
   /* ===================== Аналітика-обчислення ===================== */
+  function dayKeyFromIso(iso) {
+    return new Date(iso).toISOString().slice(0, 10);
+  }
+
+  /** Унікальні дні з активністю: запис, оцінка стану або legacy check-in */
+  function activityDayKeys() {
+    const keys = new Set();
+    S.state.entries.forEach(e => {
+      if (e.createdAt) keys.add(dayKeyFromIso(e.createdAt));
+    });
+    const wb = S.state.wellbeing;
+    if (wb && !Array.isArray(wb)) Object.keys(wb).forEach(k => keys.add(k));
+    Object.keys(S.state.checkins || {}).forEach(k => keys.add(k));
+    return [...keys].sort();
+  }
+
   function computeStreak() {
-    const cks = S.state.checkins;
+    const keys = new Set(activityDayKeys());
     let streak = 0;
-    let d = new Date();
-    // якщо сьогодні ще немає запису — рахуємо від учора
-    if (!cks[d.toISOString().slice(0,10)]) d.setDate(d.getDate() - 1);
-    while (cks[d.toISOString().slice(0, 10)]) { streak++; d.setDate(d.getDate() - 1); }
+    const d = new Date();
+    const key = (dt) => dt.toISOString().slice(0, 10);
+    if (!keys.has(key(d))) d.setDate(d.getDate() - 1);
+    while (keys.has(key(d))) { streak++; d.setDate(d.getDate() - 1); }
     return streak;
   }
-  function filledDays() { return Object.keys(S.state.checkins).length; }
+
+  function filledDays() { return activityDayKeys().length; }
+
+  function totalDiaryEntries() {
+    return S.state.entries.filter(e => e.type !== "letter").length;
+  }
+
+  function last7DayLevels() {
+    const anxietyByDay = {};
+    S.state.entries.forEach(e => {
+      if (typeof e.anxiety !== "number") return;
+      const k = dayKeyFromIso(e.createdAt);
+      anxietyByDay[k] = Math.max(anxietyByDay[k] || 0, e.anxiety);
+    });
+    const wb = S.state.wellbeing && !Array.isArray(S.state.wellbeing) ? S.state.wellbeing : {};
+    const wd = ["нд", "пн", "вт", "ср", "чт", "пт", "сб"];
+    const out = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setHours(12, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      const k = d.toISOString().slice(0, 10);
+      const level = anxietyByDay[k] ?? (wb[k] ? wb[k].level : null);
+      out.push({ key: k, level, label: wd[d.getDay()] });
+    }
+    return out;
+  }
 
   function topCounts(arr, n = 3) {
     const m = {};
@@ -673,20 +715,12 @@
     const prefix = `${y}-${m}`;
     const day = now.getDate();
     const daysInMonth = new Date(y, now.getMonth() + 1, 0).getDate();
-    const monthDays = Object.keys(S.state.checkins || {}).filter(k => k.startsWith(prefix)).length;
+    const monthDays = activityDayKeys().filter(k => k.startsWith(prefix)).length;
     return { day, daysInMonth, monthDays, pct: Math.min(100, Math.round((monthDays / day) * 100)) };
   }
 
   function weekDynamics() {
-    const out = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const k = d.toISOString().slice(0, 10);
-      const w = S.state.wellbeing && !Array.isArray(S.state.wellbeing) ? S.state.wellbeing[k] : null;
-      out.push({ key: k, level: w ? w.level : null, label: d.getDate() });
-    }
-    return out;
+    return last7DayLevels().map(d => ({ ...d, label: d.key.slice(8) }));
   }
 
   function lastUnfinishedTask() {
@@ -758,9 +792,19 @@
       ? `Сьогодні ${todayWell.level}/10 · ${wellbeingLabel(todayWell.level)}`
       : (isMale() ? "Без тиску. Один крок за раз." : "Достатньо одного маленького кроку до себе.");
 
+    const careBanner = window.Rituals ? `
+        <div class="care-banner">
+          <span class="care-banner-ico">🌿</span>
+          <div class="care-banner-text">${esc(Rituals.careMessage())}</div>
+        </div>` : "";
+
+    const ritualCard = window.Rituals ? Rituals.homeRitualCardHTML() : "";
+
     $("#view").innerHTML = `
       <div class="today-page">
         ${alert}
+        ${careBanner}
+        ${ritualCard}
         <header class="today-head">
           <h1>Як ти зараз?</h1>
           <p>${esc(sub)}</p>
@@ -837,6 +881,7 @@
     $$("[data-route]", $("#view")).forEach(b => b.onclick = () => go(b.dataset.route));
     const dr = $("#dismiss-red");
     if (dr) dr.onclick = () => { S.state.settings.dismissedRedFlag = todayKey(); S.save(); render(); };
+    if (window.Rituals) Rituals.wireHomeRituals($("#view"));
   }
 
   function viewSupport() {
@@ -2252,11 +2297,31 @@
     </div>`;
   }
 
+  function analyticsWeek7Card(week7) {
+    const filled = week7.filter(d => d.level != null).length;
+    let inner = "";
+    if (filled === 0) {
+      inner = `<p class="analytics-none">Поки немає оцінок за 7 днів. Зроби запис у щоденнику або відміть стан на головній — тоді тут з’явиться динаміка.</p>`;
+    } else if (filled < 2) {
+      inner = `<p class="analytics-hint">Є дані лише за ${filled} ${pluralUk(filled, "день", "дні", "днів")}. Після ще одного запису графік стане зрозумілішим.</p>${weekBarsHTML(week7)}`;
+    } else {
+      inner = weekBarsHTML(week7);
+    }
+    return `<div class="card analytics-card analytics-week-card analytics-span-12">
+      <div class="card-title">Стан за 7 днів</div>
+      <p class="analytics-week-sub">Середня тривога з записів або щоденна оцінка стану</p>
+      ${inner}
+    </div>`;
+  }
+
   function viewAnalytics() {
     destroyCharts();
     const entries = S.state.entries.slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     const streak = computeStreak();
-    const enoughRecords = entries.length >= 3;
+    const activeDays = filledDays();
+    const diaryCount = totalDiaryEntries();
+    const enoughRecords = diaryCount >= 3;
+    const week7 = last7DayLevels();
 
     const causes = topCounts(entries.map(e => e.cause), 3);
     const triggers = topCounts(entries.map(e => e.trigger), 3);
@@ -2301,12 +2366,30 @@
     const hasCategoryChart = enoughRecords && catData.reduce((sum, c) => sum + c[1], 0) >= 3;
 
     const metricsHTML = `
-        <div class="card analytics-card analytics-metric analytics-span-3"><div class="s-ico">🔥</div><div class="s-val">${streak}</div><div class="s-lbl">серія днів</div></div>
-        <div class="card analytics-card analytics-metric analytics-span-3"><div class="s-ico">📝</div><div class="s-val">${filledDays()}</div><div class="s-lbl">заповнено днів</div></div>
-        <div class="card analytics-card analytics-metric analytics-span-3"><div class="s-ico">🛡️</div><div class="s-val">${S.state.evidence.length}</div><div class="s-lbl">страхів не справдилось</div></div>
-        <div class="card analytics-card analytics-metric analytics-span-3"><div class="s-ico">📈</div><div class="s-val">${entries.length}</div><div class="s-lbl">усього записів</div></div>`;
+        <div class="card analytics-card analytics-metric analytics-span-3">
+          <div class="s-ico">🔥</div><div class="s-val">${streak}</div>
+          <div class="s-lbl">серія днів</div>
+          <div class="s-hint">поспіль з активністю</div>
+        </div>
+        <div class="card analytics-card analytics-metric analytics-span-3">
+          <div class="s-ico">📝</div><div class="s-val">${activeDays}</div>
+          <div class="s-lbl">активних днів</div>
+          <div class="s-hint">запис або оцінка стану</div>
+        </div>
+        <div class="card analytics-card analytics-metric analytics-span-3">
+          <div class="s-ico">🛡️</div><div class="s-val">${S.state.evidence.length}</div>
+          <div class="s-lbl">страхів не справдилось</div>
+          <div class="s-hint">у банку доказів</div>
+        </div>
+        <button class="card analytics-card analytics-metric analytics-span-3 analytics-metric-click" id="metric-entries" type="button" title="Переглянути всі записи">
+          <div class="s-ico">📈</div><div class="s-val">${diaryCount}</div>
+          <div class="s-lbl">усього записів</div>
+          <div class="s-hint">натисни — переглянути</div>
+        </button>`;
 
-    let bodyHTML = analyticsNoticeBanner(entries.length);
+    let bodyHTML = window.Rituals ? Rituals.dynamicsSectionHTML() : "";
+    bodyHTML += analyticsWeek7Card(week7);
+    if (!enoughRecords) bodyHTML = analyticsNoticeBanner(diaryCount) + bodyHTML;
 
     if (enoughRecords) {
       const chartItems = [];
@@ -2322,9 +2405,9 @@
               <div class="card-title">${esc(c.title)}</div>
               <div class="chart-box"><canvas id="${c.canvas}"></canvas></div>
             </div>`).join("")}
-        </div>` : "";
+        </div>` : `<div class="card analytics-card analytics-span-12"><p class="analytics-none">Для детальних графіків потрібно більше записів із оцінкою тривоги.</p></div>`;
 
-      bodyHTML = `
+      bodyHTML += `
         <div class="card analytics-card analytics-panel analytics-span-6">
           <div class="card-title">📉 Прогрес тривоги</div>
           <div class="analytics-row"><span>За 7 днів (vs попередні 7)</span><b>${trend(a7,p7)}</b></div>
@@ -2345,7 +2428,7 @@
 
     $("#view").innerHTML = `
       <div class="analytics-page">
-      <div class="page-head"><h1>📊 Аналітика</h1><p>Короткий огляд твоєї історії — без зайвого шуму.</p></div>
+      <div class="page-head"><h1>Моя динаміка</h1><p>Короткий огляд твоєї історії — без зайвого шуму.</p></div>
       <div class="analytics-dashboard">
         ${metricsHTML}
         ${bodyHTML}
@@ -2355,6 +2438,7 @@
 
     const rt = $("#retake"); if (rt) rt.onclick = startTest;
     const nb = $("#analytics-new"); if (nb) nb.onclick = () => go("new");
+    const me = $("#metric-entries"); if (me) me.onclick = () => go("history");
     $$("[data-route]", $("#view")).forEach(b => b.onclick = () => go(b.dataset.route));
 
     if (!window.Chart) { return; }
@@ -2401,9 +2485,15 @@
     return `${String(d.getFullYear()).slice(2)}-Т${week}`;
   }
   function chartOpts(max, legend = false) {
-    return { responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ display: legend, labels:{ font:{ family:"Comfortaa" } } } },
-      scales:{ y:{ beginAtZero:true, max, ticks:{ font:{ family:"Comfortaa" } } }, x:{ ticks:{ font:{ family:"Comfortaa" }, maxRotation:0 } } } };
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: legend, labels: { font: { family: "Comfortaa", size: 11 } } } },
+      scales: {
+        y: { beginAtZero: true, max, ticks: { font: { family: "Comfortaa", size: 10 } } },
+        x: { ticks: { font: { family: "Comfortaa", size: 10 }, maxRotation: 0, autoSkip: false } }
+      }
+    };
   }
 
   /* ===================== МОЯ ІСТОРІЯ ===================== */
@@ -2493,9 +2583,30 @@
   }
 
   /* ===================== ПРОФІЛЬ / КОНФІДЕНЦІЙНІСТЬ ===================== */
-  function viewProfile() {
+  let tgProfileCache = null;
+
+  async function viewProfile() {
     applyGenderTheme();
     const p = S.state.profile;
+    if (!tgProfileCache && S.isAuthed()) {
+      try { tgProfileCache = await S.telegramStatus(); } catch (e) { tgProfileCache = { ok: false }; }
+    }
+    const tgLinked = tgProfileCache && tgProfileCache.linked;
+    const tgBlock = `
+      <div class="card" id="tg-card">
+        <div class="card-title">📱 Telegram <span class="faint" style="font-size:12px;font-weight:500">(опційно)</span></div>
+        <p class="muted">Ті самі ритуали можна отримувати в Telegram. На сайті все вже доступно вище.</p>
+        ${tgLinked
+          ? `<p class="muted" style="margin:8px 0"><span class="pill pill-green">Підключено</span> Нагадування в боті: ⚙️ Налаштування.</p>
+             <div class="row">
+               <button class="btn btn-ghost btn-sm" id="tg-open">Відкрити бота</button>
+               <button class="btn btn-ghost btn-sm" id="tg-unlink">Відключити</button>
+             </div>`
+          : `<p class="muted" style="margin:8px 0">Нагадування вимкнені, поки не підключиш бота.</p>
+             <button class="btn btn-primary btn-sm" id="tg-connect">Підключити Telegram</button>
+             <p class="faint" id="tg-link-hint" style="margin-top:10px;font-size:12px"></p>`}
+      </div>`;
+
     $("#view").innerHTML = `
       <div class="page-head"><h1>⚙️ Профіль і дані</h1><p>Керуй своїми даними. Усе залишається приватним.</p></div>
 
@@ -2512,28 +2623,29 @@
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-title">💾 Збереження та перенесення даних</div>
-        <p class="muted">Дані зберігаються автоматично після кожної відповіді. Тут ти можеш створити резервну копію, перенести дані на інший пристрій або експортувати.</p>
-        <div class="row">
-          <button class="btn btn-ghost btn-sm" id="exp-json">⬇️ Резервна копія (JSON)</button>
-          <button class="btn btn-ghost btn-sm" id="exp-csv">📄 Експорт у CSV</button>
-          <button class="btn btn-ghost btn-sm" id="exp-pdf">🖨️ Експорт у PDF</button>
-          <button class="btn btn-ghost btn-sm" id="imp-json">⬆️ Імпорт / перенести з файлу</button>
-          <input type="file" id="imp-file" accept="application/json" class="hidden">
-        </div>
-      </div>
+      ${window.Rituals ? Rituals.profileRemindersHTML() : ""}
+
+      ${tgBlock}
 
       <div class="card">
-        <div class="card-title">☁️ Резервне хмарне збереження</div>
-        ${CLOUD.endpoint ? `
-          <p class="muted">Збережи копію в хмару, щоб записи не зникли при зміні телефону чи очищенні браузера.</p>
-          <div class="row">
-            <button class="btn btn-primary btn-sm" id="cloud-save">☁️ Зберегти в хмару</button>
-            <button class="btn btn-ghost btn-sm" id="cloud-load">⬇️ Відновити з хмари</button>
-          </div>` : `
-          <p class="muted">Зараз дані зберігаються локально на цьому пристрої. Найнадійніший спосіб не втратити записи — час від часу робити <b>резервну копію (JSON)</b> вище і зберігати її в Google Drive, на пошті чи в месенджері. На новому пристрої просто зроби «Імпорт».</p>
-          <p class="muted" style="margin-top:8px">Можна підключити автоматичну хмару (Google, Supabase чи власний сервер) — для цього у файлі <b>js/app.js</b> заповни налаштування <b>CLOUD.endpoint</b>. Після цього тут з'являться кнопки синхронізації.</p>`}
+        <div class="card-title">💾 Твої дані</div>
+        <p class="muted">Записи зберігаються автоматично. Якщо відкриєш сайт з іншого пристрою під тим самим email — вони підтягнуться самі.</p>
+        <div class="stack" style="gap:8px;margin-top:12px">
+          <button class="btn btn-ghost btn-sm btn-block" id="exp-backup" type="button">⬇️ Завантажити копію даних</button>
+          <button class="btn btn-ghost btn-sm btn-block" id="imp-json" type="button">⬆️ Перенести дані з файлу</button>
+          <button class="btn btn-ghost btn-sm btn-block" id="exp-pdf" type="button">🖨️ Експорт у PDF</button>
+          <input type="file" id="imp-file" accept="application/json" class="hidden">
+        </div>
+        <details class="backup-more" style="margin-top:14px">
+          <summary class="faint" style="cursor:pointer;font-size:13px;user-select:none">Додатково</summary>
+          <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:8px">
+            <button class="btn btn-ghost btn-sm" id="exp-json" type="button">JSON</button>
+            <button class="btn btn-ghost btn-sm" id="exp-csv" type="button">CSV</button>
+            ${CLOUD.endpoint ? `
+              <button class="btn btn-ghost btn-sm" id="cloud-save" type="button">☁️ В хмару</button>
+              <button class="btn btn-ghost btn-sm" id="cloud-load" type="button">☁️ З хмари</button>` : ""}
+          </div>
+        </details>
       </div>
 
       <div class="card">
@@ -2547,13 +2659,14 @@
 
       <div class="card">
         <div class="card-title">🔒 Конфіденційність</div>
-        <p class="muted">Усі дані приватні й зберігаються лише для тебе. Жодна інформація не публікується без твоєї згоди.</p>
+        <p class="muted">Твої записи бачиш тільки ти.</p>
         <div class="row">
           <button class="btn btn-ghost btn-sm" id="logout">Вийти</button>
-          <button class="btn btn-danger btn-sm" id="del-all">🗑 Видалити всі дані та профіль</button>
+          <button class="btn btn-danger btn-sm" id="del-all">🗑 Видалити всі дані</button>
         </div>
       </div>`;
 
+    $("#exp-backup").onclick = () => downloadFile("spokiy-backup.json", S.exportJSON(), "application/json");
     $("#exp-json").onclick = () => downloadFile("spokiy-backup.json", S.exportJSON(), "application/json");
     $("#exp-csv").onclick = exportCSV;
     $("#exp-pdf").onclick = exportPDF;
@@ -2562,10 +2675,10 @@
       const file = e.target.files[0]; if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        confirmModal("Імпортувати дані?", "Поточні дані буде замінено даними з файлу. Рекомендуємо спершу зробити резервну копію.", () => {
+        confirmModal("Перенести дані з файлу?", "Поточні записи заміняться тими, що у файлі. Краще спершу зберегти копію.", () => {
           try { S.importJSON(reader.result); toast("Дані успішно перенесено ✅", "good"); go("home"); }
           catch (err) { toast("Помилка: " + err.message, "warn"); }
-        }, "Імпортувати");
+        }, "Перенести");
       };
       reader.readAsText(file);
     };
@@ -2585,6 +2698,60 @@
     $("#del-all").onclick = () => confirmModal("Видалити ВСІ дані?", "Це назавжди видалить твій профіль і всі записи з цього пристрою. Дію не можна скасувати. Бажаєш спершу зробити резервну копію?", () => {
       S.deleteAllData(); location.reload();
     }, "Видалити назавжди", true);
+
+    wireTelegramProfile(tgProfileCache);
+    if (window.Rituals) Rituals.wireProfileReminders();
+    S.telegramStatus().then((res) => {
+      if (!res.ok || route !== "profile") return;
+      const prev = JSON.stringify(tgProfileCache);
+      tgProfileCache = res;
+      if (prev !== JSON.stringify(res)) viewProfile();
+    });
+  }
+
+  function wireTelegramProfile(cached) {
+    const connect = $("#tg-connect");
+    if (connect) {
+      connect.onclick = async () => {
+        connect.disabled = true;
+        const res = await S.telegramCreateLink();
+        connect.disabled = false;
+        if (!res.ok) {
+          toast(res.error === "offline" ? "Потрібне з'єднання з сервером" : "Не вдалося створити посилання", "warn");
+          return;
+        }
+        tgProfileCache = { linked: false };
+        const hint = $("#tg-link-hint");
+        if (res.linkUrl) {
+          window.open(res.linkUrl, "_blank");
+          if (hint) hint.textContent = "Посилання діє 15 хвилин. У Telegram натисни Start — і акаунт підключиться.";
+          toast("Відкрий Telegram і натисни Start 🌿", "good");
+        } else if (hint) {
+          hint.textContent = res.botUsername
+            ? `Відкрий @${res.botUsername} і надішли: /start ${res.startPayload}`
+            : "Звернися до адміністратора: не налаштовано TELEGRAM_BOT_USERNAME.";
+        }
+      };
+    }
+    const openBot = $("#tg-open");
+    if (openBot) {
+      openBot.onclick = () => {
+        if (cached && cached.botUsername) {
+          window.open(`https://t.me/${cached.botUsername}`, "_blank");
+        } else {
+          toast("Відкрий бота через «Підключити Telegram»", "warn");
+        }
+      };
+    }
+    const unlink = $("#tg-unlink");
+    if (unlink) {
+      unlink.onclick = () => confirmModal("Відключити Telegram?", "Нагадування в Telegram більше не надходитимуть. Можна підключити знову.", async () => {
+        await S.telegramUnlink();
+        tgProfileCache = { ok: true, linked: false };
+        toast("Telegram відключено", "good");
+        render();
+      }, "Відключити");
+    }
   }
 
   async function cloudSave() {
@@ -2638,7 +2805,7 @@
     win.document.write(`<html><head><meta charset="utf-8"><title>Спокій — звіт</title><style>${style}</style></head><body>
       <h1>🌿 Спокій — особистий звіт</h1>
       <p class="d">${esc(p.name||"")} · ${esc(p.email)} · ${fmtDate(new Date().toISOString())}</p>
-      <p>Заповнено днів: <b>${filledDays()}</b> · Серія: <b>${computeStreak()}</b> · Страхів не справдилось: <b>${S.state.evidence.length}</b></p>
+      <p>Активних днів: <b>${filledDays()}</b> · Серія: <b>${computeStreak()}</b> · Страхів не справдилось: <b>${S.state.evidence.length}</b></p>
       <h2>🛡️ Банк доказів</h2>${evHtml}
       <h2>📜 Записи</h2>${enHtml}
       <button onclick="window.print()" style="margin-top:20px;padding:10px 18px;background:#2fae8e;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨️ Зберегти як PDF</button>
@@ -2746,12 +2913,15 @@
     checkAchievements(true);
     go("home");
     notifyReminders();
+    handleDeepLinks();
+    if (window.Rituals) { Rituals.startReminderScheduler(); Rituals.requestPushPermission(); }
   }
 
   function startOnboarding() {
-    // Одразу після входу — швидкий замір самопочуття: шкала тривожності 1–10
-    // (SUDS з КПТ). Називання рівня саме по собі знижує напругу (affect labeling),
-    // тому питаємо м'яко, раз на день і з можливістю відкласти — без примусу.
+    if (window.Rituals) {
+      Rituals.maybePrompt();
+      return;
+    }
     if (S.todayWellbeing()) return;
     const scale = Array.from({ length: 10 }, (_, i) =>
       `<button class="well-btn" data-onb-well="${i + 1}">${i + 1}</button>`).join("");
@@ -2804,6 +2974,7 @@
 
   let authGender = null;
   let authMode = "signup";
+  let loginUseCode = false;
 
   function scrollToAuth(focusSel) {
     const reg = $("#auth-reg");
@@ -2811,27 +2982,162 @@
     setTimeout(() => { const el = $(focusSel); if (el) el.focus(); }, 480);
   }
 
+  function authErrorText(code) {
+    const map = {
+      bad_email: "Введи коректний email",
+      email_taken: "Цей email вже зареєстрований — спробуй увійти",
+      weak_password: "Пароль має бути не менше 6 символів",
+      name_required: "Введи ім'я",
+      gender_required: "Обери стать",
+      unknown_email: "Акаунт з таким email не знайдено",
+      invalid_credentials: "Невірний пароль або код",
+      invalid_code: "Невірний або прострочений код",
+      password_or_code_required: "Введи пароль або код",
+      code_required: "Введи код з email",
+      code_unavailable: "Вхід за кодом доступний лише онлайн",
+      offline: "Потрібне з'єднання з інтернетом",
+      password_mismatch: "Паролі не збігаються"
+    };
+    return map[code] || "Не вдалося виконати дію. Спробуй ще раз.";
+  }
+
+  function updateLoginFields() {
+    if (authMode !== "login") return;
+    const codeMode = loginUseCode;
+    const pwField = $("#auth-password-field");
+    const codeField = $("#auth-code-field");
+    if (pwField) pwField.classList.toggle("hidden", codeMode);
+    if (codeField) codeField.classList.toggle("hidden", !codeMode);
+    const useCodeBtn = $("#auth-use-code");
+    if (useCodeBtn) useCodeBtn.textContent = codeMode ? "Увійти за паролем" : "Увійти за кодом";
+    const submit = $("#auth-submit");
+    if (submit) submit.textContent = codeMode ? "Увійти за кодом" : "Увійти";
+    const pw = $("#auth-password");
+    if (pw) pw.autocomplete = codeMode ? "off" : "current-password";
+  }
+
   function setAuthMode(mode) {
     authMode = mode;
+    loginUseCode = false;
+    const isLogin = mode === "login";
     const title = $("#auth-card-title");
     const sub = $("#auth-card-sub");
-    const btn = $("#auth-email-btn");
-    const genderField = $("#auth-gender-field");
-    if (mode === "login") {
-      if (title) title.textContent = "Увійти";
-      if (sub) sub.textContent = "Введи email — і твій простір відкриється на цьому пристрої.";
-      if (btn) btn.textContent = "Увійти";
-      if (genderField) genderField.classList.add("hidden");
-    } else {
-      if (title) title.textContent = "Створити свій простір";
-      if (sub) sub.textContent = "Безкоштовно. Кілька секунд — і особистий простір тільки для тебе.";
-      if (btn) btn.textContent = "Продовжити з Email";
-      if (genderField) genderField.classList.remove("hidden");
+    const submit = $("#auth-submit");
+    if (title) title.textContent = isLogin ? "Увійти" : "Створити свій простір";
+    if (sub) sub.textContent = isLogin
+      ? "Введи email і пароль — або одноразовий код з листа."
+      : "Безкоштовно. Кілька секунд — і особистий простір тільки для тебе.";
+    if (submit) submit.textContent = isLogin ? "Увійти" : "Створити акаунт";
+    $$(".auth-signup-only").forEach(el => el.classList.toggle("hidden", isLogin));
+    $$(".auth-login-only").forEach(el => el.classList.toggle("hidden", !isLogin));
+    const pw = $("#auth-password");
+    if (pw) pw.autocomplete = isLogin ? "current-password" : "new-password";
+    if (!isLogin) {
+      const codeField = $("#auth-code-field");
+      const pwField = $("#auth-password-field");
+      if (codeField) codeField.classList.add("hidden");
+      if (pwField) pwField.classList.remove("hidden");
+    } else updateLoginFields();
+  }
+
+  async function finishAuth(res) {
+    if (!res.ok) {
+      toast(authErrorText(res.error), "warn");
+      if (res.devCode) toast("Код для розробки: " + res.devCode, "good");
+      return false;
+    }
+    showApp();
+    return true;
+  }
+
+  async function submitSignup() {
+    const name = ($("#auth-name") && $("#auth-name").value || "").trim();
+    const email = ($("#auth-email") && $("#auth-email").value || "").trim().toLowerCase();
+    const password = $("#auth-password") && $("#auth-password").value || "";
+    const password2 = $("#auth-password2") && $("#auth-password2").value || "";
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("Введи коректний email", "warn"); return; }
+    if (!name) { toast("Введи ім'я", "warn"); $("#auth-name") && $("#auth-name").focus(); return; }
+    if (!authGender) { toast("Будь ласка, обери стать 🌿", "warn"); return; }
+    if (!password || password.length < 6) { toast(authErrorText("weak_password"), "warn"); return; }
+    if (password !== password2) { toast(authErrorText("password_mismatch"), "warn"); return; }
+    const submit = $("#auth-submit");
+    if (submit) submit.disabled = true;
+    try {
+      await finishAuth(await S.register({ email, password, name, gender: authGender }));
+    } finally {
+      if (submit) submit.disabled = false;
     }
   }
 
+  async function submitLogin() {
+    const email = ($("#auth-email") && $("#auth-email").value || "").trim().toLowerCase();
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("Введи коректний email", "warn"); return; }
+    const submit = $("#auth-submit");
+    if (submit) submit.disabled = true;
+    try {
+      let res;
+      if (loginUseCode) {
+        const code = ($("#auth-code") && $("#auth-code").value || "").trim();
+        if (!code) { toast(authErrorText("code_required"), "warn"); return; }
+        res = await S.loginWithCode(email, code);
+      } else {
+        const password = $("#auth-password") && $("#auth-password").value || "";
+        if (!password) { toast("Введи пароль", "warn"); return; }
+        res = await S.loginWithPassword(email, password);
+      }
+      await finishAuth(res);
+    } finally {
+      if (submit) submit.disabled = false;
+    }
+  }
+
+  async function requestLoginCode() {
+    const email = ($("#auth-email") && $("#auth-email").value || "").trim().toLowerCase();
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("Спочатку введи email", "warn"); return; }
+    const res = await S.requestCode(email, "login");
+    if (!res.ok) { toast(authErrorText(res.error || "offline"), "warn"); return; }
+    loginUseCode = true;
+    updateLoginFields();
+    toast(res.devCode ? "Код надіслано (dev: " + res.devCode + ")" : "Код надіслано на email", "good");
+    const codeInput = $("#auth-code");
+    if (codeInput) codeInput.focus();
+  }
+
+  function openForgotPassword() {
+    const email = ($("#auth-email") && $("#auth-email").value || "").trim().toLowerCase();
+    openModal(`<h2>Забули пароль?</h2>
+      <p class="muted" style="margin:0 0 14px">Надішлемо код на email. Потім задай новий пароль.</p>
+      <label class="field"><span>Email</span><input id="fp-email" type="email" value="${esc(email)}" autocomplete="email" /></label>
+      <label class="field"><span>Код з email</span><input id="fp-code" type="text" inputmode="numeric" maxlength="6" placeholder="6 цифр" /></label>
+      <label class="field"><span>Новий пароль</span><input id="fp-password" type="password" autocomplete="new-password" placeholder="Мінімум 6 символів" /></label>
+      <div class="row spread" style="margin-top:16px;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" type="button" id="fp-send">Надіслати код</button>
+        <button class="btn btn-primary" type="button" id="fp-save">Зберегти пароль</button>
+      </div>`);
+    $("#fp-send").onclick = async () => {
+      const em = ($("#fp-email") && $("#fp-email").value || "").trim().toLowerCase();
+      if (!em) { toast("Введи email", "warn"); return; }
+      const res = await S.requestCode(em, "reset");
+      if (!res.ok) { toast(authErrorText(res.error || "offline"), "warn"); return; }
+      toast(res.devCode ? "Код (dev): " + res.devCode : "Код надіслано", "good");
+    };
+    $("#fp-save").onclick = async () => {
+      const em = ($("#fp-email") && $("#fp-email").value || "").trim().toLowerCase();
+      const code = ($("#fp-code") && $("#fp-code").value || "").trim();
+      const password = $("#fp-password") && $("#fp-password").value || "";
+      if (!em || !code || !password) { toast("Заповни всі поля", "warn"); return; }
+      const res = await S.resetPassword({ email: em, code, password });
+      if (!res.ok) { toast(authErrorText(res.error), "warn"); return; }
+      closeModal();
+      toast("Пароль оновлено. Тепер увійди 🌿", "good");
+      setAuthMode("login");
+      const emailInput = $("#auth-email");
+      if (emailInput) emailInput.value = em;
+      scrollToAuth("#auth-password");
+    };
+  }
+
   function initAuth() {
-    // вибір статі (обов'язково при реєстрації)
     $$("#auth-gender .gender-opt").forEach(b => b.onclick = () => {
       authGender = b.dataset.gender;
       $$("#auth-gender .gender-opt").forEach(x => x.classList.toggle("sel", x === b));
@@ -2844,33 +3150,26 @@
     const sosBtn = $("#landing-sos");
     if (sosBtn) sosBtn.onclick = openQuickCalm;
 
+    const submitBtn = $("#auth-submit");
+    if (submitBtn) submitBtn.onclick = () => (authMode === "signup" ? submitSignup() : submitLogin());
+
+    const onEnter = (e) => { if (e.key === "Enter") (authMode === "signup" ? submitSignup() : submitLogin()); };
     const emailInput = $("#auth-email");
-    if (emailInput) emailInput.addEventListener("input", () => {
-      if (authMode !== "login") return;
-      const email = emailInput.value.trim().toLowerCase();
-      const genderField = $("#auth-gender-field");
-      if (!genderField) return;
-      if (email && !S.hasAccount(email)) genderField.classList.remove("hidden");
-      else genderField.classList.add("hidden");
-    });
+    if (emailInput) emailInput.addEventListener("keydown", onEnter);
+    const pwInput = $("#auth-password");
+    if (pwInput) pwInput.addEventListener("keydown", onEnter);
 
-    const emailSignup = () => {
-      const name = $("#auth-name").value.trim();
-      const email = $("#auth-email").value.trim().toLowerCase();
-      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("Введи коректний email", "warn"); return; }
-      const existing = S.hasAccount(email);
-      if (!existing && !authGender) {
-        if ($("#auth-gender-field")) $("#auth-gender-field").classList.remove("hidden");
-        toast("Будь ласка, обери стать 🌿", "warn");
-        return;
-      }
-      S.login({ name: name || email.split("@")[0], email, provider: "email", gender: authGender || undefined });
-      showApp();
+    const forgotBtn = $("#auth-forgot");
+    if (forgotBtn) forgotBtn.onclick = openForgotPassword;
+
+    const useCodeBtn = $("#auth-use-code");
+    if (useCodeBtn) useCodeBtn.onclick = async () => {
+      if (!loginUseCode) await requestLoginCode();
+      else { loginUseCode = false; updateLoginFields(); }
     };
-    $("#auth-email-btn").onclick = emailSignup;
-    $("#auth-email").addEventListener("keydown", e => { if (e.key === "Enter") emailSignup(); });
 
-    // Google: справжній OAuth через Google Identity Services
+    setAuthMode("signup");
+
     $("#auth-google-btn").onclick = () => {
       if (!GOOGLE_CLIENT_ID) {
         confirmModal("Google-вхід ще не налаштовано",
@@ -2910,15 +3209,27 @@
       }
       google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
-        callback: (resp) => {
+        callback: async (resp) => {
           const data = parseJwt(resp.credential);
           if (!data || !data.email) { toast("Не вдалося увійти через Google", "warn"); return; }
-          const proceed = (gender) => {
-            S.login({ name: data.name || data.email.split("@")[0], email: data.email, provider: "google", picture: data.picture, gender });
+          const doOAuth = async (gender) => {
+            const res = await S.oauthLogin({
+              email: data.email,
+              name: data.name || data.email.split("@")[0],
+              picture: data.picture,
+              provider: "google",
+              gender: gender || null
+            });
+            if (!res.ok) { toast(authErrorText(res.error), "warn"); return; }
             showApp();
           };
-          if (S.hasAccount(data.email) && S.accountGender(data.email)) proceed(S.accountGender(data.email));
-          else askGender(proceed);
+          const exists = await S.hasAccount(data.email);
+          if (exists) {
+            const g = S.accountGender(data.email);
+            await doOAuth(g);
+          } else {
+            askGender(g => doOAuth(g));
+          }
         }
       });
       const box = $("#google-btn-box");
@@ -2949,6 +3260,27 @@
 
   // глобальний доступ для кнопки кризи з будь-де
   window.SpokiyCrisis = () => startCalm("quick");
+
+  if (window.Rituals) {
+    Rituals.init({
+      S, $, $$, esc, genderize, uiText, isMale, pluralUk, daysBetween, todayKey,
+      openModal, closeModal, toast, confirmModal, go, startCalm
+    });
+  }
+
+  function handleDeepLinks() {
+    if (!S.isAuthed()) return;
+    const p = new URLSearchParams(location.search);
+    const sos = p.get("sos");
+    if (sos === "breath" || sos === "quick" || sos === "ground") {
+      setTimeout(() => startCalm("quick"), 500);
+    }
+    const r = p.get("route");
+    if (r === "new") setTimeout(() => go("new"), 300);
+    if (p.has("sos") || p.has("route")) {
+      history.replaceState(null, "", location.pathname);
+    }
+  }
 
   document.addEventListener("DOMContentLoaded", boot);
 })();

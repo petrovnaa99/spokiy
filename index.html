@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Comfortaa:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260620-landing" />
+  <link rel="stylesheet" href="css/styles.css?v=20260720" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" />
 </head>
 <body>
@@ -51,7 +51,7 @@
           <p class="auth-card-sub" id="auth-card-sub">Безкоштовно. Кілька секунд — і особистий простір тільки для тебе.</p>
 
           <div class="auth-fields">
-            <label class="field">
+            <label class="field auth-signup-only" id="auth-name-field">
               <span>Ім'я</span>
               <input id="auth-name" type="text" placeholder="Як до тебе звертатися?" autocomplete="name" />
             </label>
@@ -59,7 +59,19 @@
               <span>Email</span>
               <input id="auth-email" type="email" placeholder="you@email.com" autocomplete="email" />
             </label>
-            <div class="field" id="auth-gender-field">
+            <label class="field" id="auth-password-field">
+              <span>Пароль</span>
+              <input id="auth-password" type="password" placeholder="Мінімум 6 символів" autocomplete="current-password" />
+            </label>
+            <label class="field auth-signup-only" id="auth-password2-field">
+              <span>Повтори пароль</span>
+              <input id="auth-password2" type="password" placeholder="Ще раз" autocomplete="new-password" />
+            </label>
+            <label class="field auth-login-only hidden" id="auth-code-field">
+              <span>Код з email</span>
+              <input id="auth-code" type="text" inputmode="numeric" placeholder="6 цифр" maxlength="6" autocomplete="one-time-code" />
+            </label>
+            <div class="field auth-signup-only" id="auth-gender-field">
               <span>Як до тебе звертатися?</span>
               <div class="gender-pick" id="auth-gender">
                 <button type="button" class="gender-opt" data-gender="female">у жіночому роді</button>
@@ -68,7 +80,12 @@
             </div>
           </div>
 
-          <button class="btn btn-primary btn-block" id="auth-email-btn">Продовжити з Email</button>
+          <div class="auth-login-only auth-links hidden" id="auth-login-links">
+            <button type="button" class="auth-link" id="auth-forgot">Забули пароль?</button>
+            <button type="button" class="auth-link" id="auth-use-code">Увійти за кодом</button>
+          </div>
+
+          <button class="btn btn-primary btn-block" id="auth-submit" type="button">Створити акаунт</button>
           <div class="auth-divider"><span>або</span></div>
           <div id="google-btn-box"></div>
           <button class="btn btn-google btn-block" id="auth-google-btn">
@@ -120,7 +137,8 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
 <script src="js/content.js"></script>
-<script src="js/storage.js"></script>
-<script src="js/app.js?v=20260620-opora"></script>
+<script src="js/storage.js?v=20260720"></script>
+<script src="js/rituals.js?v=20260720"></script>
+<script src="js/app.js?v=20260720"></script>
 </body>
 </html>

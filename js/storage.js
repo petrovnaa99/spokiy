@@ -1,28 +1,43 @@
 /* Рівень зберігання даних: cloud-first через /api/state/:email (Supabase на Vercel,
-   SQLite локально через serve.js). localStorage використовується тільки як кеш,
-   сесія й офлайн-страховка, а не як основне сховище. */
+   SQLite локально через serve.js). Авторизація: /api/auth/* + Bearer-токен сесії.
+   localStorage — кеш стану та сесії, не основне сховище. */
 window.Store = (function () {
   const ROOT = "spokiy:v1";
   const SESSION = "spokiy:session";
+  const TOKEN = "spokiy:token";
+  const LOCAL_AUTH = "spokiy:auth";
 
   function emptyState(profile) {
     return {
-      profile: profile || null,            // { name, email, provider, createdAt }
-      entries: [],                          // записи щоденника та листи
-      evidence: [],                         // банк доказів
-      resources: {},                        // { name: { uses, sumEffect } }
-      treasure: [],                         // скарбничка підтримки
-      tests: [],                            // тести тривожності { date, score }
-      joys: [],                             // що приносить радість { name, date }
-      littleJoys: [],                       // мої маленькі радощі { id, category, text, date }
-      friendNotes: [],                      // практика «порада подрузі» { id, situation, advice, date }
-      wellbeing: {},                        // щоденна шкала самопочуття { YYYY-MM-DD: { level, date } }
-      goodEvents: [],                       // хороші події дня { id, text, date, dayKey }
-      gratitude: [],                        // вдячність дня { id, text, date, dayKey }
-      achievements: {},                     // { id: ISOдата }
-      checkins: {},                         // { 'YYYY-MM-DD': true } для серій
-      draft: null,                          // незавершений запис
-      settings: { reminderHour: 9, dismissedRedFlag: null, songReminder: "" },
+      profile: profile || null,
+      entries: [],
+      evidence: [],
+      resources: {},
+      treasure: [],
+      tests: [],
+      joys: [],
+      littleJoys: [],
+      friendNotes: [],
+      wellbeing: {},
+      goodEvents: [],
+      gratitude: [],
+      achievements: {},
+      checkins: {},
+      rituals: {},
+      draft: null,
+      settings: {
+        reminderHour: 9,
+        dismissedRedFlag: null,
+        songReminder: "",
+        ritualDismiss: {},
+        reminders: {
+          morning: { enabled: false, time: "08:00", days: [0, 1, 2, 3, 4, 5, 6], push: false },
+          midday: { enabled: false, time: "14:00", days: [0, 1, 2, 3, 4, 5, 6], hoursAfterMorning: 5, push: false },
+          evening: { enabled: false, time: "21:00", days: [0, 1, 2, 3, 4, 5, 6], push: false },
+          timezone: "Europe/Kyiv",
+          sent: {}
+        }
+      },
       createdAt: new Date().toISOString()
     };
   }
@@ -33,10 +48,11 @@ window.Store = (function () {
   }
   function saveDb(obj) { localStorage.setItem(ROOT, JSON.stringify(obj)); }
 
-  /* ---- Основне сховище через backend API ----
-     На Vercel цей API пише в Supabase. Локально serve.js пише в SQLite.
-     При відкритті файлу напряму (file://) API недоступний, тож лишається кеш
-     localStorage як офлайн-режим для розробки/аварійного доступу. */
+  function authHeaders() {
+    const t = localStorage.getItem(TOKEN);
+    return t ? { Authorization: "Bearer " + t } : {};
+  }
+
   const API = "/api/state";
   let pushTimer = null;
   const Cloud = {
@@ -44,7 +60,10 @@ window.Store = (function () {
     async pull(email) {
       if (!this.enabled || !email) return null;
       try {
-        const r = await fetch(API + "/" + encodeURIComponent(email), { headers: { Accept: "application/json" } });
+        const r = await fetch(API + "/" + encodeURIComponent(email), {
+          headers: { Accept: "application/json", ...authHeaders() }
+        });
+        if (r.status === 401 || r.status === 403) return { forbidden: true };
         if (!r.ok) return null;
         const j = await r.json();
         return j && j.ok && j.data ? j.data : null;
@@ -57,7 +76,7 @@ window.Store = (function () {
       pushTimer = setTimeout(() => {
         fetch(API + "/" + encodeURIComponent(email), {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: payload,
           keepalive: true
         }).catch(() => {});
@@ -65,23 +84,124 @@ window.Store = (function () {
     },
     remove(email) {
       if (!this.enabled || !email) return;
-      fetch(API + "/" + encodeURIComponent(email), { method: "DELETE" }).catch(() => {});
+      fetch(API + "/" + encodeURIComponent(email), {
+        method: "DELETE",
+        headers: { ...authHeaders() }
+      }).catch(() => {});
     }
   };
 
-  // Підтягнути дані акаунта з основного backend-сховища.
-  // Перемагає новіша версія (за updatedAt).
-  // preferRemote=true — акаунт щойно створено на цьому пристрої: якщо в базі вже
-  // є дані цього email, вони важливіші за порожній локальний стан.
+  const Auth = {
+    enabled: Cloud.enabled,
+    async call(path, opts = {}) {
+      const r = await fetch("/api/auth/" + path, {
+        method: opts.method || "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          ...authHeaders(),
+          ...(opts.headers || {})
+        },
+        body: opts.body != null ? JSON.stringify(opts.body) : undefined
+      });
+      let json = {};
+      try { json = await r.json(); } catch (e) {}
+      return { ok: r.ok, status: r.status, ...json };
+    },
+    async register({ email, password, name, gender }) {
+      return this.call("register", { method: "POST", body: { email, password, name, gender } });
+    },
+    async login({ email, password, code }) {
+      return this.call("login", { method: "POST", body: { email, password, code } });
+    },
+    async requestCode(email, purpose) {
+      return this.call("request-code", { method: "POST", body: { email, purpose } });
+    },
+    async resetPassword({ email, code, password }) {
+      return this.call("reset-password", { method: "POST", body: { email, code, password } });
+    },
+    async exists(email) {
+      return this.call("exists?email=" + encodeURIComponent(email));
+    },
+
+    async telegramStatus() {
+      const r = await fetch("/api/telegram/link", {
+        headers: { Accept: "application/json", ...authHeaders() }
+      });
+      let json = {};
+      try { json = await r.json(); } catch (e) {}
+      return { ok: r.ok, status: r.status, ...json };
+    },
+
+    async telegramCreateLink() {
+      const r = await fetch("/api/telegram/link", {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json", ...authHeaders() }
+      });
+      let json = {};
+      try { json = await r.json(); } catch (e) {}
+      return { ok: r.ok, status: r.status, ...json };
+    },
+
+    async telegramUnlink() {
+      const r = await fetch("/api/telegram/link", {
+        method: "DELETE",
+        headers: { Accept: "application/json", ...authHeaders() }
+      });
+      let json = {};
+      try { json = await r.json(); } catch (e) {}
+      return { ok: r.ok, status: r.status, ...json };
+    }
+  };
+
+  /* Офлайн-режим file:// — спрощена локальна перевірка пароля */
+  const LocalAuth = {
+    all() {
+      try { return JSON.parse(localStorage.getItem(LOCAL_AUTH) || "{}"); }
+      catch (e) { return {}; }
+    },
+    save(obj) { localStorage.setItem(LOCAL_AUTH, JSON.stringify(obj)); },
+    hash(pw) {
+      let h = 0;
+      const s = String(pw);
+      for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i) | 0;
+      return "l" + Math.abs(h).toString(16);
+    },
+    register({ email, password, name, gender }) {
+      const e = email.trim().toLowerCase();
+      const all = this.all();
+      if (all[e]) return { ok: false, error: "email_taken" };
+      all[e] = { hash: this.hash(password), name, gender };
+      this.save(all);
+      return { ok: true, token: "local-" + e, profile: { email: e, name, gender, provider: "email" } };
+    },
+    login({ email, password }) {
+      const e = email.trim().toLowerCase();
+      const rec = this.all()[e];
+      if (!rec || rec.hash !== this.hash(password)) return { ok: false, error: "invalid_credentials" };
+      return { ok: true, token: "local-" + e, profile: { email: e, name: rec.name, gender: rec.gender, provider: "email" } };
+    },
+    exists(email) {
+      return !!this.all()[email.trim().toLowerCase()];
+    }
+  };
+
   async function syncFromCloud(preferRemote) {
     if (!Cloud.enabled || !currentEmail || !state) return;
     const remote = await Cloud.pull(currentEmail);
+    if (remote && remote.forbidden) {
+      logout();
+      return;
+    }
     if (!remote) { Cloud.push(currentEmail, state); return; }
+    if (remote.profile && remote.profile.email && remote.profile.email !== currentEmail) return;
     const localT = Date.parse(state.updatedAt || 0) || 0;
     const remoteT = Date.parse(remote.updatedAt || 0) || 0;
     if (preferRemote || remoteT > localT) {
-      clearTimeout(pushTimer); // скасувати відкладене відправлення застарілого стану
+      clearTimeout(pushTimer);
       state = remote;
+      if (!state.profile) state.profile = { email: currentEmail };
+      state.profile.email = currentEmail;
       const all = db(); all[currentEmail] = state; saveDb(all);
       try { window.dispatchEvent(new CustomEvent("spokiy:synced")); } catch (e) {}
     } else if (localT > remoteT) {
@@ -95,54 +215,123 @@ window.Store = (function () {
   function load() {
     if (!currentEmail) return null;
     const all = db();
-    state = all[currentEmail] || emptyState();
+    state = all[currentEmail] || emptyState({ email: currentEmail });
+    if (state.profile) state.profile.email = currentEmail;
     return state;
   }
-  if (currentEmail) { load(); syncFromCloud(); }
+  if (currentEmail && localStorage.getItem(TOKEN)) { load(); syncFromCloud(); }
 
   function persist() {
     if (!currentEmail || !state) return;
     state.updatedAt = new Date().toISOString();
-    // Кеш потрібен для швидкого відкриття й офлайн-режиму; головне збереження — Cloud.push().
+    if (state.profile) state.profile.email = currentEmail;
     const all = db();
     all[currentEmail] = state;
     saveDb(all);
     Cloud.push(currentEmail, state);
   }
 
+  function establishSession(profile, token, isRegistration) {
+    const email = profile.email.trim().toLowerCase();
+    localStorage.setItem(TOKEN, token);
+    currentEmail = email;
+    localStorage.setItem(SESSION, email);
+    const all = db();
+    const isNewOnDevice = !all[email];
+
+    if (isRegistration || !all[email]) {
+      state = emptyState({
+        name: profile.name,
+        email,
+        gender: profile.gender,
+        provider: profile.provider || "email",
+        picture: profile.picture,
+        createdAt: new Date().toISOString()
+      });
+    } else {
+      state = all[email];
+      state.profile = Object.assign({}, state.profile, {
+        email,
+        provider: profile.provider || state.profile.provider || "email"
+      });
+      if (profile.picture) state.profile.picture = profile.picture;
+      if (profile.name) state.profile.name = profile.name;
+      if (profile.gender) state.profile.gender = profile.gender;
+    }
+    persist();
+    return syncFromCloud(isNewOnDevice || isRegistration);
+  }
+
   return {
     get state() { return state; },
-    isAuthed() { return !!currentEmail && !!state && !!state.profile; },
+    isAuthed() { return !!currentEmail && !!state && !!state.profile && !!localStorage.getItem(TOKEN); },
+    getToken() { return localStorage.getItem(TOKEN); },
 
-    login(profile) {
-      currentEmail = profile.email.trim().toLowerCase();
-      localStorage.setItem(SESSION, currentEmail);
-      const all = db();
-      const isNewOnDevice = !all[currentEmail];
-      if (all[currentEmail]) {
-        state = all[currentEmail];
-        // оновити ім'я/провайдера/стать/аватар, якщо змінилися
-        const patch = { name: profile.name, provider: profile.provider };
-        if (profile.gender) patch.gender = profile.gender;
-        if (profile.picture) patch.picture = profile.picture;
-        state.profile = Object.assign({}, state.profile, patch);
-      } else {
-        state = emptyState({ ...profile, email: currentEmail, createdAt: new Date().toISOString() });
+    async register({ email, password, name, gender }) {
+      let res;
+      if (Auth.enabled) res = await Auth.register({ email, password, name, gender });
+      else res = LocalAuth.register({ email, password, name, gender });
+      if (!res.ok) return res;
+      await establishSession(res.profile, res.token, true);
+      return res;
+    },
+
+    async loginWithPassword(email, password) {
+      let res;
+      if (Auth.enabled) res = await Auth.login({ email, password });
+      else res = LocalAuth.login({ email, password });
+      if (!res.ok) return res;
+      await establishSession(res.profile, res.token, false);
+      return res;
+    },
+
+    async loginWithCode(email, code) {
+      if (!Auth.enabled) return { ok: false, error: "code_unavailable" };
+      const res = await Auth.login({ email, code });
+      if (!res.ok) return res;
+      await establishSession(res.profile, res.token, false);
+      return res;
+    },
+
+    async requestCode(email, purpose) {
+      if (!Auth.enabled) return { ok: false, error: "offline" };
+      return Auth.requestCode(email, purpose);
+    },
+
+    async resetPassword({ email, code, password }) {
+      if (!Auth.enabled) return { ok: false, error: "offline" };
+      return Auth.resetPassword({ email, code, password });
+    },
+
+    async oauthLogin(profile) {
+      if (Auth.enabled) {
+        const res = await Auth.call("oauth", { method: "POST", body: profile });
+        if (!res.ok) return res;
+        await establishSession(res.profile, res.token, !!res.isNew);
+        return res;
       }
-      persist();
-      // На новому пристрої дані з бази важливіші за щойно створений порожній стан.
-      syncFromCloud(isNewOnDevice);
-      return state;
+      return { ok: false, error: "offline" };
+    },
+
+    async hasAccount(email) {
+      if (!email) return false;
+      const e = email.trim().toLowerCase();
+      if (Auth.enabled) {
+        const r = await Auth.exists(e);
+        if (r.ok) return !!r.exists;
+      }
+      return LocalAuth.exists(e) || !!db()[e];
+    },
+
+    /** @deprecated використовуй register / loginWithPassword */
+    login(profile) {
+      return establishSession(profile, localStorage.getItem(TOKEN) || "legacy-" + profile.email, false);
     },
 
     setGender(gender) {
       if (state && state.profile) { state.profile.gender = gender; persist(); }
     },
 
-    hasAccount(email) {
-      if (!email) return false;
-      return !!db()[email.trim().toLowerCase()];
-    },
     accountGender(email) {
       const acc = db()[(email || "").trim().toLowerCase()];
       return acc && acc.profile ? acc.profile.gender : null;
@@ -150,22 +339,18 @@ window.Store = (function () {
 
     logout() {
       localStorage.removeItem(SESSION);
-      currentEmail = null; state = null;
+      localStorage.removeItem(TOKEN);
+      currentEmail = null;
+      state = null;
     },
 
-    // Загальне збереження після будь-якої зміни
     save() { persist(); },
+    set(path, value) { state[path] = value; persist(); },
 
-    set(path, value) {
-      state[path] = value; persist();
-    },
-
-    // ---- Чернетка незавершеного запису ----
     saveDraft(draft) { state.draft = draft; persist(); },
     clearDraft() { state.draft = null; persist(); },
     getDraft() { return state.draft; },
 
-    // ---- Записи ----
     addEntry(entry) {
       entry.id = entry.id || ("e" + Date.now() + Math.random().toString(36).slice(2, 6));
       entry.createdAt = entry.createdAt || new Date().toISOString();
@@ -179,11 +364,8 @@ window.Store = (function () {
       if (e) { Object.assign(e, patch); persist(); }
       return e;
     },
-    removeEntry(id) {
-      state.entries = state.entries.filter(x => x.id !== id); persist();
-    },
+    removeEntry(id) { state.entries = state.entries.filter(x => x.id !== id); persist(); },
 
-    // ---- Банк доказів ----
     addEvidence(ev) {
       ev.id = "ev" + Date.now() + Math.random().toString(36).slice(2, 5);
       ev.date = ev.date || new Date().toISOString();
@@ -191,7 +373,6 @@ window.Store = (function () {
     },
     removeEvidence(id) { state.evidence = state.evidence.filter(x => x.id !== id); persist(); },
 
-    // ---- Ресурси (рейтинг ефективності) ----
     addResourceUse(name, effectiveness) {
       name = name.trim(); if (!name) return;
       const r = state.resources[name] || { uses: 0, sumEffect: 0 };
@@ -205,7 +386,6 @@ window.Store = (function () {
         .sort((a, b) => (b.avg * 2 + b.uses) - (a.avg * 2 + a.uses));
     },
 
-    // ---- Скарбничка ----
     addTreasure(t) {
       t.id = "t" + Date.now() + Math.random().toString(36).slice(2, 5);
       t.date = new Date().toISOString();
@@ -213,7 +393,6 @@ window.Store = (function () {
     },
     removeTreasure(id) { state.treasure = state.treasure.filter(x => x.id !== id); persist(); },
 
-    // ---- Тести ----
     addTest(score, meta) {
       const rec = Object.assign({ date: new Date().toISOString(), score }, meta || {});
       state.tests.push(rec);
@@ -221,7 +400,6 @@ window.Store = (function () {
       return rec;
     },
 
-    // ---- Радість (джерела радості) ----
     addJoy(name) {
       name = (name || "").trim(); if (!name) return;
       if (!Array.isArray(state.joys)) state.joys = [];
@@ -235,23 +413,19 @@ window.Store = (function () {
       return Object.entries(m).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
     },
 
-    // ---- Мої маленькі радощі (книги, фільми, музика, прогулянки, хобі, своє) ----
     addLittleJoy(category, text) {
       text = (text || "").trim(); if (!text) return;
       if (!Array.isArray(state.littleJoys)) state.littleJoys = [];
       state.littleJoys.unshift({ id: "j" + Date.now() + Math.random().toString(36).slice(2, 5), category: category || "other", text, date: new Date().toISOString() });
       persist();
     },
-    removeLittleJoy(id) {
-      state.littleJoys = (state.littleJoys || []).filter(x => x.id !== id); persist();
-    },
+    removeLittleJoy(id) { state.littleJoys = (state.littleJoys || []).filter(x => x.id !== id); persist(); },
     randomLittleJoys(n = 2) {
       const arr = (state.littleJoys || []).slice();
       for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
       return arr.slice(0, n);
     },
 
-    // ---- Практика «Якби це сталося у моєї кращої подруги» ----
     addFriendNote(situation, advice) {
       situation = (situation || "").trim(); advice = (advice || "").trim();
       if (!situation && !advice) return;
@@ -259,11 +433,8 @@ window.Store = (function () {
       state.friendNotes.unshift({ id: "fn" + Date.now() + Math.random().toString(36).slice(2, 5), situation, advice, date: new Date().toISOString() });
       persist();
     },
-    removeFriendNote(id) {
-      state.friendNotes = (state.friendNotes || []).filter(x => x.id !== id); persist();
-    },
+    removeFriendNote(id) { state.friendNotes = (state.friendNotes || []).filter(x => x.id !== id); persist(); },
 
-    // ---- Щоденне самопочуття + хороші події ----
     setWellbeing(level, date) {
       const iso = date || new Date().toISOString();
       const dayKey = iso.slice(0, 10);
@@ -287,9 +458,7 @@ window.Store = (function () {
       persist();
       return ev;
     },
-    removeGoodEvent(id) {
-      state.goodEvents = (state.goodEvents || []).filter(x => x.id !== id); persist();
-    },
+    removeGoodEvent(id) { state.goodEvents = (state.goodEvents || []).filter(x => x.id !== id); persist(); },
 
     addGratitude(text, date) {
       text = (text || "").trim(); if (!text) return null;
@@ -301,31 +470,23 @@ window.Store = (function () {
       persist();
       return rec;
     },
-    removeGratitude(id) {
-      state.gratitude = (state.gratitude || []).filter(x => x.id !== id); persist();
-    },
+    removeGratitude(id) { state.gratitude = (state.gratitude || []).filter(x => x.id !== id); persist(); },
 
-    // ---- Серії (check-ins) ----
     markCheckin(iso) {
       const d = new Date(iso || Date.now());
       const key = d.toISOString().slice(0, 10);
       state.checkins[key] = true; persist();
     },
 
-    // ---- Досягнення ----
     unlock(id) {
       if (!state.achievements[id]) { state.achievements[id] = new Date().toISOString(); persist(); return true; }
       return false;
     },
 
-    // ---- Експорт / Імпорт ----
-    exportJSON() {
-      return JSON.stringify(state, null, 2);
-    },
+    exportJSON() { return JSON.stringify(state, null, 2); },
     importJSON(json) {
       const data = JSON.parse(json);
       if (!data || !data.profile) throw new Error("Невірний формат файлу");
-      // зберігаємо під поточним email (перенесення на цей пристрій)
       state = Object.assign(emptyState(state.profile), data);
       state.profile.email = currentEmail;
       persist();
@@ -334,11 +495,29 @@ window.Store = (function () {
     deleteAllData() {
       if (!currentEmail) return;
       const email = currentEmail;
+      if (Auth.enabled) {
+        fetch("/api/telegram/link", { method: "DELETE", headers: authHeaders() }).catch(() => {});
+      }
       const all = db();
       delete all[currentEmail];
       saveDb(all);
       Cloud.remove(email);
       this.logout();
+    },
+
+    async telegramStatus() {
+      if (!Auth.enabled) return { ok: false, error: "offline" };
+      return Auth.telegramStatus();
+    },
+
+    async telegramCreateLink() {
+      if (!Auth.enabled) return { ok: false, error: "offline" };
+      return Auth.telegramCreateLink();
+    },
+
+    async telegramUnlink() {
+      if (!Auth.enabled) return { ok: false, error: "offline" };
+      return Auth.telegramUnlink();
     }
   };
 })();

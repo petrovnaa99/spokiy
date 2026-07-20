@@ -75,6 +75,65 @@ alter table public.diary_entries enable row level security;
 alter table public.evidence_records enable row level security;
 alter table public.support_resources enable row level security;
 
+-- Авторизація (доступ лише через service_role на сервері)
+create table if not exists public.auth_credentials (
+  email          text primary key,
+  password_hash  text not null,
+  salt           text not null,
+  name           text,
+  gender         text check (gender is null or gender in ('female', 'male')),
+  created_at     timestamptz not null default now()
+);
+
+create table if not exists public.auth_sessions (
+  token       text primary key,
+  email       text not null references public.auth_credentials(email) on delete cascade,
+  expires_at  timestamptz not null
+);
+
+create index if not exists idx_auth_sessions_email on public.auth_sessions(email);
+
+create table if not exists public.auth_codes (
+  email       text not null references public.auth_credentials(email) on delete cascade,
+  purpose     text not null check (purpose in ('login', 'reset')),
+  code        text not null,
+  expires_at  timestamptz not null,
+  primary key (email, purpose)
+);
+
+alter table public.auth_credentials enable row level security;
+alter table public.auth_sessions enable row level security;
+alter table public.auth_codes enable row level security;
+
+-- Telegram-бот: прив'язка акаунта та нагадування
+create table if not exists public.telegram_users (
+  email        text primary key references public.auth_credentials(email) on delete cascade,
+  telegram_id  bigint unique not null,
+  settings     jsonb       not null default '{}'::jsonb,
+  bot_state    jsonb       not null default '{}'::jsonb,
+  linked_at    timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+
+create index if not exists idx_telegram_users_telegram_id on public.telegram_users(telegram_id);
+
+create table if not exists public.telegram_link_tokens (
+  token       text primary key,
+  email       text not null references public.auth_credentials(email) on delete cascade,
+  expires_at  timestamptz not null,
+  used_at     timestamptz
+);
+
+create index if not exists idx_telegram_link_tokens_email on public.telegram_link_tokens(email);
+
+alter table public.telegram_users enable row level security;
+alter table public.telegram_link_tokens enable row level security;
+
+drop trigger if exists trg_telegram_users_touch on public.telegram_users;
+create trigger trg_telegram_users_touch
+  before insert or update on public.telegram_users
+  for each row execute function public.touch_updated_at();
+
 -- Автооновлення updated_at, якщо клієнт його не передав.
 create or replace function public.touch_updated_at()
 returns trigger language plpgsql as $$
