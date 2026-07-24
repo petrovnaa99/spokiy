@@ -5,6 +5,13 @@
 -- 1) public.users зберігає профіль і повний JSON snapshot стану (сумісність із фронтендом).
 -- 2) public.diary_entries, public.evidence_records, public.support_resources зберігають
 --    ключові дані в нормальних таблицях для аналітики, синхронізації й майбутніх запитів.
+--
+-- Символ внутрішнього відновлення (recovery*):
+-- Поля живуть УСЕРЕДИНІ users.profile / users.data.profile (jsonb), а не в окремих колонках:
+--   recoverySymbolId, recoverySymbolName, recoveryStage, recoveryProgress,
+--   recoveryLastActivityAt, recoverySymbolSelectedAt.
+-- Це адитивне розширення JSON: існуючі рядки й ключі не видаляються.
+-- НЕ виконувати DROP TABLE / TRUNCATE / REPLACE цілого profile під час впровадження.
 
 create table if not exists public.users (
   email       text primary key,

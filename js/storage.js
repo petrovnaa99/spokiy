@@ -7,9 +7,47 @@ window.Store = (function () {
   const TOKEN = "spokiy:token";
   const LOCAL_AUTH = "spokiy:auth";
 
+  /**
+   * Поля «Символ внутрішнього відновлення» у profile (JSON у users.data).
+   * Додаються лише як нові ключі — наявні дані користувача не видаляються.
+   * @typedef {{
+   *   recoverySymbolId: string|null,
+   *   recoverySymbolName: string|null,
+   *   recoveryStage: number,
+   *   recoveryProgress: number,
+   *   recoveryLastActivityAt: string|null,
+   *   recoverySymbolSelectedAt: string|null
+   * }} RecoveryProfileFields
+   */
+  const RECOVERY_PROFILE_DEFAULTS = {
+    recoverySymbolId: null,
+    recoverySymbolName: null,
+    recoveryStage: 0,
+    recoveryProgress: 0,
+    recoveryLastActivityAt: null,
+    recoverySymbolSelectedAt: null
+  };
+
+  /** Додає відсутні recovery-поля без перезапису вже збережених значень. */
+  function ensureRecoveryFields(profile) {
+    if (!profile || typeof profile !== "object") return profile;
+    Object.keys(RECOVERY_PROFILE_DEFAULTS).forEach((key) => {
+      if (!Object.prototype.hasOwnProperty.call(profile, key)) {
+        profile[key] = RECOVERY_PROFILE_DEFAULTS[key];
+      }
+    });
+    if (typeof profile.recoveryStage !== "number" || Number.isNaN(profile.recoveryStage)) {
+      profile.recoveryStage = RECOVERY_PROFILE_DEFAULTS.recoveryStage;
+    }
+    if (typeof profile.recoveryProgress !== "number" || Number.isNaN(profile.recoveryProgress)) {
+      profile.recoveryProgress = RECOVERY_PROFILE_DEFAULTS.recoveryProgress;
+    }
+    return profile;
+  }
+
   function emptyState(profile) {
     return {
-      profile: profile || null,
+      profile: profile ? ensureRecoveryFields(Object.assign({}, profile)) : null,
       entries: [],
       evidence: [],
       resources: {},
@@ -202,6 +240,7 @@ window.Store = (function () {
       state = remote;
       if (!state.profile) state.profile = { email: currentEmail };
       state.profile.email = currentEmail;
+      ensureRecoveryFields(state.profile);
       const all = db(); all[currentEmail] = state; saveDb(all);
       try { window.dispatchEvent(new CustomEvent("spokiy:synced")); } catch (e) {}
     } else if (localT > remoteT) {
@@ -216,7 +255,10 @@ window.Store = (function () {
     if (!currentEmail) return null;
     const all = db();
     state = all[currentEmail] || emptyState({ email: currentEmail });
-    if (state.profile) state.profile.email = currentEmail;
+    if (state.profile) {
+      state.profile.email = currentEmail;
+      ensureRecoveryFields(state.profile);
+    }
     return state;
   }
   if (currentEmail && localStorage.getItem(TOKEN)) { load(); syncFromCloud(); }
@@ -258,6 +300,7 @@ window.Store = (function () {
       if (profile.name) state.profile.name = profile.name;
       if (profile.gender) state.profile.gender = profile.gender;
     }
+    ensureRecoveryFields(state.profile);
     persist();
     return syncFromCloud(isNewOnDevice || isRegistration);
   }
@@ -330,6 +373,65 @@ window.Store = (function () {
 
     setGender(gender) {
       if (state && state.profile) { state.profile.gender = gender; persist(); }
+    },
+
+    /** Поточні поля символу відновлення з профілю (з дефолтами). */
+    getRecovery() {
+      if (!state || !state.profile) return Object.assign({}, RECOVERY_PROFILE_DEFAULTS);
+      ensureRecoveryFields(state.profile);
+      return {
+        recoverySymbolId: state.profile.recoverySymbolId,
+        recoverySymbolName: state.profile.recoverySymbolName,
+        recoveryStage: state.profile.recoveryStage,
+        recoveryProgress: state.profile.recoveryProgress,
+        recoveryLastActivityAt: state.profile.recoveryLastActivityAt,
+        recoverySymbolSelectedAt: state.profile.recoverySymbolSelectedAt
+      };
+    },
+
+    /**
+     * Обрати символ відновлення. Не змінює auth / email / gender.
+     * @param {string} symbolId
+     * @returns {boolean} false якщо id невідомий
+     */
+    selectRecoverySymbol(symbolId) {
+      if (!state || !state.profile) return false;
+      const catalog = (typeof window !== "undefined" && window.CONTENT && window.CONTENT.getRecoverySymbolById)
+        ? window.CONTENT.getRecoverySymbolById(symbolId)
+        : null;
+      if (!catalog) return false;
+      ensureRecoveryFields(state.profile);
+      const now = new Date().toISOString();
+      state.profile.recoverySymbolId = catalog.id;
+      state.profile.recoverySymbolName = catalog.name;
+      state.profile.recoveryStage = 1;
+      state.profile.recoveryProgress = 0;
+      state.profile.recoverySymbolSelectedAt = now;
+      state.profile.recoveryLastActivityAt = now;
+      persist();
+      return true;
+    },
+
+    /**
+     * Оновити прогрес / етап / активність символу (additive patch).
+     * @param {{ recoveryStage?: number, recoveryProgress?: number, touchActivity?: boolean }} patch
+     */
+    updateRecovery(patch) {
+      if (!state || !state.profile) return false;
+      ensureRecoveryFields(state.profile);
+      if (!state.profile.recoverySymbolId) return false;
+      const p = patch || {};
+      if (typeof p.recoveryStage === "number" && !Number.isNaN(p.recoveryStage)) {
+        state.profile.recoveryStage = Math.max(0, Math.floor(p.recoveryStage));
+      }
+      if (typeof p.recoveryProgress === "number" && !Number.isNaN(p.recoveryProgress)) {
+        state.profile.recoveryProgress = Math.max(0, Math.min(100, p.recoveryProgress));
+      }
+      if (p.touchActivity !== false) {
+        state.profile.recoveryLastActivityAt = new Date().toISOString();
+      }
+      persist();
+      return true;
     },
 
     accountGender(email) {
@@ -489,6 +591,7 @@ window.Store = (function () {
       if (!data || !data.profile) throw new Error("Невірний формат файлу");
       state = Object.assign(emptyState(state.profile), data);
       state.profile.email = currentEmail;
+      ensureRecoveryFields(state.profile);
       persist();
     },
 

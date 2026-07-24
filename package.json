@@ -7,7 +7,9 @@
   "main": "serve.js",
   "scripts": {
     "start": "node serve.js",
-    "dev": "node serve.js"
+    "dev": "node serve.js",
+    "validate:recovery": "node scripts/validate-recovery.js",
+    "typecheck:recovery": "npx -p typescript@5.6.3 tsc -p tsconfig.recovery.json"
   },
   "engines": {
     "node": ">=22.5.0"

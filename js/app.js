@@ -242,7 +242,7 @@
     new: "Новий запис", types: "Типи тривоги", typeTest: "Розбір ситуації", reminders: "Нагадування",
     evidence: "Банк доказів", resources: "Мої ресурси", treasure: "Скарбничка", joys: "Мої радощі",
     good: "Хороші події", gratitude: "Вдячність", friend: "Порада подрузі", library: "Бібліотека",
-    achievements: "Прогрес", profile: "Профіль"
+    achievements: "Прогрес", profile: "Профіль", recoverySelect: "Символ відновлення"
   };
 
   let route = "home";
@@ -454,10 +454,26 @@
     return route === id;
   }
 
+  function needsRecoverySelect() {
+    if (!S.state || !S.state.profile) return false;
+    return !S.getRecovery().recoverySymbolId;
+  }
+
+  function syncRecoveryGateChrome() {
+    const app = $("#app");
+    if (!app) return;
+    app.classList.toggle("app--recovery-gate", route === "recoverySelect");
+  }
+
   function go(r, param = null) {
+    if (needsRecoverySelect() && r !== "recoverySelect") {
+      r = "recoverySelect";
+      param = null;
+    }
     route = r; routeParam = param;
     const title = ROUTE_TITLES[r] || NAV.find(n => n.id === r)?.label || "Спокій";
     $("#topbar-title").textContent = uiText(genderize(title));
+    syncRecoveryGateChrome();
     renderNav();
     render();
     $("#view").scrollTo?.(0, 0);
@@ -907,6 +923,91 @@
       <button class="btn btn-ghost btn-sm" id="support-guide" type="button" style="margin-top:14px">Інструкція про сайт</button>`;
     $$("[data-route]", $("#view")).forEach(b => b.onclick = () => go(b.dataset.route));
     $("#support-guide").onclick = openGuide;
+  }
+
+  /* ===================== Символ внутрішнього відновлення ===================== */
+  function recoverySymbolSvg(id) {
+    const common = 'xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"';
+    const map = {
+      lavender: `<svg ${common} stroke-width="1.4"><path d="M40 68V34"/><path d="M40 52c-8-6-14-4-18 2"/><path d="M40 46c8-6 14-4 18 2"/><path d="M40 40c-7-8-12-7-16-2"/><path d="M40 36c7-8 12-7 16-2"/><ellipse cx="40" cy="24" rx="5" ry="9"/><ellipse cx="32" cy="28" rx="4" ry="7" transform="rotate(-28 32 28)"/><ellipse cx="48" cy="28" rx="4" ry="7" transform="rotate(28 48 28)"/><ellipse cx="36" cy="20" rx="3.5" ry="6" transform="rotate(-12 36 20)"/><ellipse cx="44" cy="20" rx="3.5" ry="6" transform="rotate(12 44 20)"/></svg>`,
+      magnolia: `<svg ${common} stroke-width="1.4"><path d="M40 68V42"/><path d="M40 56c-10-2-16 4-18 10"/><path d="M40 56c10-2 16 4 18 10"/><path d="M40 38c-11-2-14-12-10-18 6 2 10 8 10 18z"/><path d="M40 38c11-2 14-12 10-18-6 2-10 8-10 18z"/><path d="M40 38c-4-12 2-20 8-22-2 8 0 16-8 22z"/><path d="M40 38c4-12-2-20-8-22 2 8 0 16 8 22z"/><circle cx="40" cy="36" r="3.2" fill="currentColor" stroke="none" opacity=".35"/></svg>`,
+      olive: `<svg ${common} stroke-width="1.4"><path d="M40 70V28"/><path d="M40 48c-12-8-18-6-22 0"/><path d="M40 40c12-8 18-6 22 0"/><ellipse cx="28" cy="36" rx="7" ry="12" transform="rotate(-32 28 36)"/><ellipse cx="52" cy="34" rx="7" ry="12" transform="rotate(28 52 34)"/><ellipse cx="34" cy="24" rx="5.5" ry="9" transform="rotate(-18 34 24)"/><ellipse cx="46" cy="22" rx="5.5" ry="9" transform="rotate(16 46 22)"/><ellipse cx="40" cy="42" rx="3.2" ry="4.5" fill="currentColor" stroke="none" opacity=".28"/></svg>`,
+      oak: `<svg ${common} stroke-width="1.6"><path d="M40 72V38"/><path d="M28 72h24"/><path d="M40 48l-12 8"/><path d="M40 44l12 6"/><circle cx="40" cy="28" r="16"/><path d="M28 28c4-8 12-12 20-8"/><path d="M32 36c6 4 14 2 18-4"/><circle cx="34" cy="24" r="1.6" fill="currentColor" stroke="none"/><circle cx="46" cy="30" r="1.6" fill="currentColor" stroke="none"/><circle cx="40" cy="20" r="1.4" fill="currentColor" stroke="none"/></svg>`,
+      cedar: `<svg ${common} stroke-width="1.6"><path d="M40 72V46"/><path d="M30 72h20"/><path d="M40 18l16 18H24z"/><path d="M40 28l14 16H26z"/><path d="M40 38l12 14H28z"/><path d="M40 22v8"/><path d="M34 34h12"/></svg>`,
+      bonsai: `<svg ${common} stroke-width="1.55"><path d="M22 68h36"/><path d="M28 68c2-6 6-8 12-8s10 2 12 8"/><path d="M40 60V42"/><path d="M40 52c-10-2-16 2-18 8"/><path d="M40 46c8-10 16-8 20-2"/><path d="M40 40c-8-10-4-18 2-22"/><circle cx="30" cy="34" r="9"/><circle cx="48" cy="28" r="8"/><circle cx="42" cy="18" r="6.5"/><circle cx="54" cy="38" r="5.5"/></svg>`
+    };
+    return map[id] || `<svg ${common} stroke-width="1.5"><circle cx="40" cy="40" r="18"/><path d="M40 58V28"/></svg>`;
+  }
+
+  function viewRecoverySelect() {
+    const symbols = C.orderRecoverySymbolsForGender(S.state.profile.gender);
+    const tone = isMale() ? "solid" : "gentle";
+    $("#view").innerHTML = `
+      <section class="recovery-select recovery-select--${tone}" aria-labelledby="recovery-select-title">
+        <div class="recovery-select-head">
+          <h1 id="recovery-select-title">Обери символ свого внутрішнього відновлення</h1>
+          <p>Він буде змінюватися разом із тобою та нагадувати про силу маленьких щоденних кроків.</p>
+        </div>
+        <div class="recovery-grid" id="recovery-grid" role="list">
+          ${symbols.map((s, i) => `
+            <article class="recovery-card recovery-card--${esc(s.visualStyle)}" data-id="${esc(s.id)}" style="--rs-i:${i}" role="listitem" tabindex="0" aria-pressed="false">
+              <div class="recovery-card-art" aria-hidden="true">${recoverySymbolSvg(s.id)}</div>
+              <h2 class="recovery-card-name">${esc(s.name)}</h2>
+              <p class="recovery-card-meaning">${esc(s.meaning)}</p>
+              <p class="recovery-card-phrase">«${esc(s.phrase)}»</p>
+              <div class="recovery-card-extra">
+                <p>${esc(s.shortDescription)}</p>
+              </div>
+              <button type="button" class="btn recovery-card-pick" data-pick="${esc(s.id)}" disabled aria-disabled="true">Обрати цей символ</button>
+            </article>`).join("")}
+        </div>
+      </section>`;
+
+    const cards = $$(".recovery-card", $("#view"));
+
+    function selectCard(card) {
+      cards.forEach(c => {
+        const on = c === card;
+        c.classList.toggle("is-selected", on);
+        c.setAttribute("aria-pressed", on ? "true" : "false");
+        const btn = c.querySelector(".recovery-card-pick");
+        if (btn) {
+          btn.disabled = !on;
+          btn.setAttribute("aria-disabled", on ? "false" : "true");
+        }
+      });
+    }
+
+    function confirmPick(id) {
+      if (!S.selectRecoverySymbol(id)) {
+        toast("Не вдалося зберегти символ. Спробуй ще раз.", "warn");
+        return;
+      }
+      toast(uiText("Символ збережено. Це твій перший крок 🌿"), "good");
+      go("home");
+      startOnboarding();
+    }
+
+    cards.forEach(card => {
+      card.addEventListener("click", (e) => {
+        if (e.target.closest("[data-pick]")) return;
+        selectCard(card);
+      });
+      card.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectCard(card);
+        }
+      });
+      const pick = card.querySelector("[data-pick]");
+      if (pick) {
+        pick.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (pick.disabled) return;
+          confirmPick(pick.dataset.pick);
+        });
+      }
+    });
   }
 
   /* ===================== ТИПИ ТРИВОЖНОСТІ ===================== */
@@ -2867,7 +2968,8 @@
     const map = {
       home: viewHome, types: viewTypes, typeTest: viewTypeTest, new: viewNew, reminders: viewReminders, evidence: viewEvidence,
       resources: viewResources, treasure: viewTreasure, analytics: viewAnalytics, joys: viewJoys, good: viewGoodEvents, gratitude: viewGratitude, friend: viewFriendPractice,
-      history: viewHistory, library: viewLibrary, achievements: viewAchievements, profile: viewProfile, support: viewSupport
+      history: viewHistory, library: viewLibrary, achievements: viewAchievements, profile: viewProfile, support: viewSupport,
+      recoverySelect: viewRecoverySelect
     };
     (map[route] || viewHome)();
     mountSongBar();
@@ -2880,14 +2982,22 @@
     $("#auth-screen").classList.add("hidden");
     $("#app").classList.remove("hidden");
     renderNav();
-    // якщо стать не вказана (старий акаунт) — запитати один раз
+    checkAchievements(true);
+
+    if (needsRecoverySelect()) go("recoverySelect");
+    else go("home");
+
+    // якщо стать не вказана (старий акаунт) — запитати один раз, потім оновити порядок карток
     if (!S.state.profile.gender) {
-      setTimeout(() => askGender(g => { S.setGender(g); applyGenderTheme(); render(); startOnboarding(); }), 400);
-    } else {
+      setTimeout(() => askGender(g => {
+        S.setGender(g);
+        applyGenderTheme();
+        if (needsRecoverySelect()) go("recoverySelect");
+        else { render(); startOnboarding(); }
+      }), 400);
+    } else if (!needsRecoverySelect()) {
       startOnboarding();
     }
-    checkAchievements(true);
-    go("home");
     notifyReminders();
     handleDeepLinks();
     if (window.Rituals) { Rituals.startReminderScheduler(); Rituals.requestPushPermission(); }
@@ -3228,7 +3338,17 @@
 
     // Дані підтягнулися з бекенда (SQLite) — оновити інтерфейс «на льоту».
     window.addEventListener("spokiy:synced", () => {
-      if (S.isAuthed() && !$("#app").classList.contains("hidden")) { renderNav(); render(); }
+      if (!S.isAuthed() || $("#app").classList.contains("hidden")) return;
+      if (route === "recoverySelect" && !needsRecoverySelect()) {
+        go("home");
+        return;
+      }
+      if (needsRecoverySelect() && route !== "recoverySelect") {
+        go("recoverySelect");
+        return;
+      }
+      renderNav();
+      render();
     });
 
     if (S.isAuthed()) showApp();

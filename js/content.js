@@ -650,6 +650,137 @@ window.CONTENT = (function () {
     }
   };
 
+  /**
+   * Символ внутрішнього відновлення — каталог варіантів.
+   * Стать може впливати лише на початковий порядок карток (див. orderForGender),
+   * але не на доступність: усі символи видимі кожному.
+   * Не використовувати формулювання на кшталт «рослина для чоловіка/жінки».
+   *
+   * @typedef {"gentle"|"solid"} RecoveryVisualStyle
+   * @typedef {{ id: number, key: string, name: string, description: string, progressMin: number }} RecoveryStage
+   * @typedef {{
+   *   id: string,
+   *   name: string,
+   *   shortDescription: string,
+   *   meaning: string,
+   *   phrase: string,
+   *   visualStyle: RecoveryVisualStyle,
+   *   availableToAll: true,
+   *   stages: RecoveryStage[],
+   *   illustrationPath: string
+   * }} RecoverySymbol
+   */
+
+  /** Спільні етапи для ніжного стилю (gentle). */
+  const RECOVERY_STAGES_GENTLE = [
+    { id: 1, key: "seed", name: "Насіння", description: "Символ обрано — це перший крок до внутрішнього відновлення.", progressMin: 0 },
+    { id: 2, key: "sprout", name: "Паросток", description: "З’являються перші ознаки турботи про себе.", progressMin: 20 },
+    { id: 3, key: "branch", name: "Гілка", description: "Звичні маленькі дії вже підтримують рівновагу.", progressMin: 40 },
+    { id: 4, key: "bloom", name: "Цвіт", description: "Відновлення відчувається м’якше й стійкіше.", progressMin: 60 },
+    { id: 5, key: "fruit", name: "Плід", description: "Спокій тримається всередині, і до нього можна повертатися.", progressMin: 80 }
+  ];
+
+  /** Спільні етапи для стриманого стилю (solid). */
+  const RECOVERY_STAGES_SOLID = [
+    { id: 1, key: "root", name: "Корінь", description: "Обрано опору — закладено основу внутрішньої стабільності.", progressMin: 0 },
+    { id: 2, key: "shoot", name: "Пагін", description: "З’являється перша регулярність у турботі про себе.", progressMin: 20 },
+    { id: 3, key: "trunk", name: "Стовбур", description: "Характер і дисципліна тримають у складні дні.", progressMin: 40 },
+    { id: 4, key: "crown", name: "Крона", description: "Відновлення стає відчутною внутрішньою силою.", progressMin: 60 },
+    { id: 5, key: "shelter", name: "Опора", description: "Можна залишатися собою навіть під тиском.", progressMin: 80 }
+  ];
+
+  /** @type {RecoverySymbol[]} */
+  const RECOVERY_SYMBOLS = [
+    {
+      id: "lavender",
+      name: "Лаванда",
+      shortDescription: "Ніжний символ спокою та м’якого відновлення.",
+      meaning: "Спокій, ніжність, відновлення.",
+      phrase: "Твоя сила може бути ніжною.",
+      visualStyle: "gentle",
+      availableToAll: true,
+      stages: RECOVERY_STAGES_GENTLE.map((s) => Object.assign({}, s)),
+      illustrationPath: "assets/recovery/symbols/lavender/"
+    },
+    {
+      id: "magnolia",
+      name: "Магнолія",
+      shortDescription: "Символ самоповаги та нового початку.",
+      meaning: "Самоповага, внутрішня краса, новий початок.",
+      phrase: "Ти розквітаєш у власному темпі.",
+      visualStyle: "gentle",
+      availableToAll: true,
+      stages: RECOVERY_STAGES_GENTLE.map((s) => Object.assign({}, s)),
+      illustrationPath: "assets/recovery/symbols/magnolia/"
+    },
+    {
+      id: "olive",
+      name: "Олива",
+      shortDescription: "Символ гармонії та внутрішньої рівноваги.",
+      meaning: "Гармонія, мудрість, внутрішня рівновага.",
+      phrase: "Спокій починається всередині.",
+      visualStyle: "gentle",
+      availableToAll: true,
+      stages: RECOVERY_STAGES_GENTLE.map((s) => Object.assign({}, s)),
+      illustrationPath: "assets/recovery/symbols/olive/"
+    },
+    {
+      id: "oak",
+      name: "Дуб",
+      shortDescription: "Стриманий символ характеру та внутрішньої опори.",
+      meaning: "Характер, сила, внутрішня опора.",
+      phrase: "Справжня сила росте поступово.",
+      visualStyle: "solid",
+      availableToAll: true,
+      stages: RECOVERY_STAGES_SOLID.map((s) => Object.assign({}, s)),
+      illustrationPath: "assets/recovery/symbols/oak/"
+    },
+    {
+      id: "cedar",
+      name: "Кедр",
+      shortDescription: "Символ витримки, стабільності та захищеності.",
+      meaning: "Витримка, стабільність, захищеність.",
+      phrase: "Ти можеш залишатися собою навіть під тиском.",
+      visualStyle: "solid",
+      availableToAll: true,
+      stages: RECOVERY_STAGES_SOLID.map((s) => Object.assign({}, s)),
+      illustrationPath: "assets/recovery/symbols/cedar/"
+    },
+    {
+      id: "bonsai",
+      name: "Бонсай",
+      shortDescription: "Символ дисципліни та усвідомлених щоденних дій.",
+      meaning: "Дисципліна, усвідомленість, контроль над своїм життям.",
+      phrase: "Характер формується маленькими щоденними діями.",
+      visualStyle: "solid",
+      availableToAll: true,
+      stages: RECOVERY_STAGES_SOLID.map((s) => Object.assign({}, s)),
+      illustrationPath: "assets/recovery/symbols/bonsai/"
+    }
+  ];
+
+  /**
+   * Порядок карток за статтю: спочатку ближчий стиль, потім решта.
+   * Усі символи залишаються у списку.
+   * @param {"female"|"male"|string|null|undefined} gender
+   * @returns {RecoverySymbol[]}
+   */
+  function orderRecoverySymbolsForGender(gender) {
+    const preferred = gender === "male" ? "solid" : "gentle";
+    const list = RECOVERY_SYMBOLS.slice();
+    return list.sort((a, b) => {
+      const ap = a.visualStyle === preferred ? 0 : 1;
+      const bp = b.visualStyle === preferred ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      return RECOVERY_SYMBOLS.indexOf(a) - RECOVERY_SYMBOLS.indexOf(b);
+    });
+  }
+
+  function getRecoverySymbolById(id) {
+    if (!id) return null;
+    return RECOVERY_SYMBOLS.find((s) => s.id === id) || null;
+  }
+
   // Пісні дня — універсальна музика, що піднімає настрій (не російського походження)
   const SONGS = [
     "Pharrell Williams — Happy",
@@ -705,5 +836,10 @@ window.CONTENT = (function () {
     "Lana Del Rey — Radio"
   ];
 
-  return { AFFIRMATIONS, MALE_AFFIRMATIONS, QUOTES, BREATHING, GROUNDING, LIBRARY, TEST, CATEGORIES, TRIGGERS, RESOURCE_SUGGESTIONS, ACHIEVEMENTS, ANXIETY_TYPES, CALM, FINANCE, SONGS };
+  return {
+    AFFIRMATIONS, MALE_AFFIRMATIONS, QUOTES, BREATHING, GROUNDING, LIBRARY, TEST,
+    CATEGORIES, TRIGGERS, RESOURCE_SUGGESTIONS, ACHIEVEMENTS, ANXIETY_TYPES, CALM, FINANCE, SONGS,
+    RECOVERY_SYMBOLS, RECOVERY_STAGES_GENTLE, RECOVERY_STAGES_SOLID,
+    orderRecoverySymbolsForGender, getRecoverySymbolById
+  };
 })();

@@ -1352,3 +1352,333 @@ input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border: none;
   .reminder-row { grid-template-columns: 1fr 1fr; }
   .reminder-row select { grid-column: 1 / -1; }
 }
+
+/* ---------- Символ внутрішнього відновлення (перший вибір) ---------- */
+.app--recovery-gate .sidebar,
+.app--recovery-gate .bottom-nav,
+.app--recovery-gate .topbar-profile,
+.app--recovery-gate .song-bar {
+  display: none !important;
+}
+.app--recovery-gate .content {
+  padding-bottom: max(28px, env(safe-area-inset-bottom));
+  max-width: 920px;
+  margin: 0 auto;
+}
+@media (max-width: 880px) {
+  .app--recovery-gate .content {
+    padding-bottom: max(28px, env(safe-area-inset-bottom));
+  }
+}
+
+.recovery-select {
+  --rs-milk: #f7f4ef;
+  --rs-powder: #ebe4dc;
+  --rs-sage: #7d8f7a;
+  --rs-sage-soft: #e4ebe2;
+  --rs-line: color-mix(in srgb, var(--line) 70%, var(--rs-sage) 30%);
+  --rs-glow: rgba(125, 143, 122, .14);
+  --rs-card-bg: color-mix(in srgb, var(--surface) 82%, var(--rs-milk) 18%);
+  --rs-radius: 24px;
+  --rs-stroke: 1px;
+  --rs-art-size: 72px;
+}
+
+/* Ніжна версія — молочні, пудрові, приглушено-зелені; повітряні картки */
+.recovery-select--gentle {
+  --rs-milk: #f6f3ee;
+  --rs-powder: #eee6df;
+  --rs-sage: #80937c;
+  --rs-sage-soft: #e6ede4;
+  --rs-glow: rgba(128, 147, 124, .16);
+  --rs-card-bg: color-mix(in srgb, var(--surface) 78%, #f8f5f1 22%);
+  --rs-radius: 26px;
+  --rs-stroke: 1px;
+}
+
+/* Солідна версія — графіт, темно-зелений, камінь, дерево; стримані лінії */
+.recovery-select--solid {
+  --rs-milk: #eef1ef;
+  --rs-powder: #dfe4e1;
+  --rs-sage: #3f5a4c;
+  --rs-sage-soft: #d8e2dc;
+  --rs-glow: rgba(47, 70, 58, .1);
+  --rs-card-bg: color-mix(in srgb, var(--surface) 88%, #e8ece9 12%);
+  --rs-radius: 18px;
+  --rs-stroke: 1.5px;
+  --rs-line: color-mix(in srgb, var(--line) 55%, #5c6b63 45%);
+}
+
+:root[data-theme="dark"] .recovery-select--gentle {
+  --rs-milk: #2d3340;
+  --rs-powder: #384051;
+  --rs-sage: #9bb09a;
+  --rs-sage-soft: #343f3a;
+  --rs-glow: rgba(155, 176, 154, .12);
+  --rs-card-bg: color-mix(in srgb, var(--surface) 90%, #2a332f 10%);
+}
+
+:root[data-theme="dark"] .recovery-select--solid {
+  --rs-milk: #1a2430;
+  --rs-powder: #243140;
+  --rs-sage: #8aa896;
+  --rs-sage-soft: #24332c;
+  --rs-glow: rgba(90, 120, 100, .14);
+  --rs-card-bg: color-mix(in srgb, var(--surface) 92%, #1c2822 8%);
+  --rs-line: color-mix(in srgb, var(--line) 70%, #6a7d72 30%);
+}
+
+.recovery-select-head {
+  text-align: center;
+  max-width: 560px;
+  margin: 4px auto 28px;
+}
+.recovery-select-head h1 {
+  margin: 0 0 12px;
+  font-size: clamp(22px, 4.4vw, 30px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -.02em;
+  color: var(--ink);
+}
+.recovery-select-head p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.recovery-select--gentle .recovery-select-head h1 {
+  font-weight: 600;
+}
+.recovery-select--solid .recovery-select-head h1 {
+  letter-spacing: -.03em;
+}
+
+.recovery-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.recovery-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 22px 18px 16px;
+  text-align: left;
+  border-radius: var(--rs-radius);
+  border: var(--rs-stroke) solid var(--rs-line);
+  background:
+    radial-gradient(120% 80% at 50% -10%, var(--rs-glow), transparent 55%),
+    var(--rs-card-bg);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  cursor: pointer;
+  outline: none;
+  transform: scale(1);
+  opacity: 0;
+  animation: recovery-card-in .55s ease forwards;
+  animation-delay: calc(var(--rs-i, 0) * 70ms);
+  transition:
+    transform .28s cubic-bezier(.22, 1, .36, 1),
+    border-color .28s ease,
+    box-shadow .28s ease,
+    background-color .28s ease;
+}
+.recovery-select--gentle .recovery-card {
+  padding: 24px 20px 18px;
+  box-shadow: 0 10px 32px -18px rgba(72, 70, 62, .22);
+}
+.recovery-select--solid .recovery-card {
+  background: var(--rs-card-bg);
+  box-shadow: 0 8px 24px -16px rgba(31, 43, 40, .28);
+}
+.recovery-card:hover {
+  border-color: color-mix(in srgb, var(--rs-sage) 45%, var(--rs-line));
+}
+.recovery-card:focus-visible {
+  border-color: var(--rs-sage);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rs-sage) 28%, transparent);
+}
+.recovery-card.is-selected {
+  transform: scale(1.02);
+  z-index: 2;
+  border-color: var(--rs-sage);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--rs-sage) 55%, transparent),
+    0 16px 36px -18px rgba(50, 60, 52, .28);
+}
+.recovery-select--gentle .recovery-card.is-selected {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--rs-sage) 40%, transparent),
+    0 18px 40px -16px rgba(90, 100, 85, .22),
+    inset 0 1px 0 rgba(255, 255, 255, .55);
+}
+.recovery-select--solid .recovery-card.is-selected {
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--rs-sage) 70%, transparent),
+    0 14px 30px -14px rgba(25, 35, 30, .35);
+}
+
+.recovery-card-art {
+  width: var(--rs-art-size);
+  height: var(--rs-art-size);
+  margin: 0 auto 6px;
+  display: grid;
+  place-items: center;
+  color: var(--rs-sage);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--rs-sage-soft) 70%, transparent);
+}
+.recovery-select--gentle .recovery-card-art {
+  background: radial-gradient(circle at 40% 30%, rgba(255, 255, 255, .55), transparent 55%),
+              color-mix(in srgb, var(--rs-sage-soft) 80%, var(--rs-milk));
+}
+.recovery-select--solid .recovery-card-art {
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--rs-sage-soft) 55%, var(--surface));
+  color: color-mix(in srgb, var(--rs-sage) 85%, var(--ink) 15%);
+}
+.recovery-card-art svg {
+  width: 54px;
+  height: 54px;
+  display: block;
+}
+
+.recovery-card-name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.25;
+}
+.recovery-card-meaning {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  text-align: center;
+}
+.recovery-card-phrase {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--rs-sage);
+  text-align: center;
+  font-weight: 600;
+}
+.recovery-select--gentle .recovery-card-phrase {
+  font-weight: 500;
+  font-family: var(--font-hand);
+  font-size: 18px;
+  color: color-mix(in srgb, var(--rs-sage) 75%, var(--ink-soft));
+}
+.recovery-select--solid .recovery-card-phrase {
+  font-family: var(--font-body);
+  letter-spacing: -.01em;
+}
+
+.recovery-card-extra {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  transition: max-height .32s ease, opacity .28s ease, margin .28s ease;
+}
+.recovery-card.is-selected .recovery-card-extra {
+  max-height: 120px;
+  opacity: 1;
+  margin: 4px 0 2px;
+}
+.recovery-card-extra p {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--rs-sage-soft) 55%, transparent);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  text-align: center;
+}
+.recovery-select--solid .recovery-card-extra p {
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-2) 70%, var(--rs-sage-soft));
+}
+
+.recovery-card-pick {
+  margin-top: auto;
+  width: 100%;
+  justify-content: center;
+  border: none;
+  border-radius: 14px;
+  padding: 11px 14px;
+  font-weight: 700;
+  font-size: 13.5px;
+  background: color-mix(in srgb, var(--rs-sage) 88%, #2a3a32);
+  color: #f7faf7;
+  opacity: .42;
+  cursor: not-allowed;
+  transition: opacity .25s ease, transform .2s ease, background .2s ease, box-shadow .2s ease;
+}
+.recovery-select--gentle .recovery-card-pick {
+  border-radius: 999px;
+  background: linear-gradient(135deg, #8a9b84, #6f8570);
+  box-shadow: none;
+}
+.recovery-select--solid .recovery-card-pick {
+  border-radius: 10px;
+  background: #3f5a4c;
+  letter-spacing: .01em;
+}
+.recovery-card.is-selected .recovery-card-pick:not(:disabled) {
+  opacity: 1;
+  cursor: pointer;
+  box-shadow: 0 8px 22px -12px rgba(50, 70, 55, .45);
+}
+.recovery-card.is-selected .recovery-card-pick:not(:disabled):hover {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--rs-sage) 78%, #1e2c24);
+}
+.recovery-card-pick:disabled {
+  pointer-events: none;
+}
+
+@keyframes recovery-card-in {
+  from { opacity: 0; translate: 0 14px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+@media (max-width: 880px) {
+  .recovery-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .recovery-select-head { margin-bottom: 20px; }
+  .recovery-card { padding: 18px 14px 14px; }
+  .recovery-card-art { --rs-art-size: 64px; }
+  .recovery-card-art svg { width: 48px; height: 48px; }
+}
+
+@media (max-width: 520px) {
+  .recovery-grid { grid-template-columns: 1fr; gap: 12px; }
+  .recovery-select-head { margin-bottom: 16px; text-align: left; }
+  .recovery-select-head p { font-size: 14.5px; }
+  .recovery-card.is-selected { transform: scale(1.015); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recovery-card {
+    animation: none;
+    opacity: 1;
+    transition: border-color .2s ease, box-shadow .2s ease;
+  }
+  .recovery-card.is-selected { transform: none; }
+  .recovery-card-extra {
+    transition: none;
+  }
+  .recovery-card.is-selected .recovery-card-pick:not(:disabled):hover {
+    transform: none;
+  }
+}
