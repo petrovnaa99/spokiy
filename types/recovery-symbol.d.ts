@@ -6,7 +6,7 @@
 /** Візуальний стиль символу (не прив’язаний до статі в UI). */
 export type RecoveryVisualStyle = "gentle" | "solid";
 
-/** Один етап розвитку символу. */
+/** Один етап розвитку символу (не «рівень»). */
 export interface RecoveryStage {
   /** Порядковий номер етапу (1-based). */
   id: number;
@@ -47,7 +47,7 @@ export interface RecoveryProfileFields {
   recoverySymbolName: string | null;
   /** Поточний етап (1-based); 0 якщо символ ще не обрано. */
   recoveryStage: number;
-  /** Прогрес 0–100. */
+  /** Прогрес 0–100. Ніколи не зменшується через пропуски. */
   recoveryProgress: number;
   recoveryLastActivityAt: string | null;
   recoverySymbolSelectedAt: string | null;
@@ -55,3 +55,34 @@ export interface RecoveryProfileFields {
 
 /** Значення за замовчуванням до вибору символу. */
 export declare const RECOVERY_PROFILE_DEFAULTS: RecoveryProfileFields;
+
+/**
+ * Тон комунікації в settings (незалежно від статі).
+ * null → визначити зі стилю символу або статі.
+ */
+export type CommunicationTone = "gentle" | "solid";
+
+/** Дії, за які нараховується прогрес (макс. 1 раз / день / користувач). */
+export type RecoveryAwardAction =
+  | "wellbeing"
+  | "diary"
+  | "breath"
+  | "good"
+  | "past"
+  | "exercise";
+
+/**
+ * Денний реєстр у state.recoveryAwards (users.data JSON snapshot).
+ * Ключ дня → дія → ISO час нарахування.
+ */
+export type RecoveryAwardsLedger = Record<string, Partial<Record<RecoveryAwardAction, string>>>;
+
+export interface RecoveryAwardResult {
+  awarded: boolean;
+  reason?: string;
+  action?: RecoveryAwardAction;
+  progress: number;
+  stage: number;
+  stageChanged: boolean;
+  message: string | null;
+}

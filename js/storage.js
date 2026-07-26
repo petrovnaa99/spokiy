@@ -42,7 +42,32 @@ window.Store = (function () {
     if (typeof profile.recoveryProgress !== "number" || Number.isNaN(profile.recoveryProgress)) {
       profile.recoveryProgress = RECOVERY_PROFILE_DEFAULTS.recoveryProgress;
     }
+    // Синхронізувати етап із прогресом за актуальним каталогом (6 етапів).
+    if (profile.recoverySymbolId) {
+      const catalog = (typeof window !== "undefined" && window.CONTENT && window.CONTENT.getRecoverySymbolById)
+        ? window.CONTENT.getRecoverySymbolById(profile.recoverySymbolId)
+        : null;
+      if (catalog && window.CONTENT.getRecoveryStageByProgress) {
+        const stage = window.CONTENT.getRecoveryStageByProgress(catalog, profile.recoveryProgress || 0);
+        if (stage && stage.id) profile.recoveryStage = stage.id;
+      }
+      // Уніфікована назва без конкретних видів.
+      if (profile.recoverySymbolName !== "Деревце") profile.recoverySymbolName = "Деревце";
+    }
     return profile;
+  }
+
+  /** Денний реєстр нарахувань: state.recoveryAwards[YYYY-MM-DD][action] = ISO timestamp. */
+  function ensureRecoveryAwards(st) {
+    if (!st) return st;
+    if (!st.recoveryAwards || typeof st.recoveryAwards !== "object" || Array.isArray(st.recoveryAwards)) {
+      st.recoveryAwards = {};
+    }
+    return st;
+  }
+
+  function recoveryDayKey(iso) {
+    return String(iso || new Date().toISOString()).slice(0, 10);
   }
 
   function emptyState(profile) {
@@ -62,11 +87,15 @@ window.Store = (function () {
       achievements: {},
       checkins: {},
       rituals: {},
+      /** Денний реєстр нарахувань прогресу символу (анти-подвійний запис). */
+      recoveryAwards: {},
       draft: null,
       settings: {
         reminderHour: 9,
         dismissedRedFlag: null,
         songReminder: "",
+        /** Тон комунікації: "gentle" | "solid" | null (null = визначити з символу / статі). */
+        communicationTone: null,
         ritualDismiss: {},
         reminders: {
           morning: { enabled: false, time: "08:00", days: [0, 1, 2, 3, 4, 5, 6], push: false },
@@ -241,6 +270,7 @@ window.Store = (function () {
       if (!state.profile) state.profile = { email: currentEmail };
       state.profile.email = currentEmail;
       ensureRecoveryFields(state.profile);
+      ensureRecoveryAwards(state);
       const all = db(); all[currentEmail] = state; saveDb(all);
       try { window.dispatchEvent(new CustomEvent("spokiy:synced")); } catch (e) {}
     } else if (localT > remoteT) {
@@ -255,6 +285,7 @@ window.Store = (function () {
     if (!currentEmail) return null;
     const all = db();
     state = all[currentEmail] || emptyState({ email: currentEmail });
+    ensureRecoveryAwards(state);
     if (state.profile) {
       state.profile.email = currentEmail;
       ensureRecoveryFields(state.profile);
@@ -403,13 +434,112 @@ window.Store = (function () {
       ensureRecoveryFields(state.profile);
       const now = new Date().toISOString();
       state.profile.recoverySymbolId = catalog.id;
-      state.profile.recoverySymbolName = catalog.name;
+      state.profile.recoverySymbolName = "Деревце";
       state.profile.recoveryStage = 1;
       state.profile.recoveryProgress = 0;
       state.profile.recoverySymbolSelectedAt = now;
       state.profile.recoveryLastActivityAt = now;
       persist();
       return true;
+    },
+
+    /**
+     * Нарахувати прогрес за завершену дію турботи.
+     * Одна дія = один раз на календарний день; пропуски не віднімають прогрес.
+     * @param {"ritual"|"diary"|"breath"|"gratitude"|"wellbeing"|"good"|"past"|"exercise"} action
+     * @returns {{
+     *   awarded: boolean,
+     *   reason?: string,
+     *   action?: string,
+     *   progress: number,
+     *   stage: number,
+     *   stageChanged: boolean,
+     *   message: string|null
+     * }}
+     */
+    awardRecoveryProgress(action) {
+      const empty = () => ({
+        awarded: false,
+        progress: state && state.profile ? state.profile.recoveryProgress || 0 : 0,
+        stage: state && state.profile ? state.profile.recoveryStage || 0 : 0,
+        stageChanged: false,
+        message: null
+      });
+      if (!state || !state.profile) return Object.assign(empty(), { reason: "no_session" });
+      ensureRecoveryFields(state.profile);
+      ensureRecoveryAwards(state);
+      if (!state.profile.recoverySymbolId) return Object.assign(empty(), { reason: "no_symbol" });
+
+      const C = (typeof window !== "undefined") ? window.CONTENT : null;
+      const allowed = (C && C.RECOVERY_AWARD_ACTIONS) || ["wellbeing", "diary", "breath", "good", "past", "exercise"];
+      if (!allowed.includes(action)) return Object.assign(empty(), { reason: "bad_action" });
+
+      const day = recoveryDayKey();
+      if (!state.recoveryAwards[day] || typeof state.recoveryAwards[day] !== "object") {
+        state.recoveryAwards[day] = {};
+      }
+      const ledger = state.recoveryAwards[day];
+      // Захист від подвійного нарахування (у т.ч. після оновлення сторінки).
+      if (ledger[action]) {
+        return Object.assign(empty(), { awarded: false, reason: "already_awarded", action });
+      }
+
+      const points = (C && C.RECOVERY_POINTS_PER_ACTION) || 3;
+      const prevStage = Math.max(1, state.profile.recoveryStage || 1);
+      const prevProgress = Math.max(0, state.profile.recoveryProgress || 0);
+      const nextProgress = Math.min(100, prevProgress + points);
+
+      // Спочатку фіксуємо дію в реєстрі — навіть якщо далі щось піде не так, повторно не нарахуємо.
+      ledger[action] = new Date().toISOString();
+
+      const catalog = (C && C.getRecoverySymbolById)
+        ? C.getRecoverySymbolById(state.profile.recoverySymbolId)
+        : null;
+      let nextStage = prevStage;
+      if (catalog && C.getRecoveryStageByProgress) {
+        const stageInfo = C.getRecoveryStageByProgress(catalog, nextProgress);
+        if (stageInfo && stageInfo.id) nextStage = stageInfo.id;
+      }
+
+      state.profile.recoveryProgress = nextProgress;
+      state.profile.recoveryStage = nextStage;
+      state.profile.recoveryLastActivityAt = new Date().toISOString();
+      persist();
+
+      const stageChanged = nextStage > prevStage;
+      const message = stageChanged && C && C.getRecoveryStageUpMessage
+        ? C.getRecoveryStageUpMessage(nextStage, day)
+        : (stageChanged ? "У твоєму внутрішньому просторі з’явилася нова опора." : null);
+
+      const result = {
+        awarded: true,
+        action,
+        progress: nextProgress,
+        stage: nextStage,
+        stageChanged,
+        message
+      };
+      try {
+        if (typeof window !== "undefined" && window.dispatchEvent) {
+          window.dispatchEvent(new CustomEvent("spokiy:recovery-award", { detail: result }));
+        }
+      } catch (e) { /* ignore */ }
+      return result;
+    },
+
+    /** Чи вже нараховано прогрес за дію сьогодні (для UI/тестів). */
+    hasRecoveryAwardToday(action) {
+      if (!state) return false;
+      ensureRecoveryAwards(state);
+      const day = recoveryDayKey();
+      const ledger = state.recoveryAwards[day];
+      return !!(ledger && ledger[action]);
+    },
+
+    getRecoveryAwards() {
+      if (!state) return {};
+      ensureRecoveryAwards(state);
+      return state.recoveryAwards;
     },
 
     /**
@@ -429,6 +559,34 @@ window.Store = (function () {
       }
       if (p.touchActivity !== false) {
         state.profile.recoveryLastActivityAt = new Date().toISOString();
+      }
+      persist();
+      return true;
+    },
+
+    /**
+     * Збережений тон комунікації (незалежно від статі).
+     * @returns {"gentle"|"solid"|null}
+     */
+    getCommunicationTone() {
+      if (!state || !state.settings) return null;
+      const t = state.settings.communicationTone;
+      return t === "gentle" || t === "solid" ? t : null;
+    },
+
+    /**
+     * Встановити тон комунікації. null скидає до авто (символ / стать).
+     * @param {"gentle"|"solid"|null} tone
+     */
+    setCommunicationTone(tone) {
+      if (!state) return false;
+      if (!state.settings) state.settings = {};
+      if (tone == null || tone === "") {
+        state.settings.communicationTone = null;
+      } else if (tone === "gentle" || tone === "solid") {
+        state.settings.communicationTone = tone;
+      } else {
+        return false;
       }
       persist();
       return true;
@@ -459,11 +617,18 @@ window.Store = (function () {
       state.entries.unshift(entry);
       this.markCheckin(entry.createdAt);
       persist();
+      // Щоденниковий запис (не calm-сесія) — перший за день.
+      if (entry.type !== "calm") this.awardRecoveryProgress("diary");
       return entry;
     },
     updateEntry(id, patch) {
       const e = state.entries.find(x => x.id === id);
-      if (e) { Object.assign(e, patch); persist(); }
+      if (e) {
+        const becameReviewed = patch && patch.reviewed === true && !e.reviewed;
+        Object.assign(e, patch);
+        persist();
+        if (becameReviewed) this.awardRecoveryProgress("past");
+      }
       return e;
     },
     removeEntry(id) { state.entries = state.entries.filter(x => x.id !== id); persist(); },
@@ -534,6 +699,8 @@ window.Store = (function () {
       if (!Array.isArray(state.friendNotes)) state.friendNotes = [];
       state.friendNotes.unshift({ id: "fn" + Date.now() + Math.random().toString(36).slice(2, 5), situation, advice, date: new Date().toISOString() });
       persist();
+      // Рекомендована вправа / практика листа другу.
+      this.awardRecoveryProgress("exercise");
     },
     removeFriendNote(id) { state.friendNotes = (state.friendNotes || []).filter(x => x.id !== id); persist(); },
 
@@ -544,6 +711,8 @@ window.Store = (function () {
       state.wellbeing[dayKey] = { level: +level, date: iso };
       this.markCheckin(iso);
       persist();
+      // Перша оцінка стану за день (повторні зміни шкали не дають прогресу).
+      this.awardRecoveryProgress("wellbeing");
       return state.wellbeing[dayKey];
     },
     todayWellbeing() {
@@ -558,6 +727,7 @@ window.Store = (function () {
       const ev = { id: "ge" + Date.now() + Math.random().toString(36).slice(2, 5), text, date: iso, dayKey };
       state.goodEvents.unshift(ev);
       persist();
+      this.awardRecoveryProgress("good");
       return ev;
     },
     removeGoodEvent(id) { state.goodEvents = (state.goodEvents || []).filter(x => x.id !== id); persist(); },
@@ -570,6 +740,7 @@ window.Store = (function () {
       const rec = { id: "gr" + Date.now() + Math.random().toString(36).slice(2, 5), text, date: iso, dayKey };
       state.gratitude.unshift(rec);
       persist();
+      this.awardRecoveryProgress("gratitude");
       return rec;
     },
     removeGratitude(id) { state.gratitude = (state.gratitude || []).filter(x => x.id !== id); persist(); },
@@ -592,6 +763,7 @@ window.Store = (function () {
       state = Object.assign(emptyState(state.profile), data);
       state.profile.email = currentEmail;
       ensureRecoveryFields(state.profile);
+      ensureRecoveryAwards(state);
       persist();
     },
 

@@ -10,6 +10,10 @@
 -- Поля живуть УСЕРЕДИНІ users.profile / users.data.profile (jsonb), а не в окремих колонках:
 --   recoverySymbolId, recoverySymbolName, recoveryStage, recoveryProgress,
 --   recoveryLastActivityAt, recoverySymbolSelectedAt.
+-- Денний реєстр нарахувань прогресу — у snapshot users.data (не в profile):
+--   data.recoveryAwards = { "YYYY-MM-DD": { wellbeing, diary, breath, good, past, exercise } }
+--   значення дії = ISO-час нарахування (truthy = уже нараховано сьогодні).
+-- Пропуски днів НЕ зменшують progress; символ не «помирає».
 -- Це адитивне розширення JSON: існуючі рядки й ключі не видаляються.
 -- НЕ виконувати DROP TABLE / TRUNCATE / REPLACE цілого profile під час впровадження.
 

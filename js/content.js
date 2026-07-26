@@ -671,35 +671,66 @@ window.CONTENT = (function () {
    * }} RecoverySymbol
    */
 
-  /** Спільні етапи для ніжного стилю (gentle). */
-  const RECOVERY_STAGES_GENTLE = [
-    { id: 1, key: "seed", name: "Насіння", description: "Символ обрано — це перший крок до внутрішнього відновлення.", progressMin: 0 },
-    { id: 2, key: "sprout", name: "Паросток", description: "З’являються перші ознаки турботи про себе.", progressMin: 20 },
-    { id: 3, key: "branch", name: "Гілка", description: "Звичні маленькі дії вже підтримують рівновагу.", progressMin: 40 },
-    { id: 4, key: "bloom", name: "Цвіт", description: "Відновлення відчувається м’якше й стійкіше.", progressMin: 60 },
-    { id: 5, key: "fruit", name: "Плід", description: "Спокій тримається всередині, і до нього можна повертатися.", progressMin: 80 }
+  /** Спільні 6 етапів: пагін → коріння → листя → крона → цвіт → плоди. */
+  const RECOVERY_STAGES_CORE = [
+    {
+      id: 1, key: "awakening", name: "Пагін", progressMin: 0,
+      description: "З’являється перший ніжний пагін."
+    },
+    {
+      id: 2, key: "roots", name: "Коріння", progressMin: 12,
+      description: "Пагін міцнішає й тримається на корінні."
+    },
+    {
+      id: 3, key: "first_changes", name: "Листочки", progressMin: 28,
+      description: "На гілочках з’являються перші листочки."
+    },
+    {
+      id: 4, key: "stability", name: "Крона", progressMin: 48,
+      description: "Крона стає пишною й наповненою листям."
+    },
+    {
+      id: 5, key: "inner_strength", name: "Цвіт", progressMin: 70,
+      description: "Серед листя розкривається ніжний цвіт."
+    },
+    {
+      id: 6, key: "unfolding", name: "Плоди", progressMin: 90,
+      description: "Деревце дає плоди — турбота дозріла."
+    }
   ];
 
-  /** Спільні етапи для стриманого стилю (solid). */
-  const RECOVERY_STAGES_SOLID = [
-    { id: 1, key: "root", name: "Корінь", description: "Обрано опору — закладено основу внутрішньої стабільності.", progressMin: 0 },
-    { id: 2, key: "shoot", name: "Пагін", description: "З’являється перша регулярність у турботі про себе.", progressMin: 20 },
-    { id: 3, key: "trunk", name: "Стовбур", description: "Характер і дисципліна тримають у складні дні.", progressMin: 40 },
-    { id: 4, key: "crown", name: "Крона", description: "Відновлення стає відчутною внутрішньою силою.", progressMin: 60 },
-    { id: 5, key: "shelter", name: "Опора", description: "Можна залишатися собою навіть під тиском.", progressMin: 80 }
-  ];
+  /**
+   * Етапи для стилю символу: назви спільні, фінал «Розкриття» має різний акцент.
+   * @param {"gentle"|"solid"} visualStyle
+   */
+  function buildRecoveryStages(visualStyle) {
+    return RECOVERY_STAGES_CORE.map((s) => {
+      const copy = Object.assign({}, s);
+      if (s.key === "unfolding") {
+        copy.description = visualStyle === "solid"
+          ? "Пишна крона з плодами — опора дозріла."
+          : "Пишне деревце з цвітом і плодами — турбота дозріла.";
+      }
+      return copy;
+    });
+  }
+
+  /** @deprecated алиас для сумісності: ніжний стиль. */
+  const RECOVERY_STAGES_GENTLE = buildRecoveryStages("gentle");
+  /** @deprecated алиас для сумісності: стриманий стиль. */
+  const RECOVERY_STAGES_SOLID = buildRecoveryStages("solid");
 
   /** @type {RecoverySymbol[]} */
   const RECOVERY_SYMBOLS = [
     {
       id: "lavender",
-      name: "Лаванда",
+      name: "Деревце",
       shortDescription: "Ніжний символ спокою та м’якого відновлення.",
       meaning: "Спокій, ніжність, відновлення.",
       phrase: "Твоя сила може бути ніжною.",
       visualStyle: "gentle",
       availableToAll: true,
-      stages: RECOVERY_STAGES_GENTLE.map((s) => Object.assign({}, s)),
+      stages: buildRecoveryStages("gentle"),
       illustrationPath: "assets/recovery/symbols/lavender/"
     },
     {
@@ -710,7 +741,7 @@ window.CONTENT = (function () {
       phrase: "Ти розквітаєш у власному темпі.",
       visualStyle: "gentle",
       availableToAll: true,
-      stages: RECOVERY_STAGES_GENTLE.map((s) => Object.assign({}, s)),
+      stages: buildRecoveryStages("gentle"),
       illustrationPath: "assets/recovery/symbols/magnolia/"
     },
     {
@@ -721,7 +752,7 @@ window.CONTENT = (function () {
       phrase: "Спокій починається всередині.",
       visualStyle: "gentle",
       availableToAll: true,
-      stages: RECOVERY_STAGES_GENTLE.map((s) => Object.assign({}, s)),
+      stages: buildRecoveryStages("gentle"),
       illustrationPath: "assets/recovery/symbols/olive/"
     },
     {
@@ -732,7 +763,7 @@ window.CONTENT = (function () {
       phrase: "Справжня сила росте поступово.",
       visualStyle: "solid",
       availableToAll: true,
-      stages: RECOVERY_STAGES_SOLID.map((s) => Object.assign({}, s)),
+      stages: buildRecoveryStages("solid"),
       illustrationPath: "assets/recovery/symbols/oak/"
     },
     {
@@ -743,7 +774,7 @@ window.CONTENT = (function () {
       phrase: "Ти можеш залишатися собою навіть під тиском.",
       visualStyle: "solid",
       availableToAll: true,
-      stages: RECOVERY_STAGES_SOLID.map((s) => Object.assign({}, s)),
+      stages: buildRecoveryStages("solid"),
       illustrationPath: "assets/recovery/symbols/cedar/"
     },
     {
@@ -754,7 +785,7 @@ window.CONTENT = (function () {
       phrase: "Характер формується маленькими щоденними діями.",
       visualStyle: "solid",
       availableToAll: true,
-      stages: RECOVERY_STAGES_SOLID.map((s) => Object.assign({}, s)),
+      stages: buildRecoveryStages("solid"),
       illustrationPath: "assets/recovery/symbols/bonsai/"
     }
   ];
@@ -779,6 +810,232 @@ window.CONTENT = (function () {
   function getRecoverySymbolById(id) {
     if (!id) return null;
     return RECOVERY_SYMBOLS.find((s) => s.id === id) || null;
+  }
+
+  /**
+   * Тон комунікації незалежний від статі.
+   * null / невідоме → fallback: стиль символу, інакше стать.
+   * @param {"gentle"|"solid"|null|undefined} storedTone
+   * @param {"female"|"male"|string|null|undefined} gender
+   * @param {"gentle"|"solid"|null|undefined} symbolVisualStyle
+   * @returns {"gentle"|"solid"}
+   */
+  function resolveCommunicationTone(storedTone, gender, symbolVisualStyle) {
+    if (storedTone === "gentle" || storedTone === "solid") return storedTone;
+    if (symbolVisualStyle === "gentle" || symbolVisualStyle === "solid") return symbolVisualStyle;
+    return gender === "male" ? "solid" : "gentle";
+  }
+
+  /** Спільна назва для повідомлень — без імен конкретних видів. */
+  const RECOVERY_PLANT_REF = "Твоє деревце";
+
+  /** Повідомлення за ключем етапу — без провини й тиску. */
+  const RECOVERY_STAGE_LINES = {
+    awakening: "{yours} пробивається пагоном і готується рости.",
+    roots: "{yours} формує міцне коріння під пагоном.",
+    first_changes: "{yours} випускає перші ніжні листочки.",
+    stability: "{yours} набирає пишну листову крону.",
+    inner_strength: "{yours} розкриває ніжний цвіт серед листя.",
+    unfolding_gentle: "{yours} дає плоди в пишній кроні.",
+    unfolding_solid: "{yours} дає плоди в сильній кроні опори."
+  };
+
+  /** М’які повідомлення при переході на наступний етап. */
+  const RECOVERY_STAGE_UP_MESSAGES = [
+    "У твоєму внутрішньому просторі з’явилася нова опора.",
+    "Твоя щоденна турбота починає змінювати цей простір.",
+    "Маленькі кроки вже відчуваються всередині.",
+    "Цей простір стає трохи міцнішим і тихішим.",
+    "Деревце трохи підросло від твоєї турботи."
+  ];
+
+  /**
+   * Дії прогресу (1 раз на день).
+   * Рекомендований щоденний догляд: ritual + diary + breath + gratitude.
+   */
+  const RECOVERY_AWARD_ACTIONS = ["ritual", "diary", "breath", "gratitude", "wellbeing", "good"];
+  /** Очки за одну унікальну завершену дію дня. */
+  const RECOVERY_POINTS_PER_ACTION = 3;
+
+  /** Рекомендований порядок турботи про деревце (не обов’язково). */
+  const RECOVERY_PRACTICE_GUIDE = [
+    {
+      id: "ritual",
+      title: "Ранкове або вечірнє заповнення",
+      desc: "Короткий ритуал дня — настрій, вдячність і кілька теплих питань."
+    },
+    {
+      id: "diary",
+      title: "Запис у щоденнику",
+      desc: "Один рядок про думки чи страх уже підтримує ріст."
+    },
+    {
+      id: "breath",
+      title: "Дихальна практика",
+      desc: "Хвилина спокійного дихання для тіла й уваги."
+    },
+    {
+      id: "gratitude",
+      title: "Вдячність",
+      desc: "За що ти сьогодні вдячна чи вдячний — навіть за дрібницю."
+    }
+  ];
+
+  const RECOVERY_GREETINGS = {
+    gentle: {
+      morning: "Доброго ранку",
+      day: "Добрий день",
+      evening: "Добрий вечір",
+      night: "Тиха ніч поруч із тобою"
+    },
+    solid: {
+      morning: "Доброго ранку",
+      day: "Добрий день",
+      evening: "Добрий вечір",
+      night: "Спокійної ночі"
+    }
+  };
+
+  /** М’які рядки підтримки — без серій, провини й «засихання». */
+  const RECOVERY_SOFT_LINES = {
+    gentle: [
+      "Рада знову бути поруч.",
+      "Почнемо з одного маленького кроку?",
+      "Твій простір чекав на тебе.",
+      "Сьогодні достатньо навіть однієї хвилини для себе.",
+      "Дозволь собі трохи турботи.",
+      "Твоя ніжність також є силою.",
+      "Сьогодні можна рухатися повільніше.",
+      "Одна хвилина для себе вже має значення."
+    ],
+    solid: [
+      "Поверни увагу до себе.",
+      "Один крок також формує характер.",
+      "Внутрішня опора створюється поступово.",
+      "Сьогодні достатньо однієї усвідомленої дії.",
+      "Твій простір на місці.",
+      "Можна почати з малого кроку.",
+      "Сьогодні достатньо однієї хвилини для себе.",
+      "Увага до себе також є силою."
+    ]
+  };
+
+  /** @param {Date} [date] @returns {"morning"|"day"|"evening"|"night"} */
+  function getRecoveryTimeOfDay(date) {
+    const h = (date || new Date()).getHours();
+    if (h >= 5 && h < 11) return "morning";
+    if (h >= 11 && h < 17) return "day";
+    if (h >= 17 && h < 22) return "evening";
+    return "night";
+  }
+
+  /**
+   * @param {"gentle"|"solid"} tone
+   * @param {Date} [date]
+   */
+  function getRecoveryGreeting(tone, date) {
+    const slot = getRecoveryTimeOfDay(date);
+    const pack = RECOVERY_GREETINGS[tone === "solid" ? "solid" : "gentle"];
+    return pack[slot] || pack.day;
+  }
+
+  /**
+   * Стабільний м’який рядок на день (без випадкового мерехтіння при re-render).
+   * @param {"gentle"|"solid"} tone
+   * @param {string} [dayKey]
+   */
+  function getRecoverySoftLine(tone, dayKey) {
+    const list = RECOVERY_SOFT_LINES[tone === "solid" ? "solid" : "gentle"];
+    const key = String(dayKey || new Date().toISOString().slice(0, 10));
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) hash = (hash + key.charCodeAt(i) * (i + 3)) % 997;
+    return list[hash % list.length];
+  }
+
+  /**
+   * @param {RecoverySymbol|null|undefined} symbol
+   * @param {number} progress 0–100
+   * @returns {RecoveryStage|null}
+   */
+  function getRecoveryStageByProgress(symbol, progress) {
+    if (!symbol || !Array.isArray(symbol.stages) || !symbol.stages.length) return null;
+    const p = Math.max(0, Math.min(100, Number(progress) || 0));
+    const sorted = symbol.stages.slice().sort((a, b) => a.progressMin - b.progressMin);
+    let current = sorted[0];
+    sorted.forEach((s) => {
+      if (p >= s.progressMin) current = s;
+    });
+    return current;
+  }
+
+  /**
+   * @param {RecoverySymbol|null|undefined} symbol
+   * @param {number} stageId 1-based
+   */
+  function getRecoveryStageInfo(symbol, stageId) {
+    if (!symbol || !Array.isArray(symbol.stages) || !symbol.stages.length) return null;
+    const id = Math.max(1, Math.floor(Number(stageId) || 1));
+    return symbol.stages.find((s) => s.id === id) || symbol.stages[0];
+  }
+
+  /**
+   * Коротке персональне повідомлення про етап символу.
+   * @param {RecoverySymbol|null|undefined} symbol
+   * @param {number} stageId
+   */
+  function getRecoveryStageMessage(symbol, stageId) {
+    if (!symbol) return "Почнемо з одного маленького кроку?";
+    const stage = getRecoveryStageInfo(symbol, stageId);
+    let key = stage ? stage.key : "";
+    if (key === "unfolding") {
+      key = symbol.visualStyle === "solid" ? "unfolding_solid" : "unfolding_gentle";
+    }
+    const template = RECOVERY_STAGE_LINES[key] || "{yours} росте разом із тобою.";
+    return template.replace(/\{yours\}/g, RECOVERY_PLANT_REF);
+  }
+
+  /**
+   * Статус рекомендованого щоденного догляду (м’яко, без примусу).
+   * @param {{
+   *   hasAward: (action: string) => boolean,
+   *   hasRitualToday?: boolean
+   * }} opts
+   */
+  function getDailyPracticeStatus(opts) {
+    const hasAward = opts && typeof opts.hasAward === "function" ? opts.hasAward : () => false;
+    const ritual = !!(opts && opts.hasRitualToday) || hasAward("ritual");
+    const diary = !!hasAward("diary");
+    const breath = !!hasAward("breath");
+    const gratitude = !!hasAward("gratitude");
+    const doneCount = [ritual, diary, breath, gratitude].filter(Boolean).length;
+    return {
+      ritual, diary, breath, gratitude,
+      doneCount,
+      total: 4,
+      complete: doneCount === 4,
+      items: RECOVERY_PRACTICE_GUIDE.map((g) => ({
+        id: g.id,
+        title: g.title,
+        desc: g.desc,
+        done: g.id === "ritual" ? ritual
+          : g.id === "diary" ? diary
+          : g.id === "breath" ? breath
+          : g.id === "gratitude" ? gratitude
+          : false
+      }))
+    };
+  }
+
+  /**
+   * Стабільне м’яке повідомлення при зміні етапу.
+   * @param {number} stageId
+   * @param {string} [dayKey]
+   */
+  function getRecoveryStageUpMessage(stageId, dayKey) {
+    const key = String(dayKey || new Date().toISOString().slice(0, 10)) + ":" + String(stageId || 0);
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) hash = (hash + key.charCodeAt(i) * (i + 5)) % 991;
+    return RECOVERY_STAGE_UP_MESSAGES[hash % RECOVERY_STAGE_UP_MESSAGES.length];
   }
 
   // Пісні дня — універсальна музика, що піднімає настрій (не російського походження)
@@ -836,10 +1093,59 @@ window.CONTENT = (function () {
     "Lana Del Rey — Radio"
   ];
 
+  /**
+   * Інформація про оплату та доступ.
+   * Зміни price / payUrl / requisites — і текст оновиться на всьому сайті.
+   */
+  const PAYMENT = {
+    title: "Оплата та доступ",
+    intro: "«Спокій» — особистий простір самопідтримки. Нижче — умови доступу та інформація про оплату.",
+    plans: [
+      {
+        id: "free",
+        name: "Базовий доступ",
+        price: "0 грн",
+        period: "",
+        badge: "Зараз",
+        features: [
+          "Щоденник і ритуали",
+          "Дихання та SOS",
+          "Вдячність і опора",
+          "Деревце внутрішнього відновлення"
+        ]
+      },
+      {
+        id: "support",
+        name: "Підтримка проєкту",
+        price: "за бажанням",
+        period: "",
+        badge: "Добровільно",
+        features: [
+          "Допомагає розвивати сервіс",
+          "Не впливає на доступ до функцій",
+          "Можна в будь-який зручний спосіб"
+        ]
+      }
+    ],
+    /** Посилання на оплату / банку (напр. Monobank). Порожнє = кнопка прихована. */
+    payUrl: "",
+    payLabel: "Перейти до оплати",
+    /** Текст реквізитів або інструкції (картка, призначення платежу тощо). */
+    requisites: "Якщо хочеш підтримати розвиток «Спокою» — напиши на email з профілю або скористайся посиланням на оплату, щойно воно з’явиться тут.",
+    note: "Оплата не обов’язкова для користування. Сервіс не замінює професійну психологічну чи медичну допомогу.",
+    contactHint: "Питання щодо оплати можна поставити через звернення з email, яким ти користуєшся на сайті."
+  };
+
   return {
     AFFIRMATIONS, MALE_AFFIRMATIONS, QUOTES, BREATHING, GROUNDING, LIBRARY, TEST,
     CATEGORIES, TRIGGERS, RESOURCE_SUGGESTIONS, ACHIEVEMENTS, ANXIETY_TYPES, CALM, FINANCE, SONGS,
-    RECOVERY_SYMBOLS, RECOVERY_STAGES_GENTLE, RECOVERY_STAGES_SOLID,
-    orderRecoverySymbolsForGender, getRecoverySymbolById
+    RECOVERY_SYMBOLS, RECOVERY_STAGES_GENTLE, RECOVERY_STAGES_SOLID, RECOVERY_STAGES_CORE,
+    RECOVERY_AWARD_ACTIONS, RECOVERY_POINTS_PER_ACTION, RECOVERY_STAGE_UP_MESSAGES,
+    RECOVERY_PRACTICE_GUIDE, RECOVERY_PLANT_REF, PAYMENT,
+    orderRecoverySymbolsForGender, getRecoverySymbolById, buildRecoveryStages,
+    resolveCommunicationTone, getRecoveryTimeOfDay, getRecoveryGreeting,
+    getRecoverySoftLine, getRecoveryStageInfo, getRecoveryStageMessage,
+    getRecoveryStageByProgress, getRecoveryStageUpMessage, getDailyPracticeStatus,
+    RECOVERY_SOFT_LINES, RECOVERY_GREETINGS
   };
 })();

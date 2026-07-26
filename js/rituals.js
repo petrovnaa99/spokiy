@@ -65,6 +65,7 @@ window.Rituals = (function () {
     S().rituals[k][type] = Object.assign({}, data, { at: new Date().toISOString(), source: "site" });
     deps.S.markCheckin(new Date().toISOString());
     deps.S.save();
+    if (deps.S.awardRecoveryProgress) deps.S.awardRecoveryProgress("ritual");
   }
 
   function dismissToday(type) {
@@ -162,9 +163,34 @@ window.Rituals = (function () {
     deps.toast("Гарного дня 🌿", "good");
   }
 
+  function gratitudePrompt(slot) {
+    const male = deps.isMale();
+    const title = male ? "За що ти сьогодні вдячний?" : "За що ти сьогодні вдячна?";
+    const hint = male
+      ? "Це одне з важливих заповнень ранку й вечора. Напиши хоча б одну річ — навіть дрібну."
+      : "Це одне з важливих заповнень ранку й вечора. Напиши хоча б одну річ — навіть дрібну.";
+    const label = male ? "Сьогодні я вдячний за" : "Сьогодні я вдячна за";
+    const placeholder = slot === "morning"
+      ? (male
+        ? "Напр.: за спокійний сон, за нову можливість, за підтримку..."
+        : "Напр.: за спокійний сон, за нову можливість, за підтримку...")
+      : (male
+        ? "Напр.: за розмову, прогулянку, момент тиші, підтримку друга..."
+        : "Напр.: за розмову, прогулянку, момент тиші, підтримку подруги...");
+    return { title, hint, label, placeholder };
+  }
+
+  function persistGratitudeNote(text, source) {
+    const t = (text || "").trim();
+    if (!t || !deps.S.addGratitude) return;
+    deps.S.addGratitude(t);
+  }
+
   function openMorning() {
-    morningDraft = { mood: null, sleep: 0, worry: "", goal: "" };
+    morningDraft = { mood: null, sleep: 0, worry: "", gratitude: "", goal: "" };
     let step = 1;
+    const totalSteps = 5;
+    const sleepTitle = deps.isMale() ? "Як ти спав?" : "Як ти спала?";
 
     function paint() {
       let body = "";
@@ -176,13 +202,23 @@ window.Rituals = (function () {
           ${moodButtons(MORNING_MOODS, "mm")}`;
       } else if (step === 2) {
         body = `
-          <h2>Як ти спала?</h2>
+          <h2>${sleepTitle}</h2>
           <p class="muted">Обери кількість зірок</p>
           ${starRow(morningDraft.sleep)}`;
       } else if (step === 3) {
         body = `
           <h2>Що зараз найбільше турбує?</h2>
           ${worryChips(morningDraft.worry)}`;
+      } else if (step === 4) {
+        const g = gratitudePrompt("morning");
+        body = `
+          <div class="ritual-badge">∴</div>
+          <h2>${deps.esc(g.title)}</h2>
+          <p class="muted">${deps.esc(g.hint)}</p>
+          <label class="field" style="margin-top:10px">
+            <span>${deps.esc(g.label)}</span>
+            <textarea class="quick-input" id="ritual-gratitude" rows="3" placeholder="${deps.esc(g.placeholder)}">${deps.esc(morningDraft.gratitude)}</textarea>
+          </label>`;
       } else {
         body = `
           <h2>Яка одна маленька ціль на сьогодні?</h2>
@@ -193,7 +229,7 @@ window.Rituals = (function () {
         <div class="ritual-modal">${body}
           <div class="row spread" style="margin-top:18px">
             <button class="btn btn-ghost btn-sm" id="rit-skip">Пізніше</button>
-            ${step < 4
+            ${step < totalSteps
               ? `<button class="btn btn-primary btn-sm" id="rit-next" ${step === 1 && !morningDraft.mood ? "disabled" : ""}>Далі</button>`
               : `<button class="btn btn-primary" id="rit-done">Почати день →</button>`}
           </div>
@@ -220,10 +256,25 @@ window.Rituals = (function () {
           step = 4;
           paint();
         });
+      } else if (step === 4) {
+        const inp = deps.$("#ritual-gratitude");
+        deps.$("#rit-next").onclick = () => {
+          morningDraft.gratitude = (inp && inp.value || "").trim();
+          if (!morningDraft.gratitude) {
+            deps.toast(deps.isMale()
+              ? "Це важливе заповнення — напиши, за що ти вдячний"
+              : "Це важливе заповнення — напиши, за що ти вдячна", "warn");
+            if (inp) inp.focus();
+            return;
+          }
+          step = 5;
+          paint();
+        };
       } else {
         const inp = deps.$("#ritual-goal");
         deps.$("#rit-done").onclick = () => {
           morningDraft.goal = (inp && inp.value || "").trim();
+          persistGratitudeNote(morningDraft.gratitude, "morning");
           saveRitual("morning", morningDraft);
           morningDraft = null;
           deps.closeModal();
@@ -258,8 +309,9 @@ window.Rituals = (function () {
   }
 
   function openEvening() {
-    let draft = { mood: null, win: "", hard: "", helped: "" };
+    let draft = { mood: null, win: "", hard: "", gratitude: "", helped: "" };
     let step = 1;
+    const totalSteps = 5;
 
     function paint() {
       let body = "";
@@ -269,6 +321,16 @@ window.Rituals = (function () {
         body = `<label class="field"><span>Що сьогодні вдалося?</span><input id="eve-win" class="quick-input" value="${deps.esc(draft.win)}" placeholder="Навіть щось маленьке..." /></label>`;
       } else if (step === 3) {
         body = `<label class="field"><span>Що сьогодні було найважчим?</span><input id="eve-hard" class="quick-input" value="${deps.esc(draft.hard)}" placeholder="Можна одним реченням" /></label>`;
+      } else if (step === 4) {
+        const g = gratitudePrompt("evening");
+        body = `
+          <div class="ritual-badge">∴</div>
+          <h2>${deps.esc(g.title)}</h2>
+          <p class="muted">${deps.esc(g.hint)}</p>
+          <label class="field" style="margin-top:10px">
+            <span>${deps.esc(g.label)}</span>
+            <textarea class="quick-input" id="eve-gratitude" rows="3" placeholder="${deps.esc(g.placeholder)}">${deps.esc(draft.gratitude)}</textarea>
+          </label>`;
       } else {
         body = `<label class="field"><span>Що допомогло тобі хоча б трохи?</span><input id="eve-help" class="quick-input" value="${deps.esc(draft.helped)}" placeholder="Прогулянка, музика, друг..." /></label>`;
       }
@@ -278,7 +340,9 @@ window.Rituals = (function () {
           <div class="row spread" style="margin-top:18px">
             <button class="btn btn-ghost btn-sm" id="eve-skip">Пізніше</button>
             ${step > 1 ? `<button class="btn btn-ghost btn-sm" id="eve-back">←</button>` : "<span></span>"}
-            ${step < 4 ? `<button class="btn btn-primary btn-sm" id="eve-next" ${step === 1 && !draft.mood ? "disabled" : ""}>Далі</button>` : `<button class="btn btn-primary btn-sm" id="eve-save">Зберегти</button>`}
+            ${step < totalSteps
+              ? `<button class="btn btn-primary btn-sm" id="eve-next" ${step === 1 && !draft.mood ? "disabled" : ""}>Далі</button>`
+              : `<button class="btn btn-primary btn-sm" id="eve-save">Зберегти</button>`}
           </div>
         </div>`);
 
@@ -295,9 +359,24 @@ window.Rituals = (function () {
         deps.$("#eve-next").onclick = () => { draft.win = deps.$("#eve-win").value.trim(); step = 3; paint(); };
       } else if (step === 3) {
         deps.$("#eve-next").onclick = () => { draft.hard = deps.$("#eve-hard").value.trim(); step = 4; paint(); };
+      } else if (step === 4) {
+        const inp = deps.$("#eve-gratitude");
+        deps.$("#eve-next").onclick = () => {
+          draft.gratitude = (inp && inp.value || "").trim();
+          if (!draft.gratitude) {
+            deps.toast(deps.isMale()
+              ? "Це важливе заповнення — напиши, за що ти вдячний"
+              : "Це важливе заповнення — напиши, за що ти вдячна", "warn");
+            if (inp) inp.focus();
+            return;
+          }
+          step = 5;
+          paint();
+        };
       } else {
         deps.$("#eve-save").onclick = () => {
           draft.helped = deps.$("#eve-help").value.trim();
+          persistGratitudeNote(draft.gratitude, "evening");
           saveRitual("evening", draft);
           deps.closeModal();
           const thanks = deps.isMale()

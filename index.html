@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#2fae8e" />
+  <meta name="theme-color" content="#0a2248" />
   <title>Спокій — щоденник тривожності</title>
   <script>
     (function () {
@@ -17,41 +17,26 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Comfortaa:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260724" />
+  <link rel="stylesheet" href="css/styles.css?v=20260725k" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" />
 </head>
 <body>
   <!-- AUTH / WELCOME -->
   <div id="auth-screen" class="auth-screen">
-    <div class="landing">
+    <div class="landing landing--minimal">
 
       <section class="landing-hero">
         <div class="landing-mark" aria-hidden="true">S</div>
         <h1 class="landing-title">Спокій</h1>
-        <p class="landing-subtitle">Особистий простір самопідтримки, коли тривожно, важко або потрібно почути себе</p>
-        <p class="landing-desc">Тут можна зупинитися, розібрати свій стан і знайти невелику дію, яка допоможе саме зараз. Без оцінок, вимог і необхідності писати багато.</p>
-        <div class="landing-cta">
-          <button class="btn btn-sos btn-lg" id="landing-sos" type="button">Мені тривожно зараз</button>
-          <button class="btn btn-primary btn-lg" id="landing-start" type="button">Створити свій простір</button>
-          <button class="btn btn-outline btn-lg" id="landing-login" type="button">Увійти</button>
-        </div>
       </section>
-
-      <ul class="landing-benefits">
-        <li>вправи на 1–5 хвилин</li>
-        <li>особисті записи та спостереження</li>
-        <li>доступ до даних із телефона і ноутбука</li>
-      </ul>
-
-      <p class="landing-note">Сервіс призначений для самопідтримки та не замінює професійну психологічну або медичну допомогу.</p>
 
       <section class="landing-section" id="auth-reg">
         <div class="auth-card">
-          <h2 class="auth-card-title" id="auth-card-title">Створити свій простір</h2>
-          <p class="auth-card-sub" id="auth-card-sub">Безкоштовно. Кілька секунд — і особистий простір тільки для тебе.</p>
+          <h2 class="auth-card-title" id="auth-card-title">Увійти</h2>
+          <p class="auth-card-sub" id="auth-card-sub">Введи email і пароль — або одноразовий код з листа.</p>
 
           <div class="auth-fields">
-            <label class="field auth-signup-only" id="auth-name-field">
+            <label class="field auth-signup-only hidden" id="auth-name-field">
               <span>Ім'я</span>
               <input id="auth-name" type="text" placeholder="Як до тебе звертатися?" autocomplete="name" />
             </label>
@@ -63,7 +48,7 @@
               <span>Пароль</span>
               <input id="auth-password" type="password" placeholder="Мінімум 6 символів" autocomplete="current-password" />
             </label>
-            <label class="field auth-signup-only" id="auth-password2-field">
+            <label class="field auth-signup-only hidden" id="auth-password2-field">
               <span>Повтори пароль</span>
               <input id="auth-password2" type="password" placeholder="Ще раз" autocomplete="new-password" />
             </label>
@@ -71,7 +56,7 @@
               <span>Код з email</span>
               <input id="auth-code" type="text" inputmode="numeric" placeholder="6 цифр" maxlength="6" autocomplete="one-time-code" />
             </label>
-            <div class="field auth-signup-only" id="auth-gender-field">
+            <div class="field auth-signup-only hidden" id="auth-gender-field">
               <span>Як до тебе звертатися?</span>
               <div class="gender-pick" id="auth-gender">
                 <button type="button" class="gender-opt" data-gender="female">у жіночому роді</button>
@@ -80,20 +65,29 @@
             </div>
           </div>
 
-          <div class="auth-login-only auth-links hidden" id="auth-login-links">
+          <div class="auth-login-only auth-links" id="auth-login-links">
             <button type="button" class="auth-link" id="auth-forgot">Забули пароль?</button>
             <button type="button" class="auth-link" id="auth-use-code">Увійти за кодом</button>
           </div>
 
-          <button class="btn btn-primary btn-block" id="auth-submit" type="button">Створити акаунт</button>
+          <button class="btn btn-primary btn-block" id="auth-submit" type="button">Увійти</button>
           <div class="auth-divider"><span>або</span></div>
           <div id="google-btn-box"></div>
           <button class="btn btn-google btn-block" id="auth-google-btn">
             <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.46 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
             Продовжити з Google
           </button>
+
+          <p class="auth-switch" id="auth-switch">
+            <button type="button" class="auth-link" id="auth-switch-btn">Немає акаунту? Створити простір</button>
+          </p>
         </div>
       </section>
+
+      <div class="landing-more">
+        <button type="button" class="landing-about-btn" id="landing-about">Як мною користуватися</button>
+        <button type="button" class="landing-about-btn" id="landing-payment">Оплата та доступ</button>
+      </div>
 
     </div>
   </div>
@@ -136,9 +130,10 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-<script src="js/content.js"></script>
-<script src="js/storage.js?v=20260724"></script>
-<script src="js/rituals.js?v=20260721"></script>
-<script src="js/app.js?v=20260724"></script>
+<script src="js/content.js?v=20260725i"></script>
+<script src="js/storage.js?v=20260724m"></script>
+<script src="js/rituals.js?v=20260724m"></script>
+<script src="js/recovery-art.js?v=20260725k"></script>
+<script src="js/app.js?v=20260725g"></script>
 </body>
 </html>
