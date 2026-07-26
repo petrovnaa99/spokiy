@@ -615,8 +615,10 @@ window.Rituals = (function () {
 
   function requestPushPermission() {
     if (!("Notification" in window)) return;
+    if (!deps || !deps.S || !deps.S.isAuthed() || !deps.S.state) return;
+    ensureState();
     const r = S().settings.reminders;
-    const wants = r.morning.push || r.midday.push || r.evening.push;
+    const wants = !!(r && (r.morning.push || r.midday.push || r.evening.push));
     if (wants && Notification.permission === "default") {
       Notification.requestPermission();
     }

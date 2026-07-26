@@ -3846,10 +3846,14 @@
   window.SpokiyCrisis = () => startCalm("quick");
 
   if (window.Rituals) {
-    Rituals.init({
-      S, $, $$, esc, genderize, uiText, isMale, pluralUk, daysBetween, todayKey,
-      openModal, closeModal, toast, confirmModal, go, startCalm
-    });
+    try {
+      Rituals.init({
+        S, $, $$, esc, genderize, uiText, isMale, pluralUk, daysBetween, todayKey,
+        openModal, closeModal, toast, confirmModal, go, startCalm
+      });
+    } catch (e) {
+      console.warn("Rituals.init failed", e);
+    }
   }
 
   function handleDeepLinks() {
@@ -3866,5 +3870,9 @@
     }
   }
 
-  document.addEventListener("DOMContentLoaded", boot);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
 })();
