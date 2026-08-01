@@ -11,9 +11,8 @@
   const uid = () => Math.random().toString(36).slice(2, 9);
 
   /* ===================== КОНФІГУРАЦІЯ ===================== */
-  // Щоб увімкнути справжній вхід через Google — встав сюди Client ID
-  // з Google Cloud Console (OAuth 2.0, тип «Web»), додавши свій домен у дозволені.
-  const GOOGLE_CLIENT_ID = ""; // напр. "1234567890-abc.apps.googleusercontent.com"
+  // Google Client ID підтягується з /api/config (env GOOGLE_CLIENT_ID) або window.SPOKIY_CONFIG.
+  let GOOGLE_CLIENT_ID = (window.SPOKIY_CONFIG && window.SPOKIY_CONFIG.googleClientId) || "";
 
   // Резервне хмарне збереження. Працює з будь-яким REST-сховищем (JSONBin, Supabase, власний бекенд).
   // endpoint має приймати GET (повернути JSON) та PUT (зберегти тіло). Якщо порожнє — використовується файловий бекап.
@@ -3537,6 +3536,9 @@
       code_required: "Введи код з email",
       code_unavailable: "Вхід за кодом доступний лише онлайн",
       offline: "Потрібне з'єднання з інтернетом",
+      invalid_google_token: "Не вдалося підтвердити Google-акаунт",
+      credential_required: "Потрібен новий вхід через Google",
+      supabase_not_configured: "Хмарна авторизація ще не налаштована",
       password_mismatch: "Паролі не збігаються"
     };
     return map[code] || "Не вдалося виконати дію. Спробуй ще раз.";
@@ -3721,7 +3723,7 @@
     $("#auth-google-btn").onclick = () => {
       if (!GOOGLE_CLIENT_ID) {
         confirmModal("Google-вхід ще не налаштовано",
-          "Щоб увімкнути вхід через Google, потрібен власний Client ID із Google Cloud Console (OAuth 2.0). Додай його у файл js/app.js (константа GOOGLE_CLIENT_ID) і додай свій домен у дозволені. Поки що скористайся входом через Email.", () => {}, "Зрозуміло");
+          "Додай GOOGLE_CLIENT_ID у змінні середовища (Vercel / .env) і дозволені домени в Google Cloud Console: https://spokiy-2026.vercel.app та http://127.0.0.1:3000. Поки що скористайся входом через Email.", () => {}, "Зрозуміло");
         return;
       }
       if (window.google && google.accounts && google.accounts.id) google.accounts.id.prompt();
@@ -3758,13 +3760,12 @@
       google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: async (resp) => {
+          if (!resp || !resp.credential) { toast("Не вдалося увійти через Google", "warn"); return; }
           const data = parseJwt(resp.credential);
           if (!data || !data.email) { toast("Не вдалося увійти через Google", "warn"); return; }
           const doOAuth = async (gender) => {
             const res = await S.oauthLogin({
-              email: data.email,
-              name: data.name || data.email.split("@")[0],
-              picture: data.picture,
+              credential: resp.credential,
               provider: "google",
               gender: gender || null
             });
@@ -3789,8 +3790,21 @@
     tryInit();
   }
 
+  async function loadPublicConfig() {
+    try {
+      const r = await fetch("/api/config", { headers: { Accept: "application/json" } });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j && j.googleClientId) {
+        GOOGLE_CLIENT_ID = String(j.googleClientId).trim();
+        window.SPOKIY_CONFIG = Object.assign({}, window.SPOKIY_CONFIG || {}, { googleClientId: GOOGLE_CLIENT_ID });
+      }
+    } catch (e) { /* ignore */ }
+  }
+
   /* ===================== СТАРТ ===================== */
-  function boot() {
+  async function boot() {
+    await loadPublicConfig();
     initAuth();
     const profileBtn = $("#topbar-profile");
     if (profileBtn) profileBtn.onclick = () => go("profile");

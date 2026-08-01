@@ -140,11 +140,6 @@ create index if not exists idx_telegram_link_tokens_email on public.telegram_lin
 alter table public.telegram_users enable row level security;
 alter table public.telegram_link_tokens enable row level security;
 
-drop trigger if exists trg_telegram_users_touch on public.telegram_users;
-create trigger trg_telegram_users_touch
-  before insert or update on public.telegram_users
-  for each row execute function public.touch_updated_at();
-
 -- Автооновлення updated_at, якщо клієнт його не передав.
 create or replace function public.touch_updated_at()
 returns trigger language plpgsql as $$
@@ -155,6 +150,11 @@ begin
   return new;
 end;
 $$;
+
+drop trigger if exists trg_telegram_users_touch on public.telegram_users;
+create trigger trg_telegram_users_touch
+  before insert or update on public.telegram_users
+  for each row execute function public.touch_updated_at();
 
 drop trigger if exists trg_users_touch on public.users;
 create trigger trg_users_touch

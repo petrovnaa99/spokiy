@@ -50,6 +50,29 @@ function isExpired(iso) {
   return !iso || Date.parse(iso) < Date.now();
 }
 
+/**
+ * Перевірка Google ID token (GIS credential) через tokeninfo.
+ * @param {string} credential
+ * @returns {Promise<object|null>} payload з email, name, picture…
+ */
+async function verifyGoogleIdToken(credential) {
+  const token = String(credential || "").trim();
+  if (!token || token.length < 40) return null;
+  try {
+    const url = "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(token);
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (!data || !data.email) return null;
+    const expectedAud = String(process.env.GOOGLE_CLIENT_ID || "").trim();
+    if (expectedAud && data.aud !== expectedAud) return null;
+    if (String(data.email_verified) === "false") return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 function readJsonBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") {
@@ -150,6 +173,7 @@ module.exports = {
   sessionExpiry,
   codeExpiry,
   isExpired,
+  verifyGoogleIdToken,
   readJsonBody,
   bearerToken,
   devCodeHint,

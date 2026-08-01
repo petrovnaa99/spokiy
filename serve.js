@@ -18,6 +18,27 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
 
+/* Підхопити локальний .env (без залежностей) */
+(function loadDotEnv() {
+  try {
+    const envPath = path.join(__dirname, ".env");
+    if (!fs.existsSync(envPath)) return;
+    const lines = fs.readFileSync(envPath, "utf8").split(/\r?\n/);
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) continue;
+      const i = t.indexOf("=");
+      if (i < 1) continue;
+      const key = t.slice(0, i).trim();
+      let val = t.slice(i + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      if (key && process.env[key] == null) process.env[key] = val;
+    }
+  } catch { /* ignore */ }
+})();
+
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "127.0.0.1";
 const ROOT = __dirname;
@@ -79,6 +100,7 @@ const {
   sessionExpiry,
   codeExpiry,
   isExpired,
+  verifyGoogleIdToken,
   devCodeHint
 } = require("./api/_auth");
 
@@ -251,11 +273,27 @@ async function handleAuth(req, res, pathname) {
   }
 
   if (pathname === "/api/auth/oauth" && req.method === "POST") {
-    const email = normEmail(body.email);
-    const name = String(body.name || "").trim();
-    const gender = body.gender;
-    const picture = body.picture;
-    if (!email || body.provider !== "google") return sendJSON(res, 400, { ok: false, error: "bad_request" });
+    if (body.provider !== "google") return sendJSON(res, 400, { ok: false, error: "bad_request" });
+    let email = null;
+    let name = "";
+    let picture = null;
+    const gender = body.gender || null;
+
+    if (body.credential) {
+      const payload = await verifyGoogleIdToken(body.credential);
+      if (!payload) return sendJSON(res, 401, { ok: false, error: "invalid_google_token" });
+      email = normEmail(payload.email);
+      name = String(payload.name || (payload.email || "").split("@")[0] || "").trim();
+      picture = payload.picture || null;
+    } else if (process.env.ALLOW_LEGACY_OAUTH === "1") {
+      email = normEmail(body.email);
+      name = String(body.name || "").trim();
+      picture = body.picture || null;
+    } else {
+      return sendJSON(res, 400, { ok: false, error: "credential_required" });
+    }
+
+    if (!email) return sendJSON(res, 400, { ok: false, error: "bad_request" });
     let cred = qCredGet.get(email);
     if (!cred) {
       const { salt, password_hash } = createPasswordRecord(createToken());
@@ -385,6 +423,13 @@ function assertSessionFromPath(req) {
 async function handleApi(req, res, pathname) {
   if (pathname === "/api/health") {
     return sendJSON(res, 200, { ok: true, time: new Date().toISOString() });
+  }
+
+  if (pathname === "/api/config" && req.method === "GET") {
+    return sendJSON(res, 200, {
+      ok: true,
+      googleClientId: process.env.GOOGLE_CLIENT_ID || ""
+    });
   }
 
   if (pathname.startsWith("/api/telegram/") || pathname === "/api/cron/rituals") {
