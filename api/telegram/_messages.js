@@ -22,6 +22,11 @@ function siteUrl() {
   return u.startsWith("http") ? u.replace(/\/$/, "") : `https://${u.replace(/\/$/, "")}`;
 }
 
+/** Банка Monobank / інше посилання на оплату. */
+function paymentUrl() {
+  return process.env.PAYMENT_URL || "https://send.monobank.ua/jar/5463k5JUAN";
+}
+
 function mainMenuKeyboard() {
   return {
     inline_keyboard: [
@@ -30,9 +35,19 @@ function mainMenuKeyboard() {
         { text: "😊 Як я зараз?", callback_data: "act:now" },
         { text: "🧘 Швидко заспокоїтися", callback_data: "act:calm" }
       ],
+      [{ text: "₴ Оплата та доступ", callback_data: "act:pay" }],
       [{ text: "⚙️ Налаштування", callback_data: "set:menu" }]
     ]
   };
+}
+
+function paymentKeyboard() {
+  const rows = [];
+  const pay = paymentUrl();
+  if (pay) rows.push([{ text: "💳 Перейти до оплати", url: pay }]);
+  rows.push([{ text: "ℹ️ Деталі на сайті", url: `${siteUrl()}/?route=payment` }]);
+  rows.push([{ text: "← Назад", callback_data: "menu:home" }]);
+  return { inline_keyboard: rows };
 }
 
 function moodRow(prefix) {
@@ -152,7 +167,15 @@ const TEXT = {
 
   alreadyLinkedOther: "Цей Telegram вже привʼязаний до іншого акаунта.",
 
-  openSiteBtn: "Відкрити сайт"
+  openSiteBtn: "Відкрити сайт",
+
+  paymentInfo: `₴ Оплата та доступ
+
+«Спокій» можна користуватися безкоштовно.
+
+Підтримка проєкту — добровільна: допомагає розвивати сервіс і не впливає на доступ до функцій.
+
+Оплата не обовʼязкова. Сервіс не замінює професійну психологічну чи медичну допомогу.`
 };
 
 module.exports = {
@@ -161,7 +184,9 @@ module.exports = {
   DAY_LABELS,
   TEXT,
   siteUrl,
+  paymentUrl,
   mainMenuKeyboard,
+  paymentKeyboard,
   moodRow,
   calmKeyboard,
   settingsMenu,

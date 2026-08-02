@@ -3,7 +3,7 @@
 const { sendMessage, answerCallback } = require("./_api");
 const { normalizeUserRow, mergeSettings, parseJson } = require("./_store");
 const {
-  TEXT, MOODS, siteUrl, mainMenuKeyboard, moodRow, calmKeyboard,
+  TEXT, MOODS, siteUrl, mainMenuKeyboard, paymentKeyboard, moodRow, calmKeyboard,
   settingsMenu, timePickKeyboard, timezoneKeyboard, daysToggleKeyboard
 } = require("./_messages");
 
@@ -146,6 +146,11 @@ async function handleCallback(store, cb) {
 
   if (data === "menu:home") {
     await sendMessage(chatId, "Головне меню 🌿", { replyMarkup: mainMenuKeyboard() });
+    return;
+  }
+
+  if (data === "act:pay") {
+    await sendMessage(chatId, TEXT.paymentInfo, { replyMarkup: paymentKeyboard() });
     return;
   }
 
