@@ -3879,6 +3879,7 @@
     }
     const r = p.get("route");
     if (r === "new") setTimeout(() => go("new"), 300);
+    if (r === "payment") setTimeout(() => go("payment"), 300);
     if (p.has("sos") || p.has("route")) {
       history.replaceState(null, "", location.pathname);
     }
