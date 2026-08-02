@@ -173,11 +173,25 @@ function createSupabaseStore() {
     },
 
     async syncRitualToUserData(email, dayKey, ritualType, data, opts = {}) {
-      const r = await sb("GET", `${USERS}?email=eq.${encodeURIComponent(email)}&select=data&limit=1`);
-      if (!r.ok || !r.json || !r.json[0]) return;
-      const state = parseJson(r.json[0].data, {});
+      const r = await sb("GET", `${USERS}?email=eq.${encodeURIComponent(email)}&select=data,profile&limit=1`);
+      if (!r.ok) throw new Error(`users get ${r.status}: ${r.text}`);
+      let state = (r.json && r.json[0] && parseJson(r.json[0].data, null)) || {};
+      if (!state || typeof state !== "object") state = {};
+      if (!state.profile) {
+        const cred = await sb("GET", `auth_credentials?email=eq.${encodeURIComponent(email)}&select=name,gender&limit=1`);
+        const c = cred.json && cred.json[0];
+        state.profile = {
+          email,
+          name: (c && c.name) || email.split("@")[0],
+          gender: (c && c.gender) || null,
+          provider: "email"
+        };
+      }
       if (!state.rituals) state.rituals = {};
       if (!state.rituals[dayKey]) state.rituals[dayKey] = {};
+      if (!Array.isArray(state.entries)) state.entries = [];
+      if (!state.wellbeing) state.wellbeing = {};
+      if (!state.checkins) state.checkins = {};
       const at = new Date().toISOString();
       state.rituals[dayKey][ritualType] = { ...data, at, source: "telegram" };
       applyWellbeingAndCheckin(state, dayKey, data, at);
@@ -186,15 +200,20 @@ function createSupabaseStore() {
       let diaryEntry = null;
       if (thought) {
         diaryEntry = buildTelegramDiaryEntry(thought, data, dayKey);
-        if (!Array.isArray(state.entries)) state.entries = [];
         state.entries.unshift(diaryEntry);
       }
 
       state.updatedAt = at;
-      await sb("PATCH", `${USERS}?email=eq.${encodeURIComponent(email)}`, {
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({ data: state, updated_at: state.updatedAt })
+      const up = await sb("POST", `${USERS}?on_conflict=email`, {
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({
+          email,
+          profile: state.profile || { email },
+          data: state,
+          updated_at: at
+        })
       });
+      if (!up.ok) throw new Error(`users upsert ${up.status}: ${up.text}`);
 
       if (diaryEntry) {
         const row = {
@@ -216,11 +235,13 @@ function createSupabaseStore() {
           created_at: diaryEntry.createdAt,
           updated_at: diaryEntry.updatedAt
         };
-        await sb("POST", "diary_entries", {
+        const ins = await sb("POST", "diary_entries", {
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify(row)
         });
+        if (!ins.ok) throw new Error(`diary_entries insert ${ins.status}: ${ins.text}`);
       }
+      return { ok: true, diaryId: diaryEntry ? diaryEntry.id : null };
     }
   };
 }
@@ -252,6 +273,10 @@ function createSqliteStore(db) {
   const qList = db.prepare("SELECT * FROM telegram_users");
   const qUserData = db.prepare("SELECT data FROM users WHERE email = ?");
   const qUserDataUp = db.prepare("UPDATE users SET data = ?, updated_at = ? WHERE email = ?");
+  const qUserUpsert = db.prepare(`
+    INSERT INTO users (email, data, updated_at) VALUES (?, ?, ?)
+    ON CONFLICT(email) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
+  `);
 
   return {
     backend: "sqlite",
@@ -331,11 +356,18 @@ function createSqliteStore(db) {
 
     async syncRitualToUserData(email, dayKey, ritualType, data, opts = {}) {
       const row = qUserData.get(email);
-      if (!row) return;
       let state = {};
-      try { state = JSON.parse(row.data || "{}"); } catch { state = {}; }
+      if (row) {
+        try { state = JSON.parse(row.data || "{}"); } catch { state = {}; }
+      }
+      if (!state.profile) {
+        state.profile = { email, name: email.split("@")[0], gender: null, provider: "email" };
+      }
       if (!state.rituals) state.rituals = {};
       if (!state.rituals[dayKey]) state.rituals[dayKey] = {};
+      if (!Array.isArray(state.entries)) state.entries = [];
+      if (!state.wellbeing) state.wellbeing = {};
+      if (!state.checkins) state.checkins = {};
       const at = new Date().toISOString();
       state.rituals[dayKey][ritualType] = { ...data, at, source: "telegram" };
       applyWellbeingAndCheckin(state, dayKey, data, at);
@@ -343,12 +375,12 @@ function createSqliteStore(db) {
       const thought = opts && opts.diaryThought ? String(opts.diaryThought).trim() : "";
       if (thought) {
         const diaryEntry = buildTelegramDiaryEntry(thought, data, dayKey);
-        if (!Array.isArray(state.entries)) state.entries = [];
         state.entries.unshift(diaryEntry);
       }
 
       state.updatedAt = at;
-      qUserDataUp.run(JSON.stringify(state), state.updatedAt, email);
+      qUserUpsert.run(email, JSON.stringify(state), state.updatedAt);
+      return { ok: true };
     }
   };
 }

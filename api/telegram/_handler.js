@@ -132,7 +132,11 @@ async function afterMoodAnswer(store, user, ritual, moodKey, chatId) {
     expiresAt: Date.now() + 15 * 60 * 1000
   };
   await saveUser(store, user.email, settings, bot_state);
-  await store.syncRitualToUserData(user.email, dayKey, ritual, log[ritual]);
+  try {
+    await store.syncRitualToUserData(user.email, dayKey, ritual, log[ritual]);
+  } catch (err) {
+    console.error("syncRitualToUserData mood failed", err && err.message ? err.message : err);
+  }
   await sendMessage(chatId, TEXT.askMoodNote, { replyMarkup: noteChoiceKeyboard() });
 }
 
@@ -176,9 +180,17 @@ async function applyMoodNote(store, user, chatId, noteText) {
   const moodKey = entry.mood || pending.moodKey;
   delete bot_state.pendingNote;
   await saveUser(store, user.email, settings, bot_state);
-  await store.syncRitualToUserData(user.email, pending.dayKey, ritual, entry, {
-    diaryThought: note || null
-  });
+  try {
+    await store.syncRitualToUserData(user.email, pending.dayKey, ritual, entry, {
+      diaryThought: note || null
+    });
+  } catch (err) {
+    console.error("syncRitualToUserData failed", err && err.message ? err.message : err);
+    await sendMessage(chatId, "Не вдалося зберегти на сайт. Спробуй ще раз за хвилину 🌿", {
+      replyMarkup: mainMenuKeyboard()
+    });
+    return true;
+  }
   await sendMessage(chatId, note ? TEXT.noteSaved : TEXT.noteSkipped);
   await finishMoodFlow(store, user, chatId, ritual, moodKey);
   return true;

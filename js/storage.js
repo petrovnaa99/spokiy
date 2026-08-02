@@ -262,20 +262,67 @@ window.Store = (function () {
     }
     if (!remote) { Cloud.push(currentEmail, state); return; }
     if (remote.profile && remote.profile.email && remote.profile.email !== currentEmail) return;
+
+    function mergeCloud(local, rem) {
+      const out = Object.assign({}, preferRemote ? rem : local, preferRemote ? local : rem);
+      out.profile = Object.assign({}, rem.profile || {}, local.profile || {}, { email: currentEmail });
+
+      const rituals = {};
+      const days = new Set([...Object.keys(rem.rituals || {}), ...Object.keys(local.rituals || {})]);
+      days.forEach((day) => {
+        rituals[day] = {};
+        const a = (local.rituals && local.rituals[day]) || {};
+        const b = (rem.rituals && rem.rituals[day]) || {};
+        new Set([...Object.keys(a), ...Object.keys(b)]).forEach((t) => {
+          const L = a[t], R = b[t];
+          if (!L) rituals[day][t] = R;
+          else if (!R) rituals[day][t] = L;
+          else rituals[day][t] = (Date.parse(R.at || 0) || 0) >= (Date.parse(L.at || 0) || 0) ? R : L;
+        });
+      });
+      out.rituals = rituals;
+
+      const byId = {};
+      [].concat(rem.entries || [], local.entries || []).forEach((e) => {
+        if (!e || !e.id) return;
+        const prev = byId[e.id];
+        if (!prev) byId[e.id] = e;
+        else {
+          const pt = Date.parse(prev.updatedAt || prev.createdAt || 0) || 0;
+          const et = Date.parse(e.updatedAt || e.createdAt || 0) || 0;
+          if (et >= pt) byId[e.id] = e;
+        }
+      });
+      out.entries = Object.values(byId).sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
+
+      out.wellbeing = Object.assign({}, rem.wellbeing || {}, local.wellbeing || {});
+      Object.keys(rem.wellbeing || {}).forEach((k) => {
+        const R = rem.wellbeing[k], L = out.wellbeing[k];
+        if (!L) out.wellbeing[k] = R;
+        else if (R && typeof R.level === "number" && (!(typeof L.level === "number") || R.level >= L.level)) {
+          out.wellbeing[k] = R;
+        }
+      });
+      out.checkins = Object.assign({}, rem.checkins || {}, local.checkins || {});
+
+      const localT = Date.parse(local.updatedAt || 0) || 0;
+      const remoteT = Date.parse(rem.updatedAt || 0) || 0;
+      out.updatedAt = new Date(Math.max(localT, remoteT, Date.now())).toISOString();
+      return out;
+    }
+
+    clearTimeout(pushTimer);
     const localT = Date.parse(state.updatedAt || 0) || 0;
     const remoteT = Date.parse(remote.updatedAt || 0) || 0;
-    if (preferRemote || remoteT > localT) {
-      clearTimeout(pushTimer);
-      state = remote;
-      if (!state.profile) state.profile = { email: currentEmail };
-      state.profile.email = currentEmail;
-      ensureRecoveryFields(state.profile);
-      ensureRecoveryAwards(state);
-      const all = db(); all[currentEmail] = state; saveDb(all);
-      try { window.dispatchEvent(new CustomEvent("spokiy:synced")); } catch (e) {}
-    } else if (localT > remoteT) {
-      Cloud.push(currentEmail, state);
-    }
+    state = mergeCloud(state, remote);
+    if (!state.profile) state.profile = { email: currentEmail };
+    state.profile.email = currentEmail;
+    ensureRecoveryFields(state.profile);
+    ensureRecoveryAwards(state);
+    const all = db(); all[currentEmail] = state; saveDb(all);
+    try { window.dispatchEvent(new CustomEvent("spokiy:synced")); } catch (e) {}
+    // Якщо локально були новіші зміни — відправити злитий стан
+    if (!preferRemote && localT >= remoteT) Cloud.push(currentEmail, state);
   }
 
   let currentEmail = localStorage.getItem(SESSION) || null;
