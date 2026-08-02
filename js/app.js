@@ -2939,28 +2939,26 @@
     const hasCategoryChart = enoughRecords && catData.reduce((sum, c) => sum + c[1], 0) >= 3;
 
     const metricsHTML = `
-        <div class="analytics-metrics-row analytics-span-12">
-          <div class="card analytics-card analytics-metric">
-            <div class="s-ico">🔥</div><div class="s-val">${streak}</div>
-            <div class="s-lbl">серія днів</div>
-            <div class="s-hint">поспіль з активністю</div>
-          </div>
-          <div class="card analytics-card analytics-metric">
-            <div class="s-ico">📝</div><div class="s-val">${activeDays}</div>
-            <div class="s-lbl">активних днів</div>
-            <div class="s-hint">запис, ритуал або Telegram</div>
-          </div>
-          <div class="card analytics-card analytics-metric">
-            <div class="s-ico">🛡️</div><div class="s-val">${S.state.evidence.length}</div>
-            <div class="s-lbl">страхів не справдилось</div>
-            <div class="s-hint">у банку доказів</div>
-          </div>
-          <button class="card analytics-card analytics-metric analytics-metric-click" id="metric-entries" type="button" title="Переглянути всі записи">
-            <div class="s-ico">📈</div><div class="s-val">${diaryCount}</div>
-            <div class="s-lbl">усього записів</div>
-            <div class="s-hint">натисни — переглянути</div>
-          </button>
-        </div>`;
+        <div class="card analytics-card analytics-metric analytics-span-3">
+          <div class="s-ico">🔥</div><div class="s-val">${streak}</div>
+          <div class="s-lbl">серія днів</div>
+          <div class="s-hint">поспіль з активністю</div>
+        </div>
+        <div class="card analytics-card analytics-metric analytics-span-3">
+          <div class="s-ico">📝</div><div class="s-val">${activeDays}</div>
+          <div class="s-lbl">активних днів</div>
+          <div class="s-hint">запис, ритуал або Telegram</div>
+        </div>
+        <div class="card analytics-card analytics-metric analytics-span-3">
+          <div class="s-ico">🛡️</div><div class="s-val">${S.state.evidence.length}</div>
+          <div class="s-lbl">страхів не справдилось</div>
+          <div class="s-hint">у банку доказів</div>
+        </div>
+        <button class="card analytics-card analytics-metric analytics-metric-click analytics-span-3" id="metric-entries" type="button" title="Переглянути всі записи">
+          <div class="s-ico">📈</div><div class="s-val">${diaryCount}</div>
+          <div class="s-lbl">усього записів</div>
+          <div class="s-hint">натисни — переглянути</div>
+        </button>`;
 
     let bodyHTML = window.Rituals ? Rituals.dynamicsSectionHTML() : "";
     bodyHTML += analyticsWeek7Card(week7);
