@@ -137,8 +137,24 @@ function createSupabaseStore() {
       const state = parseJson(r.json[0].data, {});
       if (!state.rituals) state.rituals = {};
       if (!state.rituals[dayKey]) state.rituals[dayKey] = {};
-      state.rituals[dayKey][ritualType] = { ...data, at: new Date().toISOString(), source: "telegram" };
-      state.updatedAt = new Date().toISOString();
+      const at = new Date().toISOString();
+      state.rituals[dayKey][ritualType] = { ...data, at, source: "telegram" };
+
+      // Підтягнути в загальну аналітику сайту: wellbeing + checkin
+      const moodVal = Number(data && data.value);
+      if (Number.isFinite(moodVal) && moodVal >= 1 && moodVal <= 5) {
+        if (!state.wellbeing) state.wellbeing = {};
+        const level = Math.max(1, Math.min(10, Math.round(moodVal * 2)));
+        const prev = state.wellbeing[dayKey];
+        // Не затираємо вищий денний рівень слабшим check-in
+        if (!prev || typeof prev.level !== "number" || level >= prev.level) {
+          state.wellbeing[dayKey] = { level, date: at, source: "telegram" };
+        }
+      }
+      if (!state.checkins) state.checkins = {};
+      state.checkins[dayKey] = true;
+
+      state.updatedAt = at;
       await sb("PATCH", `${USERS}?email=eq.${encodeURIComponent(email)}`, {
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ data: state, updated_at: state.updatedAt })
@@ -258,8 +274,22 @@ function createSqliteStore(db) {
       try { state = JSON.parse(row.data || "{}"); } catch { state = {}; }
       if (!state.rituals) state.rituals = {};
       if (!state.rituals[dayKey]) state.rituals[dayKey] = {};
-      state.rituals[dayKey][ritualType] = { ...data, at: new Date().toISOString(), source: "telegram" };
-      state.updatedAt = new Date().toISOString();
+      const at = new Date().toISOString();
+      state.rituals[dayKey][ritualType] = { ...data, at, source: "telegram" };
+
+      const moodVal = Number(data && data.value);
+      if (Number.isFinite(moodVal) && moodVal >= 1 && moodVal <= 5) {
+        if (!state.wellbeing) state.wellbeing = {};
+        const level = Math.max(1, Math.min(10, Math.round(moodVal * 2)));
+        const prev = state.wellbeing[dayKey];
+        if (!prev || typeof prev.level !== "number" || level >= prev.level) {
+          state.wellbeing[dayKey] = { level, date: at, source: "telegram" };
+        }
+      }
+      if (!state.checkins) state.checkins = {};
+      state.checkins[dayKey] = true;
+
+      state.updatedAt = at;
       qUserDataUp.run(JSON.stringify(state), state.updatedAt, email);
     }
   };

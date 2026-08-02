@@ -163,11 +163,21 @@ const TEXT = {
 
   calmIntro: "Ось кілька коротких кроків, які можуть допомогти прямо зараз:",
 
+  askMoodNote: `Можеш коротко описати свій стан одним-двома реченнями.
+
+Або натисни «Пропустити» — настрій уже збережено.`,
+
+  noteSaved: "Записала 🌿 Дякую, що ділишся.",
+
+  noteSkipped: "Добре. Настрій збережено ❤️",
+
   invalidLink: "Посилання застаріло або вже використане. Створи нове на сайті в розділі Профіль.",
 
   alreadyLinkedOther: "Цей Telegram вже привʼязаний до іншого акаунта.",
 
   openSiteBtn: "Відкрити сайт",
+
+  skipNoteBtn: "Пропустити",
 
   paymentInfo: `₴ Оплата та доступ
 
@@ -178,6 +188,12 @@ const TEXT = {
 Оплата не обовʼязкова. Сервіс не замінює професійну психологічну чи медичну допомогу.`
 };
 
+function noteSkipKeyboard() {
+  return {
+    inline_keyboard: [[{ text: TEXT.skipNoteBtn, callback_data: "note:skip" }]]
+  };
+}
+
 module.exports = {
   DEFAULT_SETTINGS,
   MOODS,
@@ -187,6 +203,7 @@ module.exports = {
   paymentUrl,
   mainMenuKeyboard,
   paymentKeyboard,
+  noteSkipKeyboard,
   moodRow,
   calmKeyboard,
   settingsMenu,

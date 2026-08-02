@@ -437,6 +437,10 @@ window.Rituals = (function () {
   }
 
   function moodValue(moodId, morning) {
+    if (moodId == null) return null;
+    // Сумісність із Telegram: great/ok/anxious/hard + числове value
+    const tgMap = { great: 5, very_good: 5, good: 4, ok: 3, anxious: 2, hard: 1 };
+    if (Object.prototype.hasOwnProperty.call(tgMap, moodId)) return tgMap[moodId];
     const list = morning ? MORNING_MOODS : DAY_MOODS;
     const m = list.find((x) => x.id === moodId);
     return m ? m.value : null;
@@ -449,19 +453,21 @@ window.Rituals = (function () {
     const moods = [];
     const worries = [];
     const helped = [];
+    const notes = [];
     const byWeekday = [0, 0, 0, 0, 0, 0, 0];
     const weekdayCount = [0, 0, 0, 0, 0, 0, 0];
 
     keys.forEach((k) => {
       const day = rituals[k];
-      ["morning", "midday", "evening"].forEach((type) => {
+      ["morning", "midday", "evening", "now"].forEach((type) => {
         const r = day[type];
-        if (!r || !r.mood) return;
-        const v = moodValue(r.mood, type === "morning");
-        if (v != null) moods.push({ key: k, type, value: v });
-        if (type === "morning" && r.mood === "anxious" || r.mood === "hard") {
-          const wd = new Date(k).getDay();
-          byWeekday[wd] += r.mood === "hard" ? 2 : 1;
+        if (!r || (!r.mood && r.value == null)) return;
+        const v = r.value != null ? Number(r.value) : moodValue(r.mood, type === "morning");
+        if (v != null && !Number.isNaN(v)) moods.push({ key: k, type, value: v, note: r.note || "", source: r.source || "site" });
+        if (r.note) notes.push({ key: k, type, note: r.note, mood: r.mood, value: v, source: r.source || "site" });
+        if ((r.mood === "anxious" || r.mood === "hard") || (v != null && v <= 2)) {
+          const wd = new Date(k + "T12:00:00").getDay();
+          byWeekday[wd] += (r.mood === "hard" || v === 1) ? 2 : 1;
           weekdayCount[wd]++;
         }
       });
@@ -483,7 +489,7 @@ window.Rituals = (function () {
       score: weekdayCount[i] ? +(byWeekday[i] / weekdayCount[i]).toFixed(1) : 0
     })).sort((a, b) => b.score - a.score);
 
-    return { keys, moods, avgMood, avgAnxiety, topWorries, topHelped, worstDays };
+    return { keys, moods, notes: notes.slice(-12).reverse(), avgMood, avgAnxiety, topWorries, topHelped, worstDays };
   }
 
   function topMap(arr, n) {
@@ -638,6 +644,14 @@ window.Rituals = (function () {
       ? a.topHelped.map(([w, c]) => `<div class="analytics-row"><span>${deps.esc(w)}</span><span class="faint">${c} ${deps.pluralUk(c, "раз", "рази", "разів")}</span></div>`).join("")
       : `<p class="analytics-none">Заповнюй вечірній ритуал</p>`;
 
+    const typeLabel = { morning: "ранок", midday: "день", evening: "вечір", now: "зараз" };
+    const notesList = a.notes && a.notes.length
+      ? a.notes.map((n) => {
+          const src = n.source === "telegram" ? " · Telegram" : "";
+          return `<div class="analytics-row analytics-note"><span><b>${deps.esc(n.key)}</b> · ${deps.esc(typeLabel[n.type] || n.type)}${src}<br>${deps.esc(n.note)}</span></div>`;
+        }).join("")
+      : `<p class="analytics-none">Описи з бота або ритуалів з’являться тут</p>`;
+
     const wd = a.worstDays.filter((x) => x.score > 0).slice(0, 3);
     const wdText = wd.length
       ? wd.map((x) => `${x.label} (${x.score})`).join(", ")
@@ -664,6 +678,9 @@ window.Rituals = (function () {
       </div>
       <div class="card analytics-card analytics-list analytics-span-6">
         <div class="card-title">Що допомагає найчастіше</div>${helpList}
+      </div>
+      <div class="card analytics-card analytics-list analytics-span-12">
+        <div class="card-title">Описи настрою</div>${notesList}
       </div>
       <div class="card analytics-card analytics-span-12">
         <div class="card-title">Дні тижня, коли напруга найвища</div>

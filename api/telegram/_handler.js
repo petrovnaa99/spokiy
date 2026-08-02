@@ -3,7 +3,7 @@
 const { sendMessage, answerCallback } = require("./_api");
 const { normalizeUserRow, mergeSettings, parseJson } = require("./_store");
 const {
-  TEXT, MOODS, siteUrl, mainMenuKeyboard, paymentKeyboard, moodRow, calmKeyboard,
+  TEXT, MOODS, siteUrl, mainMenuKeyboard, paymentKeyboard, noteSkipKeyboard, moodRow, calmKeyboard,
   settingsMenu, timePickKeyboard, timezoneKeyboard, daysToggleKeyboard
 } = require("./_messages");
 
@@ -115,10 +115,24 @@ async function afterMoodAnswer(store, user, ritual, moodKey, chatId) {
   const dayKey = todayKeyInTz(settings.timezone);
   const log = getDayLog(bot_state, dayKey);
   if (ritual === "morning") bot_state.lastMorningAt = new Date().toISOString();
-  log[ritual] = { ...(log[ritual] || {}), mood: moodKey, value: mood.value, at: new Date().toISOString() };
+  log[ritual] = {
+    ...(log[ritual] || {}),
+    mood: moodKey,
+    value: mood.value,
+    label: mood.label,
+    at: new Date().toISOString()
+  };
+  bot_state.pendingNote = {
+    ritual,
+    dayKey,
+    expiresAt: Date.now() + 15 * 60 * 1000
+  };
   await saveUser(store, user.email, settings, bot_state);
   await store.syncRitualToUserData(user.email, dayKey, ritual, log[ritual]);
+  await sendMessage(chatId, TEXT.askMoodNote, { replyMarkup: noteSkipKeyboard() });
+}
 
+async function finishMoodFlow(store, user, chatId, ritual, moodKey) {
   if (ritual === "morning") {
     await sendMessage(chatId, TEXT.morningThanks, {
       replyMarkup: {
@@ -131,11 +145,37 @@ async function afterMoodAnswer(store, user, ritual, moodKey, chatId) {
     await sendMessage(chatId, TEXT.eveningThanks, { replyMarkup: mainMenuKeyboard() });
     return;
   }
-  if (ritual === "midday" && (moodKey === "anxious" || moodKey === "hard")) {
+  if ((ritual === "midday" || ritual === "now") && (moodKey === "anxious" || moodKey === "hard")) {
     await sendMessage(chatId, TEXT.calmIntro, { replyMarkup: calmKeyboard() });
     return;
   }
   await sendMessage(chatId, "Дякую ❤️", { replyMarkup: mainMenuKeyboard() });
+}
+
+async function applyMoodNote(store, user, chatId, noteText) {
+  const settings = user.settings;
+  const bot_state = user.bot_state;
+  const pending = bot_state.pendingNote;
+  if (!pending || !pending.ritual || !pending.dayKey) return false;
+  if (pending.expiresAt && Date.now() > pending.expiresAt) {
+    delete bot_state.pendingNote;
+    await saveUser(store, user.email, settings, bot_state);
+    return false;
+  }
+  const log = getDayLog(bot_state, pending.dayKey);
+  const ritual = pending.ritual;
+  const entry = { ...(log[ritual] || {}) };
+  const note = String(noteText || "").trim().slice(0, 500);
+  if (note) entry.note = note;
+  entry.at = new Date().toISOString();
+  log[ritual] = entry;
+  const moodKey = entry.mood;
+  delete bot_state.pendingNote;
+  await saveUser(store, user.email, settings, bot_state);
+  await store.syncRitualToUserData(user.email, pending.dayKey, ritual, entry);
+  await sendMessage(chatId, note ? TEXT.noteSaved : TEXT.noteSkipped);
+  await finishMoodFlow(store, user, chatId, ritual, moodKey);
+  return true;
 }
 
 async function handleCallback(store, cb) {
@@ -159,6 +199,11 @@ async function handleCallback(store, cb) {
 
   const settings = user.settings;
   let bot_state = user.bot_state;
+
+  if (data === "note:skip") {
+    await applyMoodNote(store, user, chatId, "");
+    return;
+  }
 
   if (data === "act:now") {
     await sendMessage(chatId, "Як ти зараз?", {
@@ -262,16 +307,6 @@ async function handleCallback(store, cb) {
     const ritual = { mrn: "morning", mid: "midday", eve: "evening", now: "now" }[moodMatch[1]];
     const moodKey = moodMatch[2];
     if (!MOODS[moodKey]) return;
-    if (ritual === "now") {
-      if (moodKey === "anxious" || moodKey === "hard") {
-        await sendMessage(chatId, TEXT.calmIntro, { replyMarkup: calmKeyboard() });
-      } else {
-        await sendMessage(chatId, "Дякую ❤️ Гарно, що ти зупинилася й перевірила стан.", {
-          replyMarkup: mainMenuKeyboard()
-        });
-      }
-      return;
-    }
     await afterMoodAnswer(store, user, ritual, moodKey, chatId);
   }
 }
@@ -295,14 +330,25 @@ async function handleMessage(store, msg) {
     return;
   }
 
+  const user = await store.getByTelegramId(telegramId);
+  if (user && user.bot_state && user.bot_state.pendingNote && text && !text.startsWith("/")) {
+    await applyMoodNote(store, user, chatId, text);
+    return;
+  }
+
   if (text === "/settings" || text === "⚙️ Налаштування") {
-    const user = await requireLinked(store, chatId, telegramId);
-    if (!user) return;
-    await sendMessage(chatId, "Налаштування нагадувань", { replyMarkup: settingsMenu(user.settings) });
+    const linked = await requireLinked(store, chatId, telegramId);
+    if (!linked) return;
+    await sendMessage(chatId, "Налаштування нагадувань", { replyMarkup: settingsMenu(linked.settings) });
     return;
   }
 
   if (text.startsWith("/")) {
+    await sendMessage(chatId, "Обери дію на клавіатурі нижче 🌿", { replyMarkup: mainMenuKeyboard() });
+    return;
+  }
+
+  if (user) {
     await sendMessage(chatId, "Обери дію на клавіатурі нижче 🌿", { replyMarkup: mainMenuKeyboard() });
   }
 }
