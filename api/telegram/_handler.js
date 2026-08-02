@@ -3,7 +3,7 @@
 const { sendMessage, answerCallback } = require("./_api");
 const { normalizeUserRow, mergeSettings, parseJson } = require("./_store");
 const {
-  TEXT, MOODS, siteUrl, mainMenuKeyboard, paymentKeyboard, noteSkipKeyboard, moodRow, calmKeyboard,
+  TEXT, MOODS, siteUrl, mainMenuKeyboard, paymentKeyboard, noteChoiceKeyboard, moodRow, calmKeyboard,
   settingsMenu, timePickKeyboard, timezoneKeyboard, daysToggleKeyboard
 } = require("./_messages");
 
@@ -122,14 +122,18 @@ async function afterMoodAnswer(store, user, ritual, moodKey, chatId) {
     label: mood.label,
     at: new Date().toISOString()
   };
+  // Чекаємо вибору: записати думки / пропустити (текст ще не приймаємо)
   bot_state.pendingNote = {
     ritual,
     dayKey,
+    moodKey,
+    value: mood.value,
+    awaitingText: false,
     expiresAt: Date.now() + 15 * 60 * 1000
   };
   await saveUser(store, user.email, settings, bot_state);
   await store.syncRitualToUserData(user.email, dayKey, ritual, log[ritual]);
-  await sendMessage(chatId, TEXT.askMoodNote, { replyMarkup: noteSkipKeyboard() });
+  await sendMessage(chatId, TEXT.askMoodNote, { replyMarkup: noteChoiceKeyboard() });
 }
 
 async function finishMoodFlow(store, user, chatId, ritual, moodKey) {
@@ -165,14 +169,16 @@ async function applyMoodNote(store, user, chatId, noteText) {
   const log = getDayLog(bot_state, pending.dayKey);
   const ritual = pending.ritual;
   const entry = { ...(log[ritual] || {}) };
-  const note = String(noteText || "").trim().slice(0, 500);
+  const note = String(noteText || "").trim().slice(0, 800);
   if (note) entry.note = note;
   entry.at = new Date().toISOString();
   log[ritual] = entry;
-  const moodKey = entry.mood;
+  const moodKey = entry.mood || pending.moodKey;
   delete bot_state.pendingNote;
   await saveUser(store, user.email, settings, bot_state);
-  await store.syncRitualToUserData(user.email, pending.dayKey, ritual, entry);
+  await store.syncRitualToUserData(user.email, pending.dayKey, ritual, entry, {
+    diaryThought: note || null
+  });
   await sendMessage(chatId, note ? TEXT.noteSaved : TEXT.noteSkipped);
   await finishMoodFlow(store, user, chatId, ritual, moodKey);
   return true;
@@ -202,6 +208,22 @@ async function handleCallback(store, cb) {
 
   if (data === "note:skip") {
     await applyMoodNote(store, user, chatId, "");
+    return;
+  }
+
+  if (data === "note:write") {
+    const pending = bot_state.pendingNote;
+    if (!pending) {
+      await sendMessage(chatId, "Спочатку обери настрій 🌿", { replyMarkup: mainMenuKeyboard() });
+      return;
+    }
+    bot_state.pendingNote = {
+      ...pending,
+      awaitingText: true,
+      expiresAt: Date.now() + 15 * 60 * 1000
+    };
+    await saveUser(store, user.email, settings, bot_state);
+    await sendMessage(chatId, TEXT.askMoodNotePrompt);
     return;
   }
 
@@ -331,8 +353,9 @@ async function handleMessage(store, msg) {
   }
 
   const user = await store.getByTelegramId(telegramId);
-  if (user && user.bot_state && user.bot_state.pendingNote && text && !text.startsWith("/")) {
-    await applyMoodNote(store, user, chatId, text);
+  const pending = user && user.bot_state && user.bot_state.pendingNote;
+  if (pending && pending.awaitingText && text && !text.startsWith("/")) {
+    await applyMoodNote(store, normalizeUserRow(user) || user, chatId, text);
     return;
   }
 

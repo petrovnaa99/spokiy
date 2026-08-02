@@ -163,11 +163,13 @@ const TEXT = {
 
   calmIntro: "Ось кілька коротких кроків, які можуть допомогти прямо зараз:",
 
-  askMoodNote: `Можеш коротко описати свій стан одним-двома реченнями.
+  askMoodNote: `Настрій збережено.
 
-Або натисни «Пропустити» — настрій уже збережено.`,
+Хочеш коротко записати думки? Вони потраплять у аналітику на сайті.`,
 
-  noteSaved: "Записала 🌿 Дякую, що ділишся.",
+  askMoodNotePrompt: `Напиши свої думки одним-двома реченнями ✍️`,
+
+  noteSaved: "Думки збережено 🌿 Вони вже в аналітиці на сайті.",
 
   noteSkipped: "Добре. Настрій збережено ❤️",
 
@@ -176,6 +178,8 @@ const TEXT = {
   alreadyLinkedOther: "Цей Telegram вже привʼязаний до іншого акаунта.",
 
   openSiteBtn: "Відкрити сайт",
+
+  writeThoughtsBtn: "Записати думки",
 
   skipNoteBtn: "Пропустити",
 
@@ -188,10 +192,17 @@ const TEXT = {
 Оплата не обовʼязкова. Сервіс не замінює професійну психологічну чи медичну допомогу.`
 };
 
-function noteSkipKeyboard() {
+function noteChoiceKeyboard() {
   return {
-    inline_keyboard: [[{ text: TEXT.skipNoteBtn, callback_data: "note:skip" }]]
+    inline_keyboard: [[
+      { text: TEXT.writeThoughtsBtn, callback_data: "note:write" },
+      { text: TEXT.skipNoteBtn, callback_data: "note:skip" }
+    ]]
   };
+}
+
+function noteSkipKeyboard() {
+  return noteChoiceKeyboard();
 }
 
 module.exports = {
@@ -203,6 +214,7 @@ module.exports = {
   paymentUrl,
   mainMenuKeyboard,
   paymentKeyboard,
+  noteChoiceKeyboard,
   noteSkipKeyboard,
   moodRow,
   calmKeyboard,

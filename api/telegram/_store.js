@@ -26,6 +26,47 @@ function parseJson(val, fallback) {
   try { return JSON.parse(val); } catch { return fallback; }
 }
 
+function buildTelegramDiaryEntry(thought, data, dayKey) {
+  const at = new Date().toISOString();
+  const moodVal = Number(data && data.value);
+  const mood = Number.isFinite(moodVal) ? moodVal : 0;
+  const anxiety = Number.isFinite(moodVal) ? Math.max(1, Math.min(10, 11 - moodVal * 2)) : 5;
+  return {
+    id: "tg" + Date.now() + Math.random().toString(36).slice(2, 6),
+    type: "diary",
+    fear: String(thought).trim().slice(0, 800),
+    cause: "",
+    trigger: "",
+    category: "",
+    thought: "",
+    situation: "",
+    anxiety,
+    mood,
+    energy: 0,
+    helped: [],
+    reviewed: false,
+    openDate: null,
+    source: "telegram",
+    dayKey,
+    createdAt: at,
+    updatedAt: at
+  };
+}
+
+function applyWellbeingAndCheckin(state, dayKey, data, at) {
+  const moodVal = Number(data && data.value);
+  if (Number.isFinite(moodVal) && moodVal >= 1 && moodVal <= 5) {
+    if (!state.wellbeing) state.wellbeing = {};
+    const level = Math.max(1, Math.min(10, Math.round(moodVal * 2)));
+    const prev = state.wellbeing[dayKey];
+    if (!prev || typeof prev.level !== "number" || level >= prev.level) {
+      state.wellbeing[dayKey] = { level, date: at, source: "telegram" };
+    }
+  }
+  if (!state.checkins) state.checkins = {};
+  state.checkins[dayKey] = true;
+}
+
 /* ---------- Supabase backend ---------- */
 function createSupabaseStore() {
   async function sb(method, path, opts = {}) {
@@ -131,7 +172,7 @@ function createSupabaseStore() {
       return r.json || [];
     },
 
-    async syncRitualToUserData(email, dayKey, ritualType, data) {
+    async syncRitualToUserData(email, dayKey, ritualType, data, opts = {}) {
       const r = await sb("GET", `${USERS}?email=eq.${encodeURIComponent(email)}&select=data&limit=1`);
       if (!r.ok || !r.json || !r.json[0]) return;
       const state = parseJson(r.json[0].data, {});
@@ -139,26 +180,47 @@ function createSupabaseStore() {
       if (!state.rituals[dayKey]) state.rituals[dayKey] = {};
       const at = new Date().toISOString();
       state.rituals[dayKey][ritualType] = { ...data, at, source: "telegram" };
+      applyWellbeingAndCheckin(state, dayKey, data, at);
 
-      // Підтягнути в загальну аналітику сайту: wellbeing + checkin
-      const moodVal = Number(data && data.value);
-      if (Number.isFinite(moodVal) && moodVal >= 1 && moodVal <= 5) {
-        if (!state.wellbeing) state.wellbeing = {};
-        const level = Math.max(1, Math.min(10, Math.round(moodVal * 2)));
-        const prev = state.wellbeing[dayKey];
-        // Не затираємо вищий денний рівень слабшим check-in
-        if (!prev || typeof prev.level !== "number" || level >= prev.level) {
-          state.wellbeing[dayKey] = { level, date: at, source: "telegram" };
-        }
+      const thought = opts && opts.diaryThought ? String(opts.diaryThought).trim() : "";
+      let diaryEntry = null;
+      if (thought) {
+        diaryEntry = buildTelegramDiaryEntry(thought, data, dayKey);
+        if (!Array.isArray(state.entries)) state.entries = [];
+        state.entries.unshift(diaryEntry);
       }
-      if (!state.checkins) state.checkins = {};
-      state.checkins[dayKey] = true;
 
       state.updatedAt = at;
       await sb("PATCH", `${USERS}?email=eq.${encodeURIComponent(email)}`, {
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ data: state, updated_at: state.updatedAt })
       });
+
+      if (diaryEntry) {
+        const row = {
+          id: diaryEntry.id,
+          user_email: email,
+          type: "diary",
+          fear: diaryEntry.fear,
+          thought: null,
+          situation: null,
+          category: null,
+          cause: null,
+          trigger: null,
+          anxiety: diaryEntry.anxiety,
+          mood: diaryEntry.mood,
+          energy: null,
+          support_methods: null,
+          review: null,
+          payload: diaryEntry,
+          created_at: diaryEntry.createdAt,
+          updated_at: diaryEntry.updatedAt
+        };
+        await sb("POST", "diary_entries", {
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify(row)
+        });
+      }
     }
   };
 }
@@ -267,7 +329,7 @@ function createSqliteStore(db) {
       return qList.all();
     },
 
-    async syncRitualToUserData(email, dayKey, ritualType, data) {
+    async syncRitualToUserData(email, dayKey, ritualType, data, opts = {}) {
       const row = qUserData.get(email);
       if (!row) return;
       let state = {};
@@ -276,18 +338,14 @@ function createSqliteStore(db) {
       if (!state.rituals[dayKey]) state.rituals[dayKey] = {};
       const at = new Date().toISOString();
       state.rituals[dayKey][ritualType] = { ...data, at, source: "telegram" };
+      applyWellbeingAndCheckin(state, dayKey, data, at);
 
-      const moodVal = Number(data && data.value);
-      if (Number.isFinite(moodVal) && moodVal >= 1 && moodVal <= 5) {
-        if (!state.wellbeing) state.wellbeing = {};
-        const level = Math.max(1, Math.min(10, Math.round(moodVal * 2)));
-        const prev = state.wellbeing[dayKey];
-        if (!prev || typeof prev.level !== "number" || level >= prev.level) {
-          state.wellbeing[dayKey] = { level, date: at, source: "telegram" };
-        }
+      const thought = opts && opts.diaryThought ? String(opts.diaryThought).trim() : "";
+      if (thought) {
+        const diaryEntry = buildTelegramDiaryEntry(thought, data, dayKey);
+        if (!Array.isArray(state.entries)) state.entries = [];
+        state.entries.unshift(diaryEntry);
       }
-      if (!state.checkins) state.checkins = {};
-      state.checkins[dayKey] = true;
 
       state.updatedAt = at;
       qUserDataUp.run(JSON.stringify(state), state.updatedAt, email);
