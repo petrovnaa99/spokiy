@@ -410,9 +410,11 @@ window.Rituals = (function () {
     const keys = new Set();
     Object.keys(S().rituals || {}).forEach((k) => {
       const day = S().rituals[k];
-      if (day && (day.morning || day.midday || day.evening)) keys.add(k);
+      if (day && (day.morning || day.midday || day.evening || day.now)) keys.add(k);
     });
     Object.keys(S().checkins || {}).forEach((k) => keys.add(k));
+    const wb = S().wellbeing;
+    if (wb && !Array.isArray(wb)) Object.keys(wb).forEach((k) => keys.add(k));
     return [...keys].sort();
   }
 
@@ -658,20 +660,22 @@ window.Rituals = (function () {
       : "поки замало даних";
 
     return `
-      <div class="card analytics-card analytics-metric analytics-span-4">
+      <div class="analytics-metrics-row analytics-metrics-row-3 analytics-span-12">
+      <div class="card analytics-card analytics-metric">
         <div class="s-ico">∿</div><div class="s-val">${a.avgAnxiety != null ? a.avgAnxiety : "—"}</div>
         <div class="s-lbl">середній рівень напруги</div>
-        <div class="s-hint">за ритуалами (1–10)</div>
+        <div class="s-hint">сайт і Telegram (1–10)</div>
       </div>
-      <div class="card analytics-card analytics-metric analytics-span-4">
+      <div class="card analytics-card analytics-metric">
         <div class="s-ico">😊</div><div class="s-val">${a.avgMood != null ? a.avgMood : "—"}</div>
         <div class="s-lbl">настрій</div>
         <div class="s-hint">середнє за відповідями</div>
       </div>
-      <div class="card analytics-card analytics-metric analytics-span-4">
+      <div class="card analytics-card analytics-metric">
         <div class="s-ico">🌿</div><div class="s-val">${computeCareDays()}</div>
         <div class="s-lbl">днів турботи</div>
         <div class="s-hint">${deps.esc(careMessage())}</div>
+      </div>
       </div>
       <div class="card analytics-card analytics-list analytics-span-6">
         <div class="card-title">Найчастіші причини тривоги</div>${worryList}

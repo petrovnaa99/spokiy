@@ -577,12 +577,16 @@
       r = "recoverySelect";
       param = null;
     }
+    const prevRoute = route;
     route = r; routeParam = param;
     const title = ROUTE_TITLES[r] || NAV.find(n => n.id === r)?.label || "Спокій";
     $("#topbar-title").textContent = uiText(genderize(title));
     syncRecoveryGateChrome();
     renderNav();
     render();
+    if (r === "analytics" && prevRoute !== "analytics" && S.refreshFromCloud) {
+      S.refreshFromCloud(true).catch(() => {});
+    }
     $("#view").scrollTo?.(0, 0);
     window.scrollTo(0, 0);
   }
@@ -594,16 +598,46 @@
     return new Date(iso).toISOString().slice(0, 10);
   }
 
-  /** Унікальні дні з активністю: запис, оцінка стану або legacy check-in */
+  /** Унікальні дні з активністю: запис, оцінка стану, ритуал (сайт/Telegram) або check-in */
   function activityDayKeys() {
     const keys = new Set();
     S.state.entries.forEach(e => {
       if (e.createdAt) keys.add(dayKeyFromIso(e.createdAt));
+      if (e.dayKey) keys.add(String(e.dayKey).slice(0, 10));
     });
     const wb = S.state.wellbeing;
     if (wb && !Array.isArray(wb)) Object.keys(wb).forEach(k => keys.add(k));
     Object.keys(S.state.checkins || {}).forEach(k => keys.add(k));
+    const rituals = S.state.rituals || {};
+    Object.keys(rituals).forEach((k) => {
+      const day = rituals[k];
+      if (day && (day.morning || day.midday || day.evening || day.now)) keys.add(k);
+    });
     return [...keys].sort();
+  }
+
+  /** Рівень напруги 1–10 з ритуалу/Telegram (value 1–5 або mood id). */
+  function ritualTensionLevel(ritual) {
+    if (!ritual) return null;
+    let v = ritual.value != null ? Number(ritual.value) : null;
+    if (v == null || Number.isNaN(v)) {
+      const map = { great: 5, very_good: 5, good: 4, ok: 3, anxious: 2, hard: 1 };
+      if (ritual.mood && Object.prototype.hasOwnProperty.call(map, ritual.mood)) v = map[ritual.mood];
+    }
+    if (v == null || Number.isNaN(v)) return null;
+    return Math.max(1, Math.min(10, Math.round(11 - v * 2)));
+  }
+
+  function ritualDayTension(dayKey) {
+    const day = (S.state.rituals || {})[dayKey];
+    if (!day) return null;
+    let best = null;
+    ["morning", "midday", "evening", "now"].forEach((type) => {
+      const level = ritualTensionLevel(day[type]);
+      if (level == null) return;
+      best = best == null ? level : Math.max(best, level);
+    });
+    return best;
   }
 
   function computeStreak() {
@@ -626,7 +660,7 @@
     const anxietyByDay = {};
     S.state.entries.forEach(e => {
       if (typeof e.anxiety !== "number") return;
-      const k = dayKeyFromIso(e.createdAt);
+      const k = e.dayKey ? String(e.dayKey).slice(0, 10) : dayKeyFromIso(e.createdAt);
       anxietyByDay[k] = Math.max(anxietyByDay[k] || 0, e.anxiety);
     });
     const wb = S.state.wellbeing && !Array.isArray(S.state.wellbeing) ? S.state.wellbeing : {};
@@ -637,7 +671,9 @@
       d.setHours(12, 0, 0, 0);
       d.setDate(d.getDate() - i);
       const k = d.toISOString().slice(0, 10);
-      const level = anxietyByDay[k] ?? (wb[k] ? wb[k].level : null);
+      const level = anxietyByDay[k]
+        ?? (wb[k] && typeof wb[k].level === "number" ? wb[k].level : null)
+        ?? ritualDayTension(k);
       out.push({ key: k, level, label: wd[d.getDay()] });
     }
     return out;
@@ -2831,7 +2867,6 @@
     const streak = computeStreak();
     const activeDays = filledDays();
     const diaryCount = totalDiaryEntries();
-    const enoughRecords = diaryCount >= 3;
     const week7 = last7DayLevels();
 
     const causes = topCounts(entries.map(e => e.cause), 3);
@@ -2856,47 +2891,76 @@
     const anxietyEntries = entries.filter(e => typeof e.anxiety === "number");
     const byDay = {};
     anxietyEntries.forEach(e => {
-      const k = new Date(e.createdAt).toISOString().slice(0, 10);
+      const k = e.dayKey ? String(e.dayKey).slice(0, 10) : new Date(e.createdAt).toISOString().slice(0, 10);
       byDay[k] = byDay[k] ? Math.max(byDay[k], e.anxiety) : e.anxiety;
+    });
+    // Підтягнути відмітки Telegram / ритуалів у графік тривоги
+    Object.keys(S.state.rituals || {}).forEach((k) => {
+      const level = ritualDayTension(k);
+      if (level == null) return;
+      byDay[k] = byDay[k] != null ? Math.max(byDay[k], level) : level;
+    });
+    const wbAll = S.state.wellbeing && !Array.isArray(S.state.wellbeing) ? S.state.wellbeing : {};
+    Object.keys(wbAll).forEach((k) => {
+      if (typeof wbAll[k].level !== "number") return;
+      byDay[k] = byDay[k] != null ? Math.max(byDay[k], wbAll[k].level) : wbAll[k].level;
     });
     const dayKeys = Object.keys(byDay).sort().slice(-21);
     const moodMap = {}, energyMap = {};
     entries.forEach(e => {
-      const k = new Date(e.createdAt).toISOString().slice(0, 10);
+      const k = e.dayKey ? String(e.dayKey).slice(0, 10) : new Date(e.createdAt).toISOString().slice(0, 10);
       if (e.mood) moodMap[k] = e.mood;
       if (e.energy) energyMap[k] = e.energy;
     });
+    Object.keys(S.state.rituals || {}).forEach((k) => {
+      const day = S.state.rituals[k];
+      ["morning", "midday", "evening", "now"].forEach((type) => {
+        const r = day && day[type];
+        if (!r) return;
+        const v = r.value != null ? Number(r.value) : null;
+        if (v != null && !Number.isNaN(v)) moodMap[k] = v;
+      });
+    });
     const moodDays = Object.keys({ ...moodMap, ...energyMap }).sort().slice(-21);
     const byWeek = {};
-    anxietyEntries.forEach(e => { const k = weekKey(e.createdAt); (byWeek[k] = byWeek[k] || []).push(e.anxiety); });
+    Object.keys(byDay).forEach((k) => {
+      const wk = weekKey(k + "T12:00:00");
+      (byWeek[wk] = byWeek[wk] || []).push(byDay[k]);
+    });
     const weekKeys = Object.keys(byWeek).sort().slice(-8);
     const catData = topCounts(entries.map(e => e.category), 6);
-    const hasAnxietyChart = enoughRecords && anxietyEntries.length >= 3 && dayKeys.length >= 2;
+    const ritualMoodCount = window.Rituals && Rituals.analyticsData
+      ? Rituals.analyticsData().moods.length
+      : 0;
+    const enoughRecords = diaryCount >= 3 || ritualMoodCount >= 2 || dayKeys.length >= 2;
+    const hasAnxietyChart = enoughRecords && dayKeys.length >= 2;
     const hasMoodChart = enoughRecords && moodDays.length >= 2;
-    const hasWeekChart = enoughRecords && anxietyEntries.length >= 3 && weekKeys.length >= 1;
+    const hasWeekChart = enoughRecords && weekKeys.length >= 1 && dayKeys.length >= 2;
     const hasCategoryChart = enoughRecords && catData.reduce((sum, c) => sum + c[1], 0) >= 3;
 
     const metricsHTML = `
-        <div class="card analytics-card analytics-metric analytics-span-3">
-          <div class="s-ico">🔥</div><div class="s-val">${streak}</div>
-          <div class="s-lbl">серія днів</div>
-          <div class="s-hint">поспіль з активністю</div>
-        </div>
-        <div class="card analytics-card analytics-metric analytics-span-3">
-          <div class="s-ico">📝</div><div class="s-val">${activeDays}</div>
-          <div class="s-lbl">активних днів</div>
-          <div class="s-hint">запис або оцінка стану</div>
-        </div>
-        <div class="card analytics-card analytics-metric analytics-span-3">
-          <div class="s-ico">🛡️</div><div class="s-val">${S.state.evidence.length}</div>
-          <div class="s-lbl">страхів не справдилось</div>
-          <div class="s-hint">у банку доказів</div>
-        </div>
-        <button class="card analytics-card analytics-metric analytics-span-3 analytics-metric-click" id="metric-entries" type="button" title="Переглянути всі записи">
-          <div class="s-ico">📈</div><div class="s-val">${diaryCount}</div>
-          <div class="s-lbl">усього записів</div>
-          <div class="s-hint">натисни — переглянути</div>
-        </button>`;
+        <div class="analytics-metrics-row analytics-span-12">
+          <div class="card analytics-card analytics-metric">
+            <div class="s-ico">🔥</div><div class="s-val">${streak}</div>
+            <div class="s-lbl">серія днів</div>
+            <div class="s-hint">поспіль з активністю</div>
+          </div>
+          <div class="card analytics-card analytics-metric">
+            <div class="s-ico">📝</div><div class="s-val">${activeDays}</div>
+            <div class="s-lbl">активних днів</div>
+            <div class="s-hint">запис, ритуал або Telegram</div>
+          </div>
+          <div class="card analytics-card analytics-metric">
+            <div class="s-ico">🛡️</div><div class="s-val">${S.state.evidence.length}</div>
+            <div class="s-lbl">страхів не справдилось</div>
+            <div class="s-hint">у банку доказів</div>
+          </div>
+          <button class="card analytics-card analytics-metric analytics-metric-click" id="metric-entries" type="button" title="Переглянути всі записи">
+            <div class="s-ico">📈</div><div class="s-val">${diaryCount}</div>
+            <div class="s-lbl">усього записів</div>
+            <div class="s-hint">натисни — переглянути</div>
+          </button>
+        </div>`;
 
     let bodyHTML = window.Rituals ? Rituals.dynamicsSectionHTML() : "";
     bodyHTML += analyticsWeek7Card(week7);

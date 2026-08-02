@@ -264,7 +264,7 @@ window.Store = (function () {
     if (remote.profile && remote.profile.email && remote.profile.email !== currentEmail) return;
 
     function mergeCloud(local, rem) {
-      const out = Object.assign({}, preferRemote ? rem : local, preferRemote ? local : rem);
+      const out = Object.assign({}, preferRemote ? rem : local);
       out.profile = Object.assign({}, rem.profile || {}, local.profile || {}, { email: currentEmail });
 
       const rituals = {};
@@ -305,9 +305,9 @@ window.Store = (function () {
       });
       out.checkins = Object.assign({}, rem.checkins || {}, local.checkins || {});
 
-      const localT = Date.parse(local.updatedAt || 0) || 0;
-      const remoteT = Date.parse(rem.updatedAt || 0) || 0;
-      out.updatedAt = new Date(Math.max(localT, remoteT, Date.now())).toISOString();
+      const localT2 = Date.parse(local.updatedAt || 0) || 0;
+      const remoteT2 = Date.parse(rem.updatedAt || 0) || 0;
+      out.updatedAt = new Date(Math.max(localT2, remoteT2, Date.now())).toISOString();
       return out;
     }
 
@@ -323,6 +323,11 @@ window.Store = (function () {
     try { window.dispatchEvent(new CustomEvent("spokiy:synced")); } catch (e) {}
     // Якщо локально були новіші зміни — відправити злитий стан
     if (!preferRemote && localT >= remoteT) Cloud.push(currentEmail, state);
+  }
+
+  async function refreshFromCloud(preferRemote) {
+    await syncFromCloud(!!preferRemote);
+    return state;
   }
 
   let currentEmail = localStorage.getItem(SESSION) || null;
@@ -840,6 +845,9 @@ window.Store = (function () {
     async telegramUnlink() {
       if (!Auth.enabled) return { ok: false, error: "offline" };
       return Auth.telegramUnlink();
-    }
+    },
+
+    /** Підтягнути стан з хмари (Telegram + сайт) і злити з локальним. */
+    refreshFromCloud
   };
 })();
