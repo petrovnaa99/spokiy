@@ -94,6 +94,8 @@ window.Store = (function () {
         reminderHour: 9,
         dismissedRedFlag: null,
         songReminder: "",
+        /** Чи вже бачив(ла) вікно огляду функцій на вході. */
+        welcomeSeen: false,
         /** Тон комунікації: "gentle" | "solid" | null (null = визначити з символу / статі). */
         communicationTone: null,
         ritualDismiss: {},

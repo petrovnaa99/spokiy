@@ -307,43 +307,84 @@
     return list[Math.floor(Math.random() * list.length)];
   }
 
-  /* ===================== ІНСТРУКЦІЯ (про сайт) ===================== */
-  function openGuide() {
-    const items = [
-      { ico: "SOS", t: "SOS — швидка допомога", d: "Коли накриває просто зараз: дихання животом 1 хвилина, заземлення й тепла фраза. Кнопка вгорі та в меню." },
-      { ico: "01", t: "Мені тривожно", d: "Спокійний покроковий сценарій: оцінити стан, розкласти думку, подихати, заземлитися й повернути увагу до життя." },
-      { ico: "+", t: "Новий запис і лист собі", d: "Записати тривогу чи страх і призначити день, коли варто перевірити — чи справдився він насправді." },
-      { ico: "✓", t: "Банк доказів", d: "Колекція страхів, які не справдилися. Жива підбірка доказів, що тривога часто перебільшує." },
-      { ico: "◌", t: "Мої ресурси", d: "Сайт сам збирає те, що тобі допомагає, і показує рейтинг найдієвіших способів заспокоєння." },
-      { ico: "∿", t: "Аналітика / Мій прогрес", d: "Динаміка тривоги, настрою та енергії, серії днів, тригери й порівняння зі стартом." },
-      { ico: "◇", t: "Мої маленькі радощі", d: "Збережи книги, фільми, музику, прогулянки, хобі — сайт час від часу нагадає про них." },
-      { ico: "∴", t: "За що я сьогодні вдячна", d: "Коротко записуй одну-дві речі, які сьогодні дали опору, тепло або відчуття сенсу." },
-      { ico: "✉", t: "Порада подрузі", d: "Поглянь на ситуацію очима доброї подруги — і подаруй цю ж підтримку собі." },
-      { ico: "⌁", t: "Типи тривоги + тести", d: "Заспокійливі тести під різні тривоги, а для фінансової — окремий «Фінансовий потік»." },
-      { ico: "□", t: "Скарбничка підтримки", d: "Цитати, афірмації, теплі слова, спогади й перемоги — щоб дістати їх у складний момент." },
-      { ico: "§", t: "Бібліотека", d: "Короткі статті: як працює тривога, дихання, заземлення, кордони, робота з думками тощо." },
-      { ico: "↑", t: "Прогрес і досягнення", d: "Маленькі перемоги відзначаються — за серії днів, перші доказі, перший лист собі." },
-      { ico: "♪", t: "Музика настрою та теми", d: "Рядок із позитивною іноземною музикою вгорі екрана: перемикай рекомендації й швидко знаходь пісню для прослуховування." },
-      { ico: "₴", t: "Оплата та доступ", d: "Умови доступу до сервісу та інформація про оплату чи добровільну підтримку проєкту." },
-      { ico: "⌧", t: "Приватність", d: "Записи зберігаються в твоєму акаунті й синхронізуються між пристроями. Нічого не публікується без твоєї згоди." }
-    ];
+  /* ===================== ІНСТРУКЦІЯ / ВІКНО НА ВХОДІ ===================== */
+  let welcomeFollowUp = null;
+
+  function shouldShowWelcome() {
+    if (!S.state || !S.state.settings) return true;
+    return !S.state.settings.welcomeSeen;
+  }
+
+  function markWelcomeSeen() {
+    if (!S.state) return;
+    if (!S.state.settings) S.state.settings = {};
+    S.state.settings.welcomeSeen = true;
+    S.save();
+  }
+
+  function welcomeFeaturesHTML() {
+    const groups = C.WELCOME_FEATURES || [];
+    return `
+      <div class="welcome-groups">
+        ${groups.map((g) => `
+          <section class="welcome-group">
+            <h3 class="welcome-group-title">${esc(g.title)}</h3>
+            <div class="welcome-grid">
+              ${(g.items || []).map((i) => `
+                <article class="welcome-card">
+                  <div class="welcome-ico">${esc(i.ico)}</div>
+                  <div class="welcome-card-body">
+                    <b>${esc(i.t)}</b>
+                    <p>${esc(i.d)}</p>
+                  </div>
+                </article>`).join("")}
+            </div>
+          </section>`).join("")}
+      </div>`;
+  }
+
+  function finishWelcomeModal() {
+    markWelcomeSeen();
+    const follow = welcomeFollowUp;
+    welcomeFollowUp = null;
+    closeModal();
+    if (!follow) return;
+    setTimeout(() => {
+      if (follow.thenOnboarding) startOnboarding();
+      if (follow.thenPracticeGuide) setTimeout(() => runAfterModal(openPracticeGuide), 900);
+    }, 320);
+  }
+
+  /** Окреме вікно на вході: повний огляд функцій сайту. */
+  function openWelcomeFeatures(opts) {
+    const options = opts || {};
+    welcomeFollowUp = {
+      thenOnboarding: !!options.thenOnboarding,
+      thenPracticeGuide: !!options.thenPracticeGuide
+    };
     openModal(`
-      <h2>Про сайт «Спокій»</h2>
-      <p class="muted" style="margin:0 0 14px;line-height:1.55">Головна мета — не аналізувати тривогу безкінечно, а швидше повертати тебе до спокою й власного життя. Ось що ти знайдеш тут для себе:</p>
-      <div class="guide-list">
-        ${items.map(i => `
-          <div class="guide-item">
-            <div class="guide-ico">${i.ico}</div>
-            <div><b>${esc(i.t)}</b><p>${esc(i.d)}</p></div>
-          </div>`).join("")}
-      </div>
-      <div class="row" style="justify-content:center;margin-top:14px">
-        <button type="button" class="btn btn-ghost btn-sm" id="guide-payment">Оплата та доступ</button>
-      </div>
-      <p class="muted" style="margin:16px 0 0;text-align:center;font-family:var(--font-hand);font-size:20px;color:var(--primary-d)">Тут не треба бути сильною чи ідеальною. Достатньо одного маленького кроку до себе. 🌿</p>
-    `);
-    const payBtn = $("#guide-payment");
-    if (payBtn) payBtn.onclick = () => { closeModal(); openPaymentInfo(); };
+      <div class="welcome-modal">
+        <p class="welcome-eyebrow">Ласкаво просимо</p>
+        <h2>Що на тебе чекає в «Спокої»</h2>
+        <p class="muted welcome-lead">Це особистий простір самопідтримки: музика для настрою, записи, аналіз стану, дихання й тепла опора — без оцінок і без потреби писати багато.</p>
+        ${welcomeFeaturesHTML()}
+        <p class="welcome-footer">Тут не треба бути сильною чи ідеальною. Достатньо одного маленького кроку до себе.</p>
+        <div class="row welcome-actions">
+          <button type="button" class="btn btn-primary" id="welcome-start">Зрозуміло, почати</button>
+        </div>
+      </div>`);
+    const modal = $(".modal", $("#modal-root"));
+    if (modal) modal.classList.add("modal--welcome");
+    const start = $("#welcome-start");
+    if (start) start.onclick = () => finishWelcomeModal();
+    const root = $("#modal-root");
+    root.onclick = (e) => {
+      if (e.target === root || e.target.hasAttribute("data-close")) finishWelcomeModal();
+    };
+  }
+
+  function openGuide() {
+    openWelcomeFeatures({ thenOnboarding: false });
   }
 
   function paymentContentHTML(opts) {
@@ -1364,8 +1405,8 @@
       {
         id: "guide",
         icon: "2",
-        title: "Інструкція про сайт",
-        desc: "Що є в «Спокої» і як цим користуватися — коротко й по пунктах."
+        title: "Що є на сайті",
+        desc: "Повний огляд функцій: музика, записи, аналіз, дихання, опора й зручності."
       },
       {
         id: "payment",
@@ -1432,9 +1473,12 @@
       }
       toast(uiText("Деревце з тобою. Це твій перший крок 🌿"), "good");
       go("home");
-      startOnboarding();
-      // Путівник після ритуалу/модалки — щоб не перекривати перший крок.
-      setTimeout(() => runAfterModal(openPracticeGuide), 900);
+      if (shouldShowWelcome()) {
+        openWelcomeFeatures({ thenOnboarding: true, thenPracticeGuide: true });
+      } else {
+        startOnboarding();
+        setTimeout(() => runAfterModal(openPracticeGuide), 900);
+      }
     };
     const guide = $("#plant-guide");
     if (guide) guide.onclick = () => openPracticeGuide();
@@ -3473,14 +3517,23 @@
         S.setGender(g);
         applyGenderTheme();
         if (needsRecoverySelect()) go("recoverySelect");
-        else { render(); startOnboarding(); }
+        else maybeShowWelcomeOrOnboard();
       }), 400);
     } else if (!needsRecoverySelect()) {
-      startOnboarding();
+      maybeShowWelcomeOrOnboard();
     }
     notifyReminders();
     handleDeepLinks();
     if (window.Rituals) { Rituals.startReminderScheduler(); Rituals.requestPushPermission(); }
+  }
+
+  function maybeShowWelcomeOrOnboard() {
+    render();
+    if (shouldShowWelcome()) {
+      setTimeout(() => openWelcomeFeatures({ thenOnboarding: true }), 450);
+    } else {
+      startOnboarding();
+    }
   }
 
   function startOnboarding() {

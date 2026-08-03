@@ -1260,6 +1260,99 @@ input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border: none;
 .guide-item b { font-size: 15px; }
 .guide-item p { margin: 3px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
 
+/* Вікно огляду функцій на вході */
+.modal.modal--welcome {
+  max-width: 720px;
+  padding: 24px 22px 20px;
+}
+.welcome-modal { display: grid; gap: 12px; }
+.welcome-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.welcome-lead {
+  margin: 0 0 4px;
+  line-height: 1.55;
+  font-size: 14px;
+}
+.welcome-groups {
+  display: grid;
+  gap: 14px;
+  max-height: min(58vh, 520px);
+  overflow-y: auto;
+  padding-right: 4px;
+  margin: 0 -2px;
+}
+.welcome-group-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary-d);
+  letter-spacing: .01em;
+}
+.welcome-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.welcome-card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 11px 12px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.welcome-ico {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--primary-d);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+.welcome-card-body { min-width: 0; }
+.welcome-card-body b {
+  display: block;
+  font-size: 13.5px;
+  line-height: 1.3;
+  margin: 0 0 3px;
+}
+.welcome-card-body p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+.welcome-footer {
+  margin: 4px 0 0;
+  text-align: center;
+  font-family: var(--font-hand);
+  font-size: 20px;
+  line-height: 1.3;
+  color: var(--primary-d);
+}
+.welcome-actions {
+  justify-content: center;
+  margin-top: 4px;
+}
+@media (max-width: 640px) {
+  .modal.modal--welcome { max-width: 100%; padding: 20px 16px 16px; }
+  .welcome-grid { grid-template-columns: 1fr; }
+  .welcome-groups { max-height: 52vh; }
+}
+
 /* Перемикач теми (вгорі екрану) */
 .theme-toggle {
   display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0;
