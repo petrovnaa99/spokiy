@@ -1752,7 +1752,7 @@ input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border: none;
 .connectivity-banner--sync {
   background: linear-gradient(180deg, #f0f6fd, #d5e4f7);
   color: #163a68;
-  border-color: color-mix(in srgb, #8 Panab 55%, transparent);
+  border-color: color-mix(in srgb, #8aabcc 55%, transparent);
 }
 .connectivity-banner--ok {
   background: linear-gradient(180deg, #eef8f2, #d4efdf);
