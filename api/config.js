@@ -6,7 +6,7 @@
  */
 const { bearerToken, createAuthStore } = require("./_auth");
 const { configured, rest } = require("./_supabase");
-const { isAdminEmail } = require("./_admin");
+const { isAdminEmailAsync } = require("./_admin");
 
 module.exports = async (req, res) => {
   if (req.method !== "GET") {
@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
     if (token && configured()) {
       const store = createAuthStore(rest, configured());
       const session = await store.getSession(token);
-      if (session && isAdminEmail(session.email)) admin = true;
+      if (session && (await isAdminEmailAsync(session.email))) admin = true;
     }
   } catch (e) {
     admin = false;

@@ -89,6 +89,11 @@ db.exec(`
     expires_at  TEXT NOT NULL,
     used_at     TEXT
   );
+  CREATE TABLE IF NOT EXISTS admin_helpers (
+    email       TEXT PRIMARY KEY,
+    added_by    TEXT,
+    created_at  TEXT NOT NULL
+  );
 `);
 
 const {
@@ -429,11 +434,16 @@ async function handleApi(req, res, pathname) {
   if (pathname === "/api/config" && req.method === "GET") {
     let admin = false;
     try {
-      const { isAdminEmail } = require("./api/_admin");
+      const { getSeedAdminEmails } = require("./api/_admin");
+      const { normalizeEmail: norm } = require("./api/_auth");
       const token = bearerToken(req);
       if (token) {
         const sessRow = db.prepare("SELECT email, expires_at FROM auth_sessions WHERE token = ?").get(token);
-        if (sessRow && !isExpired(sessRow.expires_at) && isAdminEmail(sessRow.email)) admin = true;
+        if (sessRow && !isExpired(sessRow.expires_at)) {
+          const e = norm(sessRow.email);
+          if (getSeedAdminEmails().includes(e)) admin = true;
+          else if (e && db.prepare("SELECT 1 FROM admin_helpers WHERE email = ?").get(e)) admin = true;
+        }
       }
     } catch (e) { admin = false; }
     return sendJSON(res, 200, {
@@ -443,14 +453,94 @@ async function handleApi(req, res, pathname) {
     });
   }
 
+  function localAdminSession(req) {
+    const { getSeedAdminEmails } = require("./api/_admin");
+    const { normalizeEmail: norm } = require("./api/_auth");
+    const token = bearerToken(req);
+    if (!token) return { ok: false, status: 401, error: "auth_required" };
+    const sessRow = db.prepare("SELECT email, expires_at FROM auth_sessions WHERE token = ?").get(token);
+    if (!sessRow || isExpired(sessRow.expires_at)) return { ok: false, status: 401, error: "auth_required" };
+    const e = norm(sessRow.email);
+    const seed = getSeedAdminEmails();
+    const isOwner = seed.includes(e);
+    const isHelper = !!(e && db.prepare("SELECT 1 FROM admin_helpers WHERE email = ?").get(e));
+    if (!isOwner && !isHelper) return { ok: false, status: 403, error: "forbidden" };
+    return { ok: true, email: e, isOwner };
+  }
+
+  if (pathname === "/api/admin/helpers") {
+    try {
+      const auth = localAdminSession(req);
+      if (!auth.ok) return sendJSON(res, auth.status, { ok: false, error: auth.error });
+      const { getSeedAdminEmails } = require("./api/_admin");
+      const { normalizeEmail: norm, readJsonBody } = require("./api/_auth");
+      const seed = getSeedAdminEmails();
+
+      if (req.method === "GET") {
+        const helpers = db.prepare("SELECT email, added_by, created_at FROM admin_helpers ORDER BY created_at ASC").all();
+        return sendJSON(res, 200, {
+          ok: true,
+          owners: seed.map((email) => ({ email, role: "owner", locked: true })),
+          helpers: helpers.map((r) => ({
+            email: r.email,
+            role: "helper",
+            locked: false,
+            addedBy: r.added_by,
+            createdAt: r.created_at
+          }))
+        });
+      }
+
+      if (req.method === "POST") {
+        let body = {};
+        try {
+          const raw = await readBody(req);
+          body = JSON.parse(raw || "{}");
+        } catch { body = {}; }
+        const email = norm(body.email);
+        if (!email) return sendJSON(res, 400, { ok: false, error: "bad_email" });
+        if (seed.includes(email)) return sendJSON(res, 400, { ok: false, error: "already_owner" });
+        if (db.prepare("SELECT 1 FROM admin_helpers WHERE email = ?").get(email)) {
+          return sendJSON(res, 400, { ok: false, error: "already_helper" });
+        }
+        const at = new Date().toISOString();
+        db.prepare("INSERT INTO admin_helpers (email, added_by, created_at) VALUES (?, ?, ?)").run(email, auth.email, at);
+        return sendJSON(res, 200, { ok: true, email });
+      }
+
+      if (req.method === "DELETE") {
+        let body = {};
+        try {
+          const raw = await readBody(req);
+          body = JSON.parse(raw || "{}");
+        } catch { body = {}; }
+        const q = pathname.includes("?") ? "" : "";
+        void q;
+        const urlEmail = (() => {
+          try {
+            const u = new URL(req.url, "http://local");
+            return u.searchParams.get("email");
+          } catch { return null; }
+        })();
+        const email = norm(body.email || urlEmail);
+        if (!email) return sendJSON(res, 400, { ok: false, error: "bad_email" });
+        if (seed.includes(email)) return sendJSON(res, 400, { ok: false, error: "cannot_remove_owner" });
+        db.prepare("DELETE FROM admin_helpers WHERE email = ?").run(email);
+        return sendJSON(res, 200, { ok: true, email });
+      }
+
+      return sendJSON(res, 405, { ok: false, error: "method_not_allowed" });
+    } catch (e) {
+      return sendJSON(res, 502, { ok: false, error: "admin_helpers_failed", detail: String(e && e.message || e) });
+    }
+  }
+
   if (pathname === "/api/admin/overview" && req.method === "GET") {
     try {
-      const { isAdminEmail } = require("./api/_admin");
-      const token = bearerToken(req);
-      if (!token) return sendJSON(res, 401, { ok: false, error: "auth_required" });
-      const sessRow = db.prepare("SELECT email, expires_at FROM auth_sessions WHERE token = ?").get(token);
-      if (!sessRow || isExpired(sessRow.expires_at)) return sendJSON(res, 401, { ok: false, error: "auth_required" });
-      if (!isAdminEmail(sessRow.email)) return sendJSON(res, 403, { ok: false, error: "forbidden" });
+      const auth = localAdminSession(req);
+      if (!auth.ok) return sendJSON(res, auth.status, { ok: false, error: auth.error });
+      const { getSeedAdminEmails } = require("./api/_admin");
+      const seed = getSeedAdminEmails();
       const users = db.prepare("SELECT email, data, updated_at FROM users ORDER BY updated_at DESC LIMIT 40").all();
       const tgSet = new Set();
       try {
@@ -469,9 +559,21 @@ async function handleApi(req, res, pathname) {
           recoveryStage: profile.recoveryStage || null
         };
       });
+      const helpers = db.prepare("SELECT email, added_by, created_at FROM admin_helpers ORDER BY created_at ASC").all();
+      const admins = [
+        ...seed.map((email) => ({ email, role: "owner", locked: true })),
+        ...helpers.map((r) => ({
+          email: r.email,
+          role: "helper",
+          locked: false,
+          addedBy: r.added_by,
+          createdAt: r.created_at
+        }))
+      ];
       return sendJSON(res, 200, {
         ok: true,
-        admin: sessRow.email,
+        admin: auth.email,
+        isOwner: !!auth.isOwner,
         stats: {
           usersTotal: users.length,
           telegramLinked: tgSet.size,
@@ -481,6 +583,7 @@ async function handleApi(req, res, pathname) {
           supabase: false
         },
         users: mapped,
+        admins,
         note: "Локальний режим (SQLite). Тексти щоденників не показуються."
       });
     } catch (e) {

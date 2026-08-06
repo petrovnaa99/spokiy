@@ -140,6 +140,15 @@ create index if not exists idx_telegram_link_tokens_email on public.telegram_lin
 alter table public.telegram_users enable row level security;
 alter table public.telegram_link_tokens enable row level security;
 
+-- Помічники адміна (додаються з адмін-панелі)
+create table if not exists public.admin_helpers (
+  email       text primary key,
+  added_by    text,
+  created_at  timestamptz not null default now()
+);
+
+alter table public.admin_helpers enable row level security;
+
 -- Автооновлення updated_at, якщо клієнт його не передав.
 create or replace function public.touch_updated_at()
 returns trigger language plpgsql as $$

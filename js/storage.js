@@ -1160,6 +1160,38 @@ window.Store = (function () {
       }
     },
 
+    async addAdminHelper(email) {
+      if (!Auth.enabled || !currentEmail) return { ok: false, error: "offline" };
+      try {
+        const r = await fetch("/api/admin/helpers", {
+          method: "POST",
+          headers: { Accept: "application/json", "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ email })
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) return { ok: false, error: (j && j.error) || ("http_" + r.status), status: r.status };
+        return j;
+      } catch (e) {
+        return { ok: false, error: "network" };
+      }
+    },
+
+    async removeAdminHelper(email) {
+      if (!Auth.enabled || !currentEmail) return { ok: false, error: "offline" };
+      try {
+        const r = await fetch("/api/admin/helpers?email=" + encodeURIComponent(email), {
+          method: "DELETE",
+          headers: { Accept: "application/json", "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ email })
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) return { ok: false, error: (j && j.error) || ("http_" + r.status), status: r.status };
+        return j;
+      } catch (e) {
+        return { ok: false, error: "network" };
+      }
+    },
+
     /** Підтягнути стан з хмари (Telegram + сайт) і злити з локальним. */
     refreshFromCloud
   };

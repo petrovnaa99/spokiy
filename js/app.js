@@ -531,6 +531,16 @@
 
     const st = res.stats || {};
     const users = Array.isArray(res.users) ? res.users : [];
+    const admins = Array.isArray(res.admins) ? res.admins : [];
+    const helperErr = (code) => ({
+      bad_email: "Введи коректну пошту",
+      already_owner: "Ця пошта вже власник",
+      already_helper: "Ця пошта вже в списку помічників",
+      cannot_remove_owner: "Власника прибрати не можна",
+      db_error: "Не вдалося зберегти в базі. Можливо, ще немає таблиці admin_helpers у Supabase.",
+      network: "Немає з’єднання"
+    }[code] || code || "Помилка");
+
     $("#admin-body").innerHTML = `
       <p class="faint" style="margin:0 0 12px;font-size:12px">Акаунт: ${esc(res.admin || p.email || "")}</p>
       <div class="admin-stats">
@@ -544,7 +554,31 @@
         <span class="pill ${st.telegramBot ? "pill-green" : "pill-violet"}">Бот ${st.telegramBot ? "налаштований" : "вимкнений"}</span>
       </div>
       ${res.note ? `<p class="faint" style="font-size:12.5px;margin:0 0 12px">${esc(res.note)}</p>` : ""}
-      <div class="card-title" style="margin-top:8px">Останні акаунти</div>
+
+      <div class="card-title" style="margin-top:8px">Помічники адміна</div>
+      <p class="muted" style="margin:0 0 10px;font-size:13px;line-height:1.45">
+        Додай пошту людини, яка матиме доступ до цієї панелі. Вона має увійти на сайт із цієї пошти.
+      </p>
+      <div class="admin-helper-add row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <input type="email" id="admin-helper-email" class="quick-input" placeholder="email@example.com" style="flex:1;min-width:180px" />
+        <button type="button" class="btn btn-primary btn-sm" id="admin-helper-add">Додати</button>
+      </div>
+      <div class="admin-helper-list" id="admin-helper-list">
+        ${admins.length ? admins.map((a) => `
+          <div class="admin-user-row">
+            <div>
+              <b>${esc(a.email)}</b>
+              <div class="faint" style="font-size:12px">${a.role === "owner" ? "Власник" : "Помічник"}${a.addedBy ? " · додав(ла) " + esc(a.addedBy) : ""}</div>
+            </div>
+            <div class="admin-user-meta">
+              ${a.locked
+                ? `<span class="pill pill-violet">закріплено</span>`
+                : `<button type="button" class="btn btn-ghost btn-sm" data-remove-helper="${esc(a.email)}">Прибрати</button>`}
+            </div>
+          </div>`).join("") : `<p class="analytics-none">Поки лише ти в списку</p>`}
+      </div>
+
+      <div class="card-title" style="margin-top:18px">Останні акаунти</div>
       <div class="admin-user-list">
         ${users.length ? users.map((u) => `
           <div class="admin-user-row">
@@ -559,8 +593,46 @@
           </div>`).join("") : `<p class="analytics-none">Поки немає даних</p>`}
       </div>
       <button class="btn btn-ghost btn-sm" id="admin-refresh" type="button" style="margin-top:12px">Оновити</button>`;
+
     const refresh = $("#admin-refresh");
     if (refresh) refresh.onclick = () => viewAdmin();
+
+    const addBtn = $("#admin-helper-add");
+    const emailInp = $("#admin-helper-email");
+    if (addBtn && emailInp) {
+      const doAdd = async () => {
+        const email = emailInp.value.trim();
+        if (!email) { toast("Введи пошту помічника", "warn"); return; }
+        addBtn.disabled = true;
+        const out = await S.addAdminHelper(email);
+        addBtn.disabled = false;
+        if (!out.ok) {
+          toast(helperErr(out.error), "warn");
+          return;
+        }
+        toast("Помічника додано ✅", "good");
+        viewAdmin();
+      };
+      addBtn.onclick = doAdd;
+      emailInp.addEventListener("keydown", (e) => { if (e.key === "Enter") doAdd(); });
+    }
+    $$("[data-remove-helper]", $("#admin-body")).forEach((b) => {
+      b.onclick = () => confirmModal(
+        "Прибрати помічника?",
+        "Ця пошта більше не матиме доступу до адмін-панелі.",
+        async () => {
+          const out = await S.removeAdminHelper(b.dataset.removeHelper);
+          if (!out.ok) {
+            toast(helperErr(out.error), "warn");
+            return;
+          }
+          toast("Помічника прибрано", "good");
+          viewAdmin();
+        },
+        "Прибрати",
+        true
+      );
+    });
   }
 
   /* ===================== ТЕМА (день / ніч) ===================== */

@@ -1,8 +1,9 @@
 "use strict";
 
 const { configured, rest } = require("../_supabase");
-const { assertAdmin } = require("../_admin");
+const { assertAdmin, resolveAdminEmails, isSeedAdmin } = require("../_admin");
 const { configured: tgConfigured } = require("../telegram/_api");
+const { normalizeEmail } = require("../_auth");
 
 async function countTable(table) {
   const r = await rest(`${table}?select=email`, {
@@ -71,9 +72,22 @@ module.exports = async (req, res) => {
       };
     });
 
+    const resolved = await resolveAdminEmails();
+    const admins = [
+      ...resolved.seed.map((email) => ({ email, role: "owner", locked: true })),
+      ...resolved.helpers.map((r) => ({
+        email: normalizeEmail(r.email),
+        role: "helper",
+        locked: false,
+        addedBy: r.added_by || null,
+        createdAt: r.created_at || null
+      }))
+    ];
+
     return res.status(200).json({
       ok: true,
       admin: auth.email,
+      isOwner: isSeedAdmin(auth.email),
       stats: {
         usersTotal: usersTotal ?? users.length,
         telegramLinked: tgLinked ?? tgSet.size,
@@ -83,6 +97,7 @@ module.exports = async (req, res) => {
         supabase: true
       },
       users,
+      admins,
       note: "Тексти щоденників тут не показуються — лише службова статистика."
     });
   } catch (e) {
