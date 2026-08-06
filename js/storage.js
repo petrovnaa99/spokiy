@@ -124,6 +124,10 @@ window.Store = (function () {
 
   const API = "/api/state";
   let pushTimer = null;
+  let pendingSync = false;
+  let lastSuccessfulSyncAt = null;
+  let pushInFlight = null;
+
   const Cloud = {
     enabled: (location.protocol === "http:" || location.protocol === "https:"),
     async pull(email) {
@@ -140,16 +144,37 @@ window.Store = (function () {
     },
     push(email, data) {
       if (!this.enabled || !email || !data) return;
+      pendingSync = true;
       clearTimeout(pushTimer);
       const payload = JSON.stringify(data);
       pushTimer = setTimeout(() => {
-        fetch(API + "/" + encodeURIComponent(email), {
+        this.pushNow(email, payload).catch(() => {});
+      }, 600);
+    },
+    async pushNow(email, payloadOrData) {
+      if (!this.enabled || !email) return { ok: false, error: "disabled" };
+      const payload = typeof payloadOrData === "string"
+        ? payloadOrData
+        : JSON.stringify(payloadOrData);
+      try {
+        const r = await fetch(API + "/" + encodeURIComponent(email), {
           method: "PUT",
           headers: { "Content-Type": "application/json", ...authHeaders() },
           body: payload,
           keepalive: true
-        }).catch(() => {});
-      }, 600);
+        });
+        if (!r.ok) {
+          pendingSync = true;
+          return { ok: false, status: r.status };
+        }
+        pendingSync = false;
+        lastSuccessfulSyncAt = new Date().toISOString();
+        try { window.dispatchEvent(new CustomEvent("spokiy:cloud-saved")); } catch (e) {}
+        return { ok: true };
+      } catch (e) {
+        pendingSync = true;
+        return { ok: false, error: "network" };
+      }
     },
     remove(email) {
       if (!this.enabled || !email) return;
@@ -256,14 +281,16 @@ window.Store = (function () {
   };
 
   async function syncFromCloud(preferRemote) {
-    if (!Cloud.enabled || !currentEmail || !state) return;
+    if (!Cloud.enabled || !currentEmail || !state) return { ok: false };
     const remote = await Cloud.pull(currentEmail);
     if (remote && remote.forbidden) {
       logout();
-      return;
+      return { ok: false, error: "forbidden" };
     }
-    if (!remote) { Cloud.push(currentEmail, state); return; }
-    if (remote.profile && remote.profile.email && remote.profile.email !== currentEmail) return;
+    if (!remote) { Cloud.push(currentEmail, state); return { ok: true }; }
+    if (remote.profile && remote.profile.email && remote.profile.email !== currentEmail) {
+      return { ok: false, error: "email_mismatch" };
+    }
 
     function mergeCloud(local, rem) {
       const out = Object.assign({}, preferRemote ? rem : local);
@@ -307,24 +334,90 @@ window.Store = (function () {
       });
       out.checkins = Object.assign({}, rem.checkins || {}, local.checkins || {});
 
+      // Чернетка: не губити локальний текст, якщо на сервері порожньо або старіше
+      const localDraft = local.draft;
+      const remoteDraft = rem.draft;
+      const localDraftAt = Date.parse((localDraft && localDraft.draftSavedAt) || local.updatedAt || 0) || 0;
+      const remoteDraftAt = Date.parse((remoteDraft && remoteDraft.draftSavedAt) || rem.updatedAt || 0) || 0;
+      const localHas = localDraft && (String(localDraft.fear || "").trim() || String(localDraft.cause || "").trim());
+      const remoteHas = remoteDraft && (String(remoteDraft.fear || "").trim() || String(remoteDraft.cause || "").trim());
+      if (localHas && remoteHas) {
+        out.draft = remoteDraftAt > localDraftAt ? remoteDraft : localDraft;
+        if (
+          String(localDraft.fear || "") !== String(remoteDraft.fear || "") &&
+          Math.abs(remoteDraftAt - localDraftAt) > 2000
+        ) {
+          out.__draftConflict = { local: localDraft, remote: remoteDraft };
+        }
+      } else if (localHas) {
+        out.draft = localDraft;
+      } else if (remoteHas) {
+        out.draft = remoteDraft;
+      } else {
+        out.draft = localDraft || remoteDraft || null;
+      }
+
       const localT2 = Date.parse(local.updatedAt || 0) || 0;
       const remoteT2 = Date.parse(rem.updatedAt || 0) || 0;
       out.updatedAt = new Date(Math.max(localT2, remoteT2, Date.now())).toISOString();
       return out;
     }
 
+    function entriesConflict(local, rem) {
+      const mapL = {};
+      (local.entries || []).forEach((e) => { if (e && e.id) mapL[e.id] = e; });
+      for (const e of (rem.entries || [])) {
+        if (!e || !e.id || !mapL[e.id]) continue;
+        const L = mapL[e.id];
+        const lt = Date.parse(L.updatedAt || L.createdAt || 0) || 0;
+        const rt = Date.parse(e.updatedAt || e.createdAt || 0) || 0;
+        if (
+          String(L.fear || "") !== String(e.fear || "") &&
+          lt && rt &&
+          Math.abs(lt - rt) > 1500 &&
+          pendingSync
+        ) return { id: e.id, local: L, remote: e };
+      }
+      return null;
+    }
+
     clearTimeout(pushTimer);
+    const localSnapshot = JSON.parse(JSON.stringify(state));
     const localT = Date.parse(state.updatedAt || 0) || 0;
     const remoteT = Date.parse(remote.updatedAt || 0) || 0;
+    const conflictEntry = (!preferRemote && pendingSync && remoteT > localT)
+      ? entriesConflict(state, remote)
+      : null;
+
+    if (conflictEntry) {
+      try {
+        window.dispatchEvent(new CustomEvent("spokiy:sync-conflict", {
+          detail: { type: "entry", local: localSnapshot, remote, entry: conflictEntry }
+        }));
+      } catch (e) {}
+      return { ok: false, conflict: true, local: localSnapshot, remote };
+    }
+
     state = mergeCloud(state, remote);
+    const draftConflict = state.__draftConflict;
+    delete state.__draftConflict;
     if (!state.profile) state.profile = { email: currentEmail };
     state.profile.email = currentEmail;
     ensureRecoveryFields(state.profile);
     ensureRecoveryAwards(state);
     const all = db(); all[currentEmail] = state; saveDb(all);
     try { window.dispatchEvent(new CustomEvent("spokiy:synced")); } catch (e) {}
+    if (draftConflict) {
+      try {
+        window.dispatchEvent(new CustomEvent("spokiy:sync-conflict", {
+          detail: { type: "draft", local: localSnapshot, remote, draft: draftConflict }
+        }));
+      } catch (e) {}
+      return { ok: false, conflict: true, local: localSnapshot, remote };
+    }
     // Якщо локально були новіші зміни — відправити злитий стан
     if (!preferRemote && localT >= remoteT) Cloud.push(currentEmail, state);
+    return { ok: true };
   }
 
   async function refreshFromCloud(preferRemote) {
@@ -348,14 +441,23 @@ window.Store = (function () {
   }
   if (currentEmail && localStorage.getItem(TOKEN)) { load(); syncFromCloud(); }
 
-  function persist() {
+  function persist(opts) {
     if (!currentEmail || !state) return;
+    const options = opts || {};
     state.updatedAt = new Date().toISOString();
     if (state.profile) state.profile.email = currentEmail;
     const all = db();
     all[currentEmail] = state;
     saveDb(all);
+    if (options.localOnly) {
+      pendingSync = true;
+      return;
+    }
     Cloud.push(currentEmail, state);
+  }
+
+  function persistLocal() {
+    persist({ localOnly: true });
   }
 
   function establishSession(profile, token, isRegistration) {
@@ -661,13 +763,98 @@ window.Store = (function () {
     save() { persist(); },
     set(path, value) { state[path] = value; persist(); },
 
-    saveDraft(draft) { state.draft = draft; persist(); },
-    clearDraft() { state.draft = null; persist(); },
-    getDraft() { return state.draft; },
+    saveDraft(draft, opts) {
+      if (!state) return;
+      state.draft = draft ? Object.assign({}, draft, {
+        draftSavedAt: (draft && draft.draftSavedAt) || new Date().toISOString()
+      }) : null;
+      persist(opts && opts.localOnly ? { localOnly: true } : { localOnly: true });
+    },
+    saveDraftLocal(draft) {
+      this.saveDraft(draft, { localOnly: true });
+    },
+    clearDraft(opts) {
+      if (!state) return;
+      state.draft = null;
+      if (opts && opts.skipPush) persistLocal();
+      else persist();
+    },
+    getDraft() { return state && state.draft; },
+
+    hasPendingSync() { return !!pendingSync; },
+
+    async flushToCloud() {
+      if (!currentEmail || !state) return { ok: false, error: "no_session" };
+      if (!Cloud.enabled) {
+        persistLocal();
+        return { ok: true, localOnly: true };
+      }
+      // Спочатку підтягнути сервер, щоб піймати конфлікти
+      const syncRes = await syncFromCloud(false);
+      if (syncRes && syncRes.conflict) return syncRes;
+      clearTimeout(pushTimer);
+      const pushRes = await Cloud.pushNow(currentEmail, state);
+      if (pushRes && pushRes.ok) pendingSync = false;
+      else pendingSync = true;
+      return pushRes;
+    },
+
+    async resolveSyncConflict(choice, local, remote) {
+      if (!currentEmail || !state) return;
+      if (choice === "remote" && remote) {
+        state = Object.assign(emptyState(state.profile), remote);
+        state.profile = Object.assign({}, remote.profile || {}, { email: currentEmail });
+        ensureRecoveryFields(state.profile);
+        ensureRecoveryAwards(state);
+      } else if (choice === "merge" && local && remote) {
+        // Повторно використати merge з syncFromCloud-логіки через тимчасовий стан
+        const prev = state;
+        state = local;
+        const rem = remote;
+        const byId = {};
+        [].concat(rem.entries || [], local.entries || []).forEach((e) => {
+          if (!e || !e.id) return;
+          const prevE = byId[e.id];
+          if (!prevE) byId[e.id] = e;
+          else {
+            const a = String(prevE.fear || "");
+            const b = String(e.fear || "");
+            // Об’єднання: беремо довшу/новішу версію тексту
+            const pt = Date.parse(prevE.updatedAt || prevE.createdAt || 0) || 0;
+            const et = Date.parse(e.updatedAt || e.createdAt || 0) || 0;
+            if (b.length > a.length || et >= pt) byId[e.id] = Object.assign({}, prevE, e, {
+              fear: b.length >= a.length ? b : a,
+              cause: (e.cause || prevE.cause || ""),
+              updatedAt: new Date().toISOString()
+            });
+          }
+        });
+        state = Object.assign({}, rem, local, {
+          entries: Object.values(byId).sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0)),
+          rituals: Object.assign({}, rem.rituals || {}, local.rituals || {}),
+          wellbeing: Object.assign({}, rem.wellbeing || {}, local.wellbeing || {}),
+          checkins: Object.assign({}, rem.checkins || {}, local.checkins || {}),
+          draft: (local.draft && (local.draft.fear || local.draft.cause)) ? local.draft : (rem.draft || null),
+          profile: Object.assign({}, rem.profile || {}, local.profile || {}, { email: currentEmail }),
+          updatedAt: new Date().toISOString()
+        });
+        ensureRecoveryFields(state.profile);
+        ensureRecoveryAwards(state);
+        if (!state) state = prev;
+      } else if (choice === "local" && local) {
+        state = local;
+        if (state.profile) state.profile.email = currentEmail;
+      }
+      pendingSync = true;
+      persist();
+      clearTimeout(pushTimer);
+      await Cloud.pushNow(currentEmail, state);
+    },
 
     addEntry(entry) {
       entry.id = entry.id || ("e" + Date.now() + Math.random().toString(36).slice(2, 6));
       entry.createdAt = entry.createdAt || new Date().toISOString();
+      entry.updatedAt = entry.updatedAt || entry.createdAt;
       state.entries.unshift(entry);
       this.markCheckin(entry.createdAt);
       persist();
@@ -679,7 +866,7 @@ window.Store = (function () {
       const e = state.entries.find(x => x.id === id);
       if (e) {
         const becameReviewed = patch && patch.reviewed === true && !e.reviewed;
-        Object.assign(e, patch);
+        Object.assign(e, patch, { updatedAt: new Date().toISOString() });
         persist();
         if (becameReviewed) this.awardRecoveryProgress("past");
       }

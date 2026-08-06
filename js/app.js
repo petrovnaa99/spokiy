@@ -618,6 +618,20 @@
       r = "recoverySelect";
       param = null;
     }
+    const leaveNew = route === "new" && r !== "new";
+    if (leaveNew && window.Safeguard && Safeguard.hasUnsaved()) {
+      confirmModal(
+        "Незбережені зміни",
+        "У вас є незбережені зміни. Ви дійсно хочете залишити сторінку?",
+        () => applyGo(r, param),
+        "Залишити"
+      );
+      return;
+    }
+    applyGo(r, param);
+  }
+
+  function applyGo(r, param = null) {
     const prevRoute = route;
     route = r; routeParam = param;
     const title = ROUTE_TITLES[r] || NAV.find(n => n.id === r)?.label || "Спокій";
@@ -625,6 +639,7 @@
     syncRecoveryGateChrome();
     renderNav();
     render();
+    if (window.Safeguard) Safeguard.setEditingRoute(r === "new");
     if (r === "analytics" && prevRoute !== "analytics" && S.refreshFromCloud) {
       S.refreshFromCloud(true).catch(() => {});
     }
@@ -1825,15 +1840,16 @@
   }
 
   function viewNew() {
-    // відновлення чернетки
+    // відновлення чернетки (Store + durable Safeguard)
     if (!form) form = S.getDraft() || freshForm();
+    if (window.Safeguard) Safeguard.setEditingRoute(true);
 
     const catChips = C.CATEGORIES.map(c => `<button type="button" class="chip ${form.category===c?"sel":""}" data-cat="${esc(c)}">${esc(c)}</button>`).join("");
     const trigChips = C.TRIGGERS.map(t => `<button type="button" class="chip ${form.trigger===t?"sel":""}" data-trig="${esc(t)}">${esc(t)}</button>`).join("");
     const helpChips = C.RESOURCE_SUGGESTIONS.map(h => `<button type="button" class="chip ${form.helped.includes(h)?"sel":""}" data-help="${esc(h)}">${esc(h)}</button>`).join("");
 
     $("#view").innerHTML = `
-      <div class="page-head"><h1>Новий запис</h1><p>Усе зберігається автоматично. Можна повернутися й завершити пізніше.</p></div>
+      <div class="page-head"><h1>Новий запис</h1><p>Усе зберігається автоматично на пристрої. Після збереження — синхронізується з хмарою.</p></div>
 
       <div class="card">
         <div class="row" style="margin-bottom:18px">
@@ -1878,7 +1894,10 @@
       </div>`;
 
     const root = $("#view");
-    const persistDraft = () => S.saveDraft(form);
+    const persistDraft = () => {
+      if (window.Safeguard) Safeguard.scheduleDraftSave(form);
+      else S.saveDraft(form, { localOnly: true });
+    };
 
     $("#f-fear").oninput = (e) => { form.fear = e.target.value; persistDraft(); };
     $("#f-cause").oninput = (e) => { form.cause = e.target.value; persistDraft(); };
@@ -1897,24 +1916,41 @@
       persistDraft(); viewNew();
     });
 
-    $("#f-clear").onclick = () => confirmModal("Очистити чернетку?", "Введені дані буде видалено.", () => { S.clearDraft(); form = freshForm(); viewNew(); toast("Чернетку очищено"); });
+    $("#f-clear").onclick = () => confirmModal("Очистити чернетку?", "Введені дані буде видалено.", async () => {
+      if (window.Safeguard) await Safeguard.clearDraftDurable();
+      else S.clearDraft();
+      form = freshForm();
+      viewNew();
+      toast("Чернетку очищено");
+    });
 
-    $("#f-save").onclick = () => {
+    $("#f-save").onclick = async () => {
       if (!form.fear.trim()) { toast("Опиши, що тебе тривожить 🙏", "warn"); return; }
       if (!form.anxiety) { toast("Обери рівень тривоги", "warn"); return; }
+      if (window.Safeguard) await Safeguard.writeDraftNow(form);
       const entry = S.addEntry({
         type: form.type, anxiety: form.anxiety, mood: form.mood, energy: form.energy,
         fear: form.fear.trim(), cause: form.cause.trim(), trigger: form.trigger, category: form.category,
         helped: form.helped.slice(), openDate: form.openDate, reviewed: false
       });
-      // ресурси, що допомогли (ефективність = настрій або 3)
       form.helped.forEach(h => S.addResourceUse(h, form.mood || 3));
       const wasLetter = form.type === "letter";
-      S.clearDraft();
+      S.clearDraft({ skipPush: true });
+      if (window.Safeguard) {
+        const syncRes = await Safeguard.flushToServer({ afterEntrySave: true, silent: false });
+        if (syncRes && syncRes.ok) await Safeguard.clearDraftDurable();
+        else if (window.Safeguard && !Safeguard.isOnline()) {
+          toast("Запис збережено на пристрої. Синхронізуємо, коли з’явиться Інтернет.", "warn");
+        }
+      } else {
+        S.clearDraft();
+      }
       form = null;
+      if (window.Safeguard) Safeguard.setEditingRoute(false);
       checkAchievements();
       toast(wasLetter ? "Лист збережено ✉️" : "Запис збережено 🌿", "good");
       closerModal(() => go("home"));
+      void entry;
     };
   }
 
@@ -3921,6 +3957,16 @@
   async function boot() {
     await loadPublicConfig();
     initAuth();
+    if (window.Safeguard) {
+      Safeguard.init({
+        S, toast, openModal, closeModal, go, esc,
+        confirmModal
+      });
+    }
+    window.addEventListener("spokiy:sync-conflict", (ev) => {
+      if (!window.Safeguard || !ev.detail || !Safeguard.handleConflictEvent) return;
+      Safeguard.handleConflictEvent(ev.detail);
+    });
     const profileBtn = $("#topbar-profile");
     if (profileBtn) profileBtn.onclick = () => go("profile");
     const scrim = $("#scrim");

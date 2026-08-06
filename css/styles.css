@@ -1724,6 +1724,45 @@ input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border: none;
   .welcome-groups { max-height: 52vh; }
 }
 
+/* Connectivity / sync banner */
+.connectivity-banner {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+.connectivity-banner.hidden { display: none !important; }
+.connectivity-banner--offline {
+  background: linear-gradient(180deg, #ffe8d2, #ffd7b0);
+  color: #5a3218;
+}
+.connectivity-banner--sync {
+  background: linear-gradient(180deg, #e8f0fb, #d5e4f7);
+  color: #163a68;
+}
+.connectivity-banner--ok {
+  background: linear-gradient(180deg, #e7f6ee, #d4efdf);
+  color: #1d5c3a;
+}
+:root[data-theme="dark"] .connectivity-banner--offline {
+  background: #3a2a22;
+  color: #ffd7b0;
+  border-bottom-color: #5a4030;
+}
+:root[data-theme="dark"] .connectivity-banner--sync {
+  background: #1a2c44;
+  color: #c9d3e4;
+}
+:root[data-theme="dark"] .connectivity-banner--ok {
+  background: #1c3a2c;
+  color: #b8e0c8;
+}
+
 /* Перемикач теми (вгорі екрану) */
 .theme-toggle {
   display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0;
