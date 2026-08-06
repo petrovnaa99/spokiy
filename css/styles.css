@@ -1046,6 +1046,10 @@ button.analytics-metric:hover {
 .analytics-banner-text b { display: block; font-size: 14px; margin-bottom: 2px; }
 .analytics-banner-text span { display: block; font-size: 12.5px; color: var(--ink-soft); line-height: 1.4; }
 .analytics-banner .btn { flex: none; white-space: nowrap; }
+.analytics-banner-ok {
+  background: color-mix(in srgb, var(--ok, #2fae8e) 12%, var(--card, #fff));
+  border-color: color-mix(in srgb, var(--ok, #2fae8e) 22%, var(--line));
+}
 
 /* Ряд 2: панелі прогресу / тесту */
 .analytics-panel { min-height: 124px; }

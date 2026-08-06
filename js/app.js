@@ -7,7 +7,13 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
-  const todayKey = () => new Date().toISOString().slice(0, 10);
+  function dayKeyLocal(d = new Date()) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  const todayKey = () => dayKeyLocal(new Date());
   const uid = () => Math.random().toString(36).slice(2, 9);
 
   /* ===================== КОНФІГУРАЦІЯ ===================== */
@@ -651,7 +657,20 @@
 
   /* ===================== Аналітика-обчислення ===================== */
   function dayKeyFromIso(iso) {
-    return new Date(iso).toISOString().slice(0, 10);
+    if (!iso) return todayKey();
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
+    return dayKeyLocal(d);
+  }
+
+  /** Тривога 1–10 з wellbeing (сайт). Telegram раніше писав mood×2 — нормалізуємо. */
+  function wellbeingAnxiety(wbEntry) {
+    if (!wbEntry || typeof wbEntry.level !== "number") return null;
+    if (wbEntry.source === "telegram" && wbEntry.scale !== "anxiety") {
+      // legacy: mood×2 (більше = краще) → anxiety
+      return Math.max(1, Math.min(10, 11 - wbEntry.level));
+    }
+    return wbEntry.level;
   }
 
   /** Унікальні дні з активністю: запис, оцінка стану, ритуал (сайт/Telegram) або check-in */
@@ -670,6 +689,35 @@
       if (day && (day.morning || day.midday || day.evening || day.now)) keys.add(k);
     });
     return [...keys].sort();
+  }
+
+  function telegramCheckinStats() {
+    const rituals = S.state.rituals || {};
+    let marks = 0;
+    let notes = 0;
+    const days = new Set();
+    Object.keys(rituals).forEach((k) => {
+      const day = rituals[k] || {};
+      ["morning", "midday", "evening", "now"].forEach((type) => {
+        const r = day[type];
+        if (!r) return;
+        if (r.source === "telegram" || r.note || r.value != null || r.mood) {
+          if (r.source === "telegram") {
+            marks++;
+            days.add(k);
+            if (r.note) notes++;
+          }
+        }
+      });
+    });
+    (S.state.entries || []).forEach((e) => {
+      if (e && e.source === "telegram") {
+        marks++;
+        if (e.dayKey) days.add(String(e.dayKey).slice(0, 10));
+        else if (e.createdAt) days.add(dayKeyFromIso(e.createdAt));
+      }
+    });
+    return { marks, notes, days: days.size };
   }
 
   /** Рівень напруги 1–10 з ритуалу/Telegram (value 1–5 або mood id). */
@@ -700,9 +748,12 @@
     const keys = new Set(activityDayKeys());
     let streak = 0;
     const d = new Date();
-    const key = (dt) => dt.toISOString().slice(0, 10);
-    if (!keys.has(key(d))) d.setDate(d.getDate() - 1);
-    while (keys.has(key(d))) { streak++; d.setDate(d.getDate() - 1); }
+    d.setHours(12, 0, 0, 0);
+    if (!keys.has(dayKeyLocal(d))) d.setDate(d.getDate() - 1);
+    while (keys.has(dayKeyLocal(d))) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    }
     return streak;
   }
 
@@ -726,10 +777,13 @@
       const d = new Date();
       d.setHours(12, 0, 0, 0);
       d.setDate(d.getDate() - i);
-      const k = d.toISOString().slice(0, 10);
+      const k = dayKeyLocal(d);
+      const ritualLvl = ritualDayTension(k);
+      const wbLvl = wellbeingAnxiety(wb[k]);
+      // Ритуал/Telegram mood — пріоритетніше за сирий wellbeing, щоб не плутати шкалу
       const level = anxietyByDay[k]
-        ?? (wb[k] && typeof wb[k].level === "number" ? wb[k].level : null)
-        ?? ritualDayTension(k);
+        ?? (ritualLvl != null ? ritualLvl : null)
+        ?? wbLvl;
       out.push({ key: k, level, label: wd[d.getDay()] });
     }
     return out;
@@ -755,7 +809,7 @@
     const byDay = {};
     S.state.entries.forEach(e => {
       if (typeof e.anxiety !== "number") return;
-      const k = new Date(e.createdAt).toISOString().slice(0, 10);
+      const k = e.dayKey ? String(e.dayKey).slice(0, 10) : dayKeyFromIso(e.createdAt);
       byDay[k] = Math.max(byDay[k] || 0, e.anxiety);
     });
     const days = Object.keys(byDay).sort().reverse();
@@ -2380,9 +2434,12 @@
 
   function calendarMark(dayKey) {
     const w = (S.state.wellbeing || {})[dayKey];
+    const anxiety = wellbeingAnxiety(w);
     const hasGood = (S.state.goodEvents || []).some(e => e.dayKey === dayKey);
-    if (w && w.level >= 7) return { mark: "😟", cls: "anxious", title: "Тривожний день" };
-    if (hasGood || (w && w.level <= 4)) return { mark: "🙂", cls: "good", title: "Хороший / спокійний день" };
+    const ritualLvl = ritualDayTension(dayKey);
+    const level = anxiety != null ? anxiety : ritualLvl;
+    if (level != null && level >= 7) return { mark: "😟", cls: "anxious", title: "Тривожний день" };
+    if (hasGood || (level != null && level <= 4)) return { mark: "🙂", cls: "good", title: "Хороший / спокійний день" };
     return { mark: "", cls: "", title: "" };
   }
 
@@ -2911,14 +2968,25 @@
   let charts = [];
   function destroyCharts() { charts.forEach(c => { try { c.destroy(); } catch (e) {} }); charts = []; }
 
-  function analyticsNoticeBanner(entriesCount) {
+  function analyticsNoticeBanner(entriesCount, tgStats) {
+    const tg = tgStats || { marks: 0, days: 0 };
+    if (tg.marks > 0) {
+      return `<div class="card analytics-banner analytics-span-12 analytics-banner-ok">
+      <span class="analytics-banner-ico">📱</span>
+      <div class="analytics-banner-text">
+        <b>Telegram уже в статистиці</b>
+        <span>${tg.marks} ${pluralUk(tg.marks, "відмітка", "відмітки", "відміток")} за ${tg.days} ${pluralUk(tg.days, "день", "дні", "днів")}. Нижче — у загальних метриках і «Стан за 7 днів».</span>
+      </div>
+      <button class="btn btn-primary btn-sm" id="analytics-new">Новий запис</button>
+    </div>`;
+    }
     const need = Math.max(0, 3 - entriesCount);
     const needText = `ще ${need} ${pluralUk(need, "запис", "записи", "записів")}`;
     return `<div class="card analytics-banner analytics-span-12">
       <span class="analytics-banner-ico">📊</span>
       <div class="analytics-banner-text">
         <b>Недостатньо даних</b>
-        <span>Створи ${needText} для появи аналітики.</span>
+        <span>Створи ${needText} у щоденнику або відміть стан у Telegram — з’явиться аналітика.</span>
       </div>
       <button class="btn btn-primary btn-sm" id="analytics-new">Новий запис</button>
     </div>`;
@@ -2928,7 +2996,7 @@
     const filled = week7.filter(d => d.level != null).length;
     let inner = "";
     if (filled === 0) {
-      inner = `<p class="analytics-none">Поки немає оцінок за 7 днів. Зроби запис у щоденнику або відміть стан на головній — тоді тут з’явиться динаміка.</p>`;
+      inner = `<p class="analytics-none">Поки немає оцінок за 7 днів. Зроби запис у щоденнику, відміть стан на головній або в Telegram — тоді тут з’явиться динаміка.</p>`;
     } else if (filled < 2) {
       inner = `<p class="analytics-hint">Є дані лише за ${filled} ${pluralUk(filled, "день", "дні", "днів")}. Після ще одного запису графік стане зрозумілішим.</p>${weekBarsHTML(week7)}`;
     } else {
@@ -2936,7 +3004,7 @@
     }
     return `<div class="card analytics-card analytics-week-card analytics-span-12">
       <div class="card-title">Стан за 7 днів</div>
-      <p class="analytics-week-sub">Середня тривога з записів або щоденна оцінка стану</p>
+      <p class="analytics-week-sub">Тривога з записів, ритуалів і Telegram (1–10, вище = напруженіше)</p>
       ${inner}
     </div>`;
   }
@@ -2971,7 +3039,7 @@
     const anxietyEntries = entries.filter(e => typeof e.anxiety === "number");
     const byDay = {};
     anxietyEntries.forEach(e => {
-      const k = e.dayKey ? String(e.dayKey).slice(0, 10) : new Date(e.createdAt).toISOString().slice(0, 10);
+      const k = e.dayKey ? String(e.dayKey).slice(0, 10) : dayKeyFromIso(e.createdAt);
       byDay[k] = byDay[k] ? Math.max(byDay[k], e.anxiety) : e.anxiety;
     });
     // Підтягнути відмітки Telegram / ритуалів у графік тривоги
@@ -2982,13 +3050,15 @@
     });
     const wbAll = S.state.wellbeing && !Array.isArray(S.state.wellbeing) ? S.state.wellbeing : {};
     Object.keys(wbAll).forEach((k) => {
-      if (typeof wbAll[k].level !== "number") return;
-      byDay[k] = byDay[k] != null ? Math.max(byDay[k], wbAll[k].level) : wbAll[k].level;
+      const lvl = wellbeingAnxiety(wbAll[k]);
+      if (lvl == null) return;
+      // Не перебивати ритуал сирим wellbeing, якщо вже є
+      if (byDay[k] == null) byDay[k] = lvl;
     });
     const dayKeys = Object.keys(byDay).sort().slice(-21);
     const moodMap = {}, energyMap = {};
     entries.forEach(e => {
-      const k = e.dayKey ? String(e.dayKey).slice(0, 10) : new Date(e.createdAt).toISOString().slice(0, 10);
+      const k = e.dayKey ? String(e.dayKey).slice(0, 10) : dayKeyFromIso(e.createdAt);
       if (e.mood) moodMap[k] = e.mood;
       if (e.energy) energyMap[k] = e.energy;
     });
@@ -3012,7 +3082,8 @@
     const ritualMoodCount = window.Rituals && Rituals.analyticsData
       ? Rituals.analyticsData().moods.length
       : 0;
-    const enoughRecords = diaryCount >= 3 || ritualMoodCount >= 2 || dayKeys.length >= 2;
+    const tgStats = telegramCheckinStats();
+    const enoughRecords = diaryCount >= 1 || ritualMoodCount >= 1 || dayKeys.length >= 1 || tgStats.marks >= 1;
     const hasAnxietyChart = enoughRecords && dayKeys.length >= 2;
     const hasMoodChart = enoughRecords && moodDays.length >= 2;
     const hasWeekChart = enoughRecords && weekKeys.length >= 1 && dayKeys.length >= 2;
@@ -3030,19 +3101,21 @@
           <div class="s-hint">запис, ритуал або Telegram</div>
         </div>
         <div class="card analytics-card analytics-metric analytics-span-3">
-          <div class="s-ico">🛡️</div><div class="s-val">${S.state.evidence.length}</div>
-          <div class="s-lbl">страхів не справдилось</div>
-          <div class="s-hint">у банку доказів</div>
+          <div class="s-ico">📱</div><div class="s-val">${tgStats.marks}</div>
+          <div class="s-lbl">відміток Telegram</div>
+          <div class="s-hint">${tgStats.days ? `за ${tgStats.days} ${pluralUk(tgStats.days, "день", "дні", "днів")}` : "поки немає"}</div>
         </div>
         <button class="card analytics-card analytics-metric analytics-metric-click analytics-span-3" id="metric-entries" type="button" title="Переглянути всі записи">
           <div class="s-ico">📈</div><div class="s-val">${diaryCount}</div>
           <div class="s-lbl">усього записів</div>
-          <div class="s-hint">натисни — переглянути</div>
+          <div class="s-hint">${tgStats.notes ? `${tgStats.notes} з Telegram · натисни` : "натисни — переглянути"}</div>
         </button>`;
 
     let bodyHTML = window.Rituals ? Rituals.dynamicsSectionHTML() : "";
     bodyHTML += analyticsWeek7Card(week7);
-    if (!enoughRecords) bodyHTML = analyticsNoticeBanner(diaryCount) + bodyHTML;
+    if (!enoughRecords || (tgStats.marks > 0 && diaryCount < 3 && dayKeys.length < 2)) {
+      bodyHTML = analyticsNoticeBanner(diaryCount, tgStats) + bodyHTML;
+    }
 
     if (enoughRecords) {
       const chartItems = [];
@@ -3987,6 +4060,20 @@
       renderNav();
       render();
     });
+
+    // Після бота в Telegram — підтягнути хмару, коли повертаєшся на вкладку
+    let lastFocusPull = 0;
+    const pullOnFocus = () => {
+      if (!S.isAuthed() || !S.refreshFromCloud) return;
+      const now = Date.now();
+      if (now - lastFocusPull < 8000) return;
+      lastFocusPull = now;
+      S.refreshFromCloud(true).catch(() => {});
+    };
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") pullOnFocus();
+    });
+    window.addEventListener("focus", pullOnFocus);
 
     // М’яке повідомлення при зміні етапу рослини (без «рівнів» і без покарання).
     window.addEventListener("spokiy:recovery-award", (ev) => {

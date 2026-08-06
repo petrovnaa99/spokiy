@@ -66,8 +66,49 @@ window.Store = (function () {
     return st;
   }
 
+  function dayKeyLocal(d = new Date()) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
   function recoveryDayKey(iso) {
-    return String(iso || new Date().toISOString()).slice(0, 10);
+    if (!iso) return dayKeyLocal(new Date());
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
+    return dayKeyLocal(d);
+  }
+
+  /** Telegram раніше писав mood×2; на сайті level = тривога 1–10. */
+  function normalizeWellbeingMap(wb) {
+    const src = wb && typeof wb === "object" && !Array.isArray(wb) ? wb : {};
+    const out = {};
+    Object.keys(src).forEach((k) => {
+      const e = src[k];
+      if (!e || typeof e !== "object") return;
+      if (typeof e.level !== "number") {
+        out[k] = e;
+        return;
+      }
+      if (e.source === "telegram" && e.scale !== "anxiety") {
+        out[k] = Object.assign({}, e, {
+          level: Math.max(1, Math.min(10, Math.round(11 - e.level))),
+          scale: "anxiety"
+        });
+      } else {
+        out[k] = e;
+      }
+    });
+    return out;
+  }
+
+  function anxietyOfWellbeing(entry) {
+    if (!entry || typeof entry.level !== "number") return null;
+    if (entry.source === "telegram" && entry.scale !== "anxiety") {
+      return Math.max(1, Math.min(10, Math.round(11 - entry.level)));
+    }
+    return entry.level;
   }
 
   function emptyState(profile) {
@@ -324,15 +365,43 @@ window.Store = (function () {
       });
       out.entries = Object.values(byId).sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
 
-      out.wellbeing = Object.assign({}, rem.wellbeing || {}, local.wellbeing || {});
-      Object.keys(rem.wellbeing || {}).forEach((k) => {
-        const R = rem.wellbeing[k], L = out.wellbeing[k];
-        if (!L) out.wellbeing[k] = R;
-        else if (R && typeof R.level === "number" && (!(typeof L.level === "number") || R.level >= L.level)) {
-          out.wellbeing[k] = R;
-        }
-      });
+      out.wellbeing = (() => {
+        const wbL = normalizeWellbeingMap(local.wellbeing);
+        const wbR = normalizeWellbeingMap(rem.wellbeing);
+        const wellbeing = Object.assign({}, wbR, wbL);
+        new Set([...Object.keys(wbL), ...Object.keys(wbR)]).forEach((k) => {
+          const L = wbL[k];
+          const R = wbR[k];
+          if (!L) wellbeing[k] = R;
+          else if (!R) wellbeing[k] = L;
+          else {
+            const la = anxietyOfWellbeing(L);
+            const ra = anxietyOfWellbeing(R);
+            wellbeing[k] = (ra == null || (la != null && la >= ra)) ? L : R;
+          }
+        });
+        return wellbeing;
+      })();
       out.checkins = Object.assign({}, rem.checkins || {}, local.checkins || {});
+
+      function mergeListById(a, b) {
+        const map = {};
+        [].concat(a || [], b || []).forEach((item) => {
+          if (!item || !item.id) return;
+          const prev = map[item.id];
+          if (!prev) map[item.id] = item;
+          else {
+            const pt = Date.parse(prev.date || prev.updatedAt || 0) || 0;
+            const et = Date.parse(item.date || item.updatedAt || 0) || 0;
+            if (et >= pt) map[item.id] = item;
+          }
+        });
+        return Object.values(map).sort(
+          (x, y) => Date.parse(y.date || 0) - Date.parse(x.date || 0)
+        );
+      }
+      out.gratitude = mergeListById(local.gratitude, rem.gratitude);
+      out.goodEvents = mergeListById(local.goodEvents, rem.goodEvents);
 
       // Чернетка: не губити локальний текст, якщо на сервері порожньо або старіше
       const localDraft = local.draft;
@@ -433,6 +502,7 @@ window.Store = (function () {
     const all = db();
     state = all[currentEmail] || emptyState({ email: currentEmail });
     ensureRecoveryAwards(state);
+    if (state.wellbeing) state.wellbeing = normalizeWellbeingMap(state.wellbeing);
     if (state.profile) {
       state.profile.email = currentEmail;
       ensureRecoveryFields(state.profile);
@@ -947,9 +1017,10 @@ window.Store = (function () {
 
     setWellbeing(level, date) {
       const iso = date || new Date().toISOString();
-      const dayKey = iso.slice(0, 10);
+      const d = new Date(iso);
+      const dayKey = Number.isNaN(d.getTime()) ? String(iso).slice(0, 10) : dayKeyLocal(d);
       if (!state.wellbeing || Array.isArray(state.wellbeing)) state.wellbeing = {};
-      state.wellbeing[dayKey] = { level: +level, date: iso };
+      state.wellbeing[dayKey] = { level: +level, date: iso, scale: "anxiety" };
       this.markCheckin(iso);
       persist();
       // Перша оцінка стану за день (повторні зміни шкали не дають прогресу).
@@ -958,12 +1029,14 @@ window.Store = (function () {
     },
     todayWellbeing() {
       if (!state.wellbeing || Array.isArray(state.wellbeing)) state.wellbeing = {};
-      return state.wellbeing[new Date().toISOString().slice(0, 10)] || null;
+      state.wellbeing = normalizeWellbeingMap(state.wellbeing);
+      return state.wellbeing[dayKeyLocal(new Date())] || null;
     },
     addGoodEvent(text, date) {
       text = (text || "").trim(); if (!text) return null;
       const iso = date || new Date().toISOString();
-      const dayKey = iso.slice(0, 10);
+      const d = new Date(iso);
+      const dayKey = Number.isNaN(d.getTime()) ? String(iso).slice(0, 10) : dayKeyLocal(d);
       if (!Array.isArray(state.goodEvents)) state.goodEvents = [];
       const ev = { id: "ge" + Date.now() + Math.random().toString(36).slice(2, 5), text, date: iso, dayKey };
       state.goodEvents.unshift(ev);
@@ -976,7 +1049,8 @@ window.Store = (function () {
     addGratitude(text, date) {
       text = (text || "").trim(); if (!text) return null;
       const iso = date || new Date().toISOString();
-      const dayKey = iso.slice(0, 10);
+      const d = new Date(iso);
+      const dayKey = Number.isNaN(d.getTime()) ? String(iso).slice(0, 10) : dayKeyLocal(d);
       if (!Array.isArray(state.gratitude)) state.gratitude = [];
       const rec = { id: "gr" + Date.now() + Math.random().toString(36).slice(2, 5), text, date: iso, dayKey };
       state.gratitude.unshift(rec);
@@ -988,7 +1062,7 @@ window.Store = (function () {
 
     markCheckin(iso) {
       const d = new Date(iso || Date.now());
-      const key = d.toISOString().slice(0, 10);
+      const key = Number.isNaN(d.getTime()) ? dayKeyLocal(new Date()) : dayKeyLocal(d);
       state.checkins[key] = true; persist();
     },
 

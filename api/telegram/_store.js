@@ -57,14 +57,138 @@ function applyWellbeingAndCheckin(state, dayKey, data, at) {
   const moodVal = Number(data && data.value);
   if (Number.isFinite(moodVal) && moodVal >= 1 && moodVal <= 5) {
     if (!state.wellbeing) state.wellbeing = {};
-    const level = Math.max(1, Math.min(10, Math.round(moodVal * 2)));
+    // На сайті wellbeing.level = тривога 1–10 (більше = гірше). Mood 5 → 1, mood 1 → 9.
+    const level = Math.max(1, Math.min(10, Math.round(11 - moodVal * 2)));
     const prev = state.wellbeing[dayKey];
     if (!prev || typeof prev.level !== "number" || level >= prev.level) {
-      state.wellbeing[dayKey] = { level, date: at, source: "telegram" };
+      state.wellbeing[dayKey] = { level, date: at, source: "telegram", scale: "anxiety" };
     }
   }
   if (!state.checkins) state.checkins = {};
   state.checkins[dayKey] = true;
+}
+
+function ensureStateArrays(state, email) {
+  if (!state || typeof state !== "object") state = {};
+  if (!state.profile) {
+    state.profile = { email, name: String(email || "").split("@")[0], gender: null, provider: "email" };
+  }
+  if (!state.rituals) state.rituals = {};
+  if (!Array.isArray(state.entries)) state.entries = [];
+  if (!state.wellbeing || Array.isArray(state.wellbeing)) state.wellbeing = {};
+  if (!state.checkins) state.checkins = {};
+  if (!Array.isArray(state.gratitude)) state.gratitude = [];
+  if (!Array.isArray(state.goodEvents)) state.goodEvents = [];
+  return state;
+}
+
+function appendGratitude(state, text, dayKey, at) {
+  const t = String(text || "").trim().slice(0, 800);
+  if (!t) return null;
+  const rec = {
+    id: "gr" + Date.now() + Math.random().toString(36).slice(2, 5),
+    text: t,
+    date: at,
+    dayKey,
+    source: "telegram"
+  };
+  state.gratitude.unshift(rec);
+  return rec;
+}
+
+function appendGoodEvent(state, text, dayKey, at) {
+  const t = String(text || "").trim().slice(0, 800);
+  if (!t) return null;
+  const rec = {
+    id: "ge" + Date.now() + Math.random().toString(36).slice(2, 5),
+    text: t,
+    date: at,
+    dayKey,
+    source: "telegram"
+  };
+  state.goodEvents.unshift(rec);
+  return rec;
+}
+
+/**
+ * Застосувати щоденну нотатку до snapshot стану.
+ * kind: ritual | wellbeing | gratitude | good | diary
+ */
+function applyDailyNoteToState(state, kind, payload = {}) {
+  const email = (state.profile && state.profile.email) || payload.email || "";
+  state = ensureStateArrays(state, email);
+  const at = new Date().toISOString();
+  const dayKey = payload.dayKey || at.slice(0, 10);
+  let diaryEntry = null;
+
+  if (kind === "ritual") {
+    const ritualType = payload.ritualType || "now";
+    if (!state.rituals[dayKey]) state.rituals[dayKey] = {};
+    const data = Object.assign({}, payload.data || {});
+    state.rituals[dayKey][ritualType] = { ...data, at, source: "telegram" };
+    applyWellbeingAndCheckin(state, dayKey, data, at);
+    if (data.gratitude) appendGratitude(state, data.gratitude, dayKey, at);
+    const thought = payload.diaryThought ? String(payload.diaryThought).trim() : "";
+    if (thought) {
+      diaryEntry = buildTelegramDiaryEntry(thought, data, dayKey);
+      state.entries.unshift(diaryEntry);
+    }
+  } else if (kind === "wellbeing") {
+    const level = Math.max(1, Math.min(10, Math.round(Number(payload.level) || 5)));
+    state.wellbeing[dayKey] = { level, date: at, source: "telegram", scale: "anxiety" };
+    state.checkins[dayKey] = true;
+  } else if (kind === "gratitude") {
+    appendGratitude(state, payload.text, dayKey, at);
+    state.checkins[dayKey] = true;
+  } else if (kind === "good") {
+    appendGoodEvent(state, payload.text, dayKey, at);
+    state.checkins[dayKey] = true;
+  } else if (kind === "diary") {
+    const moodVal = Number(payload.mood);
+    const anxiety = Number.isFinite(Number(payload.anxiety))
+      ? Math.max(1, Math.min(10, Math.round(Number(payload.anxiety))))
+      : (Number.isFinite(moodVal) ? Math.max(1, Math.min(10, 11 - moodVal * 2)) : 5);
+    diaryEntry = buildTelegramDiaryEntry(payload.text || "", { value: moodVal }, dayKey);
+    diaryEntry.anxiety = anxiety;
+    if (Number.isFinite(moodVal)) diaryEntry.mood = moodVal;
+    state.entries.unshift(diaryEntry);
+    state.checkins[dayKey] = true;
+    const prev = state.wellbeing[dayKey];
+    if (!prev || typeof prev.level !== "number" || anxiety >= prev.level) {
+      state.wellbeing[dayKey] = { level: anxiety, date: at, source: "telegram", scale: "anxiety" };
+    }
+  }
+
+  state.updatedAt = at;
+  return { state, diaryEntry, at };
+}
+
+async function insertDiaryRow(sb, email, diaryEntry) {
+  if (!diaryEntry) return;
+  const row = {
+    id: diaryEntry.id,
+    user_email: email,
+    type: "diary",
+    fear: diaryEntry.fear,
+    thought: null,
+    situation: null,
+    category: null,
+    cause: null,
+    trigger: null,
+    anxiety: diaryEntry.anxiety,
+    mood: diaryEntry.mood,
+    energy: null,
+    support_methods: null,
+    review: null,
+    payload: diaryEntry,
+    created_at: diaryEntry.createdAt,
+    updated_at: diaryEntry.updatedAt
+  };
+  const ins = await sb("POST", "diary_entries", {
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify(row)
+  });
+  if (!ins.ok) throw new Error(`diary_entries insert ${ins.status}: ${ins.text}`);
 }
 
 /* ---------- Supabase backend ---------- */
@@ -176,7 +300,6 @@ function createSupabaseStore() {
       const r = await sb("GET", `${USERS}?email=eq.${encodeURIComponent(email)}&select=data,profile&limit=1`);
       if (!r.ok) throw new Error(`users get ${r.status}: ${r.text}`);
       let state = (r.json && r.json[0] && parseJson(r.json[0].data, null)) || {};
-      if (!state || typeof state !== "object") state = {};
       if (!state.profile) {
         const cred = await sb("GET", `auth_credentials?email=eq.${encodeURIComponent(email)}&select=name,gender&limit=1`);
         const c = cred.json && cred.json[0];
@@ -187,61 +310,49 @@ function createSupabaseStore() {
           provider: "email"
         };
       }
-      if (!state.rituals) state.rituals = {};
-      if (!state.rituals[dayKey]) state.rituals[dayKey] = {};
-      if (!Array.isArray(state.entries)) state.entries = [];
-      if (!state.wellbeing) state.wellbeing = {};
-      if (!state.checkins) state.checkins = {};
-      const at = new Date().toISOString();
-      state.rituals[dayKey][ritualType] = { ...data, at, source: "telegram" };
-      applyWellbeingAndCheckin(state, dayKey, data, at);
-
-      const thought = opts && opts.diaryThought ? String(opts.diaryThought).trim() : "";
-      let diaryEntry = null;
-      if (thought) {
-        diaryEntry = buildTelegramDiaryEntry(thought, data, dayKey);
-        state.entries.unshift(diaryEntry);
-      }
-
-      state.updatedAt = at;
+      const applied = applyDailyNoteToState(state, "ritual", {
+        email,
+        dayKey,
+        ritualType,
+        data,
+        diaryThought: opts && opts.diaryThought
+      });
+      state = applied.state;
       const up = await sb("POST", `${USERS}?on_conflict=email`, {
         headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
         body: JSON.stringify({
           email,
           profile: state.profile || { email },
           data: state,
-          updated_at: at
+          updated_at: applied.at
         })
       });
       if (!up.ok) throw new Error(`users upsert ${up.status}: ${up.text}`);
+      await insertDiaryRow(sb, email, applied.diaryEntry);
+      return { ok: true, diaryId: applied.diaryEntry ? applied.diaryEntry.id : null };
+    },
 
-      if (diaryEntry) {
-        const row = {
-          id: diaryEntry.id,
-          user_email: email,
-          type: "diary",
-          fear: diaryEntry.fear,
-          thought: null,
-          situation: null,
-          category: null,
-          cause: null,
-          trigger: null,
-          anxiety: diaryEntry.anxiety,
-          mood: diaryEntry.mood,
-          energy: null,
-          support_methods: null,
-          review: null,
-          payload: diaryEntry,
-          created_at: diaryEntry.createdAt,
-          updated_at: diaryEntry.updatedAt
-        };
-        const ins = await sb("POST", "diary_entries", {
-          headers: { Prefer: "return=minimal" },
-          body: JSON.stringify(row)
-        });
-        if (!ins.ok) throw new Error(`diary_entries insert ${ins.status}: ${ins.text}`);
+    async syncDailyNote(email, kind, payload = {}) {
+      const r = await sb("GET", `${USERS}?email=eq.${encodeURIComponent(email)}&select=data,profile&limit=1`);
+      if (!r.ok) throw new Error(`users get ${r.status}: ${r.text}`);
+      let state = (r.json && r.json[0] && parseJson(r.json[0].data, null)) || {};
+      if (!state.profile) {
+        state.profile = { email, name: email.split("@")[0], gender: null, provider: "email" };
       }
-      return { ok: true, diaryId: diaryEntry ? diaryEntry.id : null };
+      const applied = applyDailyNoteToState(state, kind, Object.assign({ email }, payload));
+      state = applied.state;
+      const up = await sb("POST", `${USERS}?on_conflict=email`, {
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({
+          email,
+          profile: state.profile || { email },
+          data: state,
+          updated_at: applied.at
+        })
+      });
+      if (!up.ok) throw new Error(`users upsert ${up.status}: ${up.text}`);
+      await insertDiaryRow(sb, email, applied.diaryEntry);
+      return { ok: true, diaryId: applied.diaryEntry ? applied.diaryEntry.id : null };
     }
   };
 }
@@ -363,23 +474,28 @@ function createSqliteStore(db) {
       if (!state.profile) {
         state.profile = { email, name: email.split("@")[0], gender: null, provider: "email" };
       }
-      if (!state.rituals) state.rituals = {};
-      if (!state.rituals[dayKey]) state.rituals[dayKey] = {};
-      if (!Array.isArray(state.entries)) state.entries = [];
-      if (!state.wellbeing) state.wellbeing = {};
-      if (!state.checkins) state.checkins = {};
-      const at = new Date().toISOString();
-      state.rituals[dayKey][ritualType] = { ...data, at, source: "telegram" };
-      applyWellbeingAndCheckin(state, dayKey, data, at);
+      const applied = applyDailyNoteToState(state, "ritual", {
+        email,
+        dayKey,
+        ritualType,
+        data,
+        diaryThought: opts && opts.diaryThought
+      });
+      qUserUpsert.run(email, JSON.stringify(applied.state), applied.at);
+      return { ok: true };
+    },
 
-      const thought = opts && opts.diaryThought ? String(opts.diaryThought).trim() : "";
-      if (thought) {
-        const diaryEntry = buildTelegramDiaryEntry(thought, data, dayKey);
-        state.entries.unshift(diaryEntry);
+    async syncDailyNote(email, kind, payload = {}) {
+      const row = qUserData.get(email);
+      let state = {};
+      if (row) {
+        try { state = JSON.parse(row.data || "{}"); } catch { state = {}; }
       }
-
-      state.updatedAt = at;
-      qUserUpsert.run(email, JSON.stringify(state), state.updatedAt);
+      if (!state.profile) {
+        state.profile = { email, name: email.split("@")[0], gender: null, provider: "email" };
+      }
+      const applied = applyDailyNoteToState(state, kind, Object.assign({ email }, payload));
+      qUserUpsert.run(email, JSON.stringify(applied.state), applied.at);
       return { ok: true };
     }
   };

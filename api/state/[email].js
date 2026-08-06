@@ -23,12 +23,6 @@ const ENTRIES_TABLE = "diary_entries";
 const EVIDENCE_TABLE = "evidence_records";
 const SUPPORT_TABLE = "support_resources";
 
-function normalizeEmail(raw) {
-  const e = String(raw || "").trim().toLowerCase();
-  if (!e || e.length > 320 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return null;
-  return e;
-}
-
 function iso(raw) {
   const d = raw ? new Date(raw) : new Date();
   return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
@@ -145,6 +139,127 @@ async function writeNormalized(email, data) {
   await replaceRows(SUPPORT_TABLE, email, resourcesToRows(email, data.resources));
 }
 
+/** Telegram раніше писав mood×2 (більше = краще). На сайті level = тривога. */
+function normalizeWellbeingMap(wb) {
+  const src = wb && typeof wb === "object" && !Array.isArray(wb) ? wb : {};
+  const out = {};
+  Object.keys(src).forEach((k) => {
+    const e = src[k];
+    if (!e || typeof e !== "object") return;
+    if (typeof e.level !== "number") {
+      out[k] = e;
+      return;
+    }
+    if (e.source === "telegram" && e.scale !== "anxiety") {
+      out[k] = Object.assign({}, e, {
+        level: Math.max(1, Math.min(10, Math.round(11 - e.level))),
+        scale: "anxiety"
+      });
+    } else {
+      out[k] = e;
+    }
+  });
+  return out;
+}
+
+function anxietyLevel(wbEntry) {
+  if (!wbEntry || typeof wbEntry.level !== "number") return null;
+  if (wbEntry.source === "telegram" && wbEntry.scale !== "anxiety") {
+    return Math.max(1, Math.min(10, Math.round(11 - wbEntry.level)));
+  }
+  return wbEntry.level;
+}
+
+function mergeEntriesById(snapshotEntries, tableEntries) {
+  const byId = {};
+  [].concat(snapshotEntries || [], tableEntries || []).forEach((e) => {
+    if (!e || !e.id) return;
+    const prev = byId[e.id];
+    if (!prev) {
+      byId[e.id] = e;
+      return;
+    }
+    const pt = Date.parse(prev.updatedAt || prev.createdAt || 0) || 0;
+    const et = Date.parse(e.updatedAt || e.createdAt || 0) || 0;
+    byId[e.id] = et >= pt ? Object.assign({}, prev, e) : Object.assign({}, e, prev);
+  });
+  return Object.values(byId).sort(
+    (a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0)
+  );
+}
+
+/** Злити два повні snapshot’и, щоб PUT з сайту не затирав Telegram-дані. */
+function mergeSnapshots(incoming, existing) {
+  const a = incoming && typeof incoming === "object" ? incoming : {};
+  const b = existing && typeof existing === "object" ? existing : {};
+  const out = Object.assign({}, b, a);
+
+  const rituals = {};
+  const days = new Set([
+    ...Object.keys(a.rituals || {}),
+    ...Object.keys(b.rituals || {})
+  ]);
+  days.forEach((day) => {
+    rituals[day] = {};
+    const L = (a.rituals && a.rituals[day]) || {};
+    const R = (b.rituals && b.rituals[day]) || {};
+    new Set([...Object.keys(L), ...Object.keys(R)]).forEach((t) => {
+      const left = L[t];
+      const right = R[t];
+      if (!left) rituals[day][t] = right;
+      else if (!right) rituals[day][t] = left;
+      else {
+        rituals[day][t] =
+          (Date.parse(left.at || 0) || 0) >= (Date.parse(right.at || 0) || 0) ? left : right;
+      }
+    });
+  });
+  out.rituals = rituals;
+
+  out.entries = mergeEntriesById(arr(a.entries), arr(b.entries));
+
+  const wbA = normalizeWellbeingMap(a.wellbeing);
+  const wbB = normalizeWellbeingMap(b.wellbeing);
+  const wellbeing = Object.assign({}, wbB, wbA);
+  new Set([...Object.keys(wbA), ...Object.keys(wbB)]).forEach((k) => {
+    const L = wbA[k];
+    const R = wbB[k];
+    if (!L) wellbeing[k] = R;
+    else if (!R) wellbeing[k] = L;
+    else {
+      const la = anxietyLevel(L);
+      const ra = anxietyLevel(R);
+      wellbeing[k] = (ra == null || (la != null && la >= ra)) ? L : R;
+    }
+  });
+  out.wellbeing = wellbeing;
+  out.checkins = Object.assign({}, b.checkins || {}, a.checkins || {});
+
+  function mergeListById(listA, listB) {
+    const map = {};
+    [].concat(listA || [], listB || []).forEach((item) => {
+      if (!item || !item.id) return;
+      const prev = map[item.id];
+      if (!prev) map[item.id] = item;
+      else {
+        const pt = Date.parse(prev.date || prev.updatedAt || 0) || 0;
+        const et = Date.parse(item.date || item.updatedAt || 0) || 0;
+        if (et >= pt) map[item.id] = item;
+      }
+    });
+    return Object.values(map).sort(
+      (x, y) => Date.parse(y.date || 0) - Date.parse(x.date || 0)
+    );
+  }
+  out.gratitude = mergeListById(arr(a.gratitude), arr(b.gratitude));
+  out.goodEvents = mergeListById(arr(a.goodEvents), arr(b.goodEvents));
+
+  const at = Date.parse(a.updatedAt || 0) || 0;
+  const bt = Date.parse(b.updatedAt || 0) || 0;
+  out.updatedAt = new Date(Math.max(at, bt, Date.now())).toISOString();
+  return out;
+}
+
 async function readNormalized(email, snapshot) {
   const state = snapshot && typeof snapshot === "object" ? snapshot : null;
   if (!state) return null;
@@ -153,12 +268,14 @@ async function readNormalized(email, snapshot) {
     tableRows(EVIDENCE_TABLE, email, "*", "&order=created_at.desc"),
     tableRows(SUPPORT_TABLE, email)
   ]);
-  return {
+  const withEntries = {
     ...state,
-    entries: entries.length ? entries.map(rowToEntry) : arr(state.entries),
+    wellbeing: normalizeWellbeingMap(state.wellbeing),
+    entries: mergeEntriesById(arr(state.entries), entries.map(rowToEntry)),
     evidence: evidence.length ? evidence.map(rowToEvidence) : arr(state.evidence),
     resources: resources.length ? rowsToResources(resources) : (state.resources || {})
   };
+  return withEntries;
 }
 
 async function readBody(req) {
@@ -219,14 +336,29 @@ module.exports = async (req, res) => {
     if (req.method === "PUT" || req.method === "POST") {
       const data = await readBody(req);
       if (!data || typeof data !== "object") return res.status(400).json({ ok: false, error: "bad_json" });
-      const updatedAt = typeof data.updatedAt === "string" ? data.updatedAt : new Date().toISOString();
+      let merged = data;
+      try {
+        const cur = await rest(`${USERS_TABLE}?${eq}&select=data&limit=1`);
+        if (cur.ok) {
+          const rows = await cur.json();
+          const existing = rows && rows[0] && rows[0].data;
+          if (existing && typeof existing === "object") {
+            merged = mergeSnapshots(data, existing);
+          }
+        }
+      } catch (e) {
+        merged = data;
+      }
+      merged.wellbeing = normalizeWellbeingMap(merged.wellbeing);
+      const updatedAt = typeof merged.updatedAt === "string" ? merged.updatedAt : new Date().toISOString();
+      merged.updatedAt = updatedAt;
       const r = await rest(`${USERS_TABLE}?on_conflict=email`, {
         method: "POST",
         headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({ email, profile: data.profile || {}, data, updated_at: updatedAt })
+        body: JSON.stringify({ email, profile: merged.profile || {}, data: merged, updated_at: updatedAt })
       });
       if (!r.ok) throw new Error(`supabase ${r.status}: ${await r.text()}`);
-      await writeNormalized(email, data);
+      await writeNormalized(email, merged);
       return res.status(200).json({ ok: true, updatedAt });
     }
 

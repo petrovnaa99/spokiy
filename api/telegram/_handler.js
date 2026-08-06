@@ -1,10 +1,12 @@
 "use strict";
 
 const { sendMessage, answerCallback } = require("./_api");
-const { normalizeUserRow, mergeSettings, parseJson } = require("./_store");
+const { normalizeUserRow } = require("./_store");
 const {
-  TEXT, MOODS, siteUrl, mainMenuKeyboard, paymentKeyboard, noteChoiceKeyboard, moodRow, calmKeyboard,
-  settingsMenu, timePickKeyboard, timezoneKeyboard, daysToggleKeyboard
+  TEXT, MOODS, WORRIES, siteUrl, mainMenuKeyboard, notesMenuKeyboard, paymentKeyboard,
+  noteChoiceKeyboard, moodRow, calmKeyboard, settingsMenu, timePickKeyboard, timezoneKeyboard,
+  daysToggleKeyboard, sleepKeyboard, worryKeyboard, wellbeingKeyboard, anxietyKeyboard,
+  skipOrCancelKeyboard, cancelKeyboard
 } = require("./_messages");
 
 function todayKeyInTz(timezone) {
@@ -61,6 +63,26 @@ async function saveUser(store, email, settings, bot_state) {
   await store.updateUser(email, { settings, bot_state });
 }
 
+function clearPending(bot_state) {
+  delete bot_state.pendingFlow;
+  delete bot_state.pendingNote;
+}
+
+function newFlow(kind, dayKey, extra = {}) {
+  return {
+    kind,
+    dayKey,
+    step: extra.step || "start",
+    data: extra.data || {},
+    awaitingText: !!extra.awaitingText,
+    expiresAt: Date.now() + 30 * 60 * 1000
+  };
+}
+
+function flowExpired(flow) {
+  return !flow || (flow.expiresAt && Date.now() > flow.expiresAt);
+}
+
 async function handleLinkStart(store, chatId, token, telegramId) {
   const res = await store.consumeLinkToken(token, telegramId);
   if (!res.ok) {
@@ -90,6 +112,10 @@ async function requireLinked(store, chatId, telegramId) {
   return row;
 }
 
+async function sendNotesMenu(chatId) {
+  await sendMessage(chatId, TEXT.notesMenu, { replyMarkup: notesMenuKeyboard() });
+}
+
 async function sendMorning(chatId) {
   await sendMessage(chatId, TEXT.morningPrompt, {
     replyMarkup: { inline_keyboard: [moodRow("mrn")] }
@@ -108,43 +134,86 @@ async function sendEvening(chatId) {
   });
 }
 
-async function afterMoodAnswer(store, user, ritual, moodKey, chatId) {
-  const mood = MOODS[moodKey];
+async function startRitualFlow(store, user, chatId, ritual) {
   const settings = user.settings;
   const bot_state = user.bot_state;
   const dayKey = todayKeyInTz(settings.timezone);
-  const log = getDayLog(bot_state, dayKey);
-  if (ritual === "morning") bot_state.lastMorningAt = new Date().toISOString();
-  log[ritual] = {
-    ...(log[ritual] || {}),
-    mood: moodKey,
-    value: mood.value,
-    label: mood.label,
-    at: new Date().toISOString()
-  };
-  // Чекаємо вибору: записати думки / пропустити (текст ще не приймаємо)
-  bot_state.pendingNote = {
-    ritual,
-    dayKey,
-    moodKey,
-    value: mood.value,
-    awaitingText: false,
-    expiresAt: Date.now() + 15 * 60 * 1000
-  };
+  bot_state.pendingFlow = newFlow(ritual, dayKey, { step: "mood", data: {} });
   await saveUser(store, user.email, settings, bot_state);
-  try {
-    await store.syncRitualToUserData(user.email, dayKey, ritual, log[ritual]);
-  } catch (err) {
-    console.error("syncRitualToUserData mood failed", err && err.message ? err.message : err);
+  if (ritual === "morning") await sendMorning(chatId);
+  else if (ritual === "midday") await sendMidday(chatId);
+  else if (ritual === "evening") await sendEvening(chatId);
+  else {
+    await sendMessage(chatId, TEXT.nowPrompt, {
+      replyMarkup: { inline_keyboard: [moodRow("now")] }
+    });
   }
-  await sendMessage(chatId, TEXT.askMoodNote, { replyMarkup: noteChoiceKeyboard() });
+}
+
+async function promptMorningSleep(chatId) {
+  await sendMessage(chatId, TEXT.morningSleep, { replyMarkup: sleepKeyboard() });
+}
+
+async function promptMorningWorry(chatId) {
+  await sendMessage(chatId, TEXT.morningWorry, { replyMarkup: worryKeyboard() });
+}
+
+async function promptMorningGratitude(store, user, chatId) {
+  user.bot_state.pendingFlow.step = "gratitude";
+  user.bot_state.pendingFlow.awaitingText = true;
+  user.bot_state.pendingFlow.expiresAt = Date.now() + 30 * 60 * 1000;
+  await saveUser(store, user.email, user.settings, user.bot_state);
+  await sendMessage(chatId, TEXT.morningGratitude, { replyMarkup: cancelKeyboard() });
+}
+
+async function promptMorningGoal(store, user, chatId) {
+  user.bot_state.pendingFlow.step = "goal";
+  user.bot_state.pendingFlow.awaitingText = true;
+  user.bot_state.pendingFlow.expiresAt = Date.now() + 30 * 60 * 1000;
+  await saveUser(store, user.email, user.settings, user.bot_state);
+  await sendMessage(chatId, TEXT.morningGoal, { replyMarkup: skipOrCancelKeyboard() });
+}
+
+async function promptEveningWin(store, user, chatId) {
+  user.bot_state.pendingFlow.step = "win";
+  user.bot_state.pendingFlow.awaitingText = true;
+  user.bot_state.pendingFlow.expiresAt = Date.now() + 30 * 60 * 1000;
+  await saveUser(store, user.email, user.settings, user.bot_state);
+  await sendMessage(chatId, TEXT.eveningWin, { replyMarkup: cancelKeyboard() });
+}
+
+async function promptEveningHard(store, user, chatId) {
+  user.bot_state.pendingFlow.step = "hard";
+  user.bot_state.pendingFlow.awaitingText = true;
+  user.bot_state.pendingFlow.expiresAt = Date.now() + 30 * 60 * 1000;
+  await saveUser(store, user.email, user.settings, user.bot_state);
+  await sendMessage(chatId, TEXT.eveningHard, { replyMarkup: skipOrCancelKeyboard() });
+}
+
+async function promptEveningGratitude(store, user, chatId) {
+  user.bot_state.pendingFlow.step = "gratitude";
+  user.bot_state.pendingFlow.awaitingText = true;
+  user.bot_state.pendingFlow.expiresAt = Date.now() + 30 * 60 * 1000;
+  await saveUser(store, user.email, user.settings, user.bot_state);
+  await sendMessage(chatId, TEXT.eveningGratitude, { replyMarkup: cancelKeyboard() });
+}
+
+async function promptEveningHelped(store, user, chatId) {
+  user.bot_state.pendingFlow.step = "helped";
+  user.bot_state.pendingFlow.awaitingText = true;
+  user.bot_state.pendingFlow.expiresAt = Date.now() + 30 * 60 * 1000;
+  await saveUser(store, user.email, user.settings, user.bot_state);
+  await sendMessage(chatId, TEXT.eveningHelped, { replyMarkup: skipOrCancelKeyboard() });
 }
 
 async function finishMoodFlow(store, user, chatId, ritual, moodKey) {
   if (ritual === "morning") {
     await sendMessage(chatId, TEXT.morningThanks, {
       replyMarkup: {
-        inline_keyboard: [[{ text: TEXT.openSiteBtn, url: siteUrl() }]]
+        inline_keyboard: [
+          [{ text: TEXT.openSiteBtn, url: siteUrl() }],
+          [{ text: "📝 Ще нотатка", callback_data: "notes:menu" }]
+        ]
       }
     });
     return;
@@ -160,25 +229,128 @@ async function finishMoodFlow(store, user, chatId, ritual, moodKey) {
   await sendMessage(chatId, "Дякую ❤️", { replyMarkup: mainMenuKeyboard() });
 }
 
+async function saveRitualAndFinish(store, user, chatId, diaryThought) {
+  const settings = user.settings;
+  const bot_state = user.bot_state;
+  const flow = bot_state.pendingFlow;
+  if (!flow || !flow.kind || !flow.dayKey) return false;
+  const ritual = flow.kind;
+  const data = Object.assign({}, flow.data || {});
+  const log = getDayLog(bot_state, flow.dayKey);
+  if (ritual === "morning") bot_state.lastMorningAt = new Date().toISOString();
+  data.at = new Date().toISOString();
+  log[ritual] = { ...(log[ritual] || {}), ...data };
+  const moodKey = data.mood;
+  clearPending(bot_state);
+  await saveUser(store, user.email, settings, bot_state);
+  try {
+    await store.syncRitualToUserData(user.email, flow.dayKey, ritual, data, {
+      diaryThought: diaryThought || null
+    });
+  } catch (err) {
+    console.error("syncRitualToUserData failed", err && err.message ? err.message : err);
+    await sendMessage(chatId, "Не вдалося зберегти на сайт. Спробуй ще раз за хвилину 🌿", {
+      replyMarkup: mainMenuKeyboard()
+    });
+    return true;
+  }
+  await sendMessage(chatId, TEXT.flowSaved);
+  await finishMoodFlow(store, user, chatId, ritual, moodKey);
+  return true;
+}
+
+/** Після вибору настрою — повний ритуал або коротка нотатка */
+async function afterMoodAnswer(store, user, ritual, moodKey, chatId) {
+  const mood = MOODS[moodKey];
+  const settings = user.settings;
+  const bot_state = user.bot_state;
+  const dayKey = todayKeyInTz(settings.timezone);
+  const log = getDayLog(bot_state, dayKey);
+  if (ritual === "morning") bot_state.lastMorningAt = new Date().toISOString();
+
+  const data = {
+    mood: moodKey,
+    value: mood.value,
+    label: mood.label,
+    at: new Date().toISOString()
+  };
+  log[ritual] = { ...(log[ritual] || {}), ...data };
+
+  // Повний ранок / вечір — багатокроковий flow
+  if (ritual === "morning") {
+    bot_state.pendingFlow = newFlow("morning", dayKey, { step: "sleep", data });
+    await saveUser(store, user.email, settings, bot_state);
+    try {
+      await store.syncRitualToUserData(user.email, dayKey, ritual, data);
+    } catch (err) {
+      console.error("syncRitualToUserData mood failed", err && err.message ? err.message : err);
+    }
+    await promptMorningSleep(chatId);
+    return;
+  }
+
+  if (ritual === "evening") {
+    bot_state.pendingFlow = newFlow("evening", dayKey, { step: "win", data });
+    await saveUser(store, user.email, settings, bot_state);
+    try {
+      await store.syncRitualToUserData(user.email, dayKey, ritual, data);
+    } catch (err) {
+      console.error("syncRitualToUserData mood failed", err && err.message ? err.message : err);
+    }
+    await promptEveningWin(store, user, chatId);
+    return;
+  }
+
+  // День / зараз — настрій + опційна думка (як раніше)
+  bot_state.pendingFlow = newFlow(ritual, dayKey, {
+    step: "note_choice",
+    data,
+    awaitingText: false
+  });
+  // сумісність зі старим pendingNote
+  bot_state.pendingNote = {
+    ritual,
+    dayKey,
+    moodKey,
+    value: mood.value,
+    awaitingText: false,
+    expiresAt: Date.now() + 15 * 60 * 1000
+  };
+  await saveUser(store, user.email, settings, bot_state);
+  try {
+    await store.syncRitualToUserData(user.email, dayKey, ritual, data);
+  } catch (err) {
+    console.error("syncRitualToUserData mood failed", err && err.message ? err.message : err);
+  }
+  await sendMessage(chatId, TEXT.askMoodNote, { replyMarkup: noteChoiceKeyboard() });
+}
+
 async function applyMoodNote(store, user, chatId, noteText) {
   const settings = user.settings;
   const bot_state = user.bot_state;
-  const pending = bot_state.pendingNote;
+  const pending = bot_state.pendingNote || (bot_state.pendingFlow && bot_state.pendingFlow.step === "note_choice"
+    ? {
+        ritual: bot_state.pendingFlow.kind,
+        dayKey: bot_state.pendingFlow.dayKey,
+        moodKey: bot_state.pendingFlow.data && bot_state.pendingFlow.data.mood,
+        awaitingText: bot_state.pendingFlow.awaitingText
+      }
+    : null);
   if (!pending || !pending.ritual || !pending.dayKey) return false;
   if (pending.expiresAt && Date.now() > pending.expiresAt) {
-    delete bot_state.pendingNote;
+    clearPending(bot_state);
     await saveUser(store, user.email, settings, bot_state);
     return false;
   }
   const log = getDayLog(bot_state, pending.dayKey);
   const ritual = pending.ritual;
-  const entry = { ...(log[ritual] || {}) };
+  const entry = { ...(log[ritual] || {}), ...(bot_state.pendingFlow && bot_state.pendingFlow.data) };
   const note = String(noteText || "").trim().slice(0, 800);
   if (note) entry.note = note;
   entry.at = new Date().toISOString();
   log[ritual] = entry;
   const moodKey = entry.mood || pending.moodKey;
-  delete bot_state.pendingNote;
+  clearPending(bot_state);
   await saveUser(store, user.email, settings, bot_state);
   try {
     await store.syncRitualToUserData(user.email, pending.dayKey, ritual, entry, {
@@ -194,6 +366,197 @@ async function applyMoodNote(store, user, chatId, noteText) {
   await sendMessage(chatId, note ? TEXT.noteSaved : TEXT.noteSkipped);
   await finishMoodFlow(store, user, chatId, ritual, moodKey);
   return true;
+}
+
+async function handleFlowText(store, user, chatId, text) {
+  const bot_state = user.bot_state;
+  const flow = bot_state.pendingFlow;
+  if (!flow || flowExpired(flow) || !flow.awaitingText) return false;
+
+  const value = String(text || "").trim().slice(0, 800);
+  const step = flow.step;
+
+  if (flow.kind === "morning") {
+    if (step === "gratitude") {
+      if (!value) {
+        await sendMessage(chatId, "Напиши хоча б кілька слів вдячності 🌿");
+        return true;
+      }
+      flow.data.gratitude = value;
+      await promptMorningGoal(store, user, chatId);
+      return true;
+    }
+    if (step === "goal") {
+      if (value) flow.data.goal = value;
+      flow.awaitingText = false;
+      await saveUser(store, user.email, user.settings, bot_state);
+      await saveRitualAndFinish(store, user, chatId, null);
+      return true;
+    }
+  }
+
+  if (flow.kind === "evening") {
+    if (step === "win") {
+      if (!value) {
+        await sendMessage(chatId, "Напиши хоча б щось маленьке, що вдалося 🌿");
+        return true;
+      }
+      flow.data.win = value;
+      await promptEveningHard(store, user, chatId);
+      return true;
+    }
+    if (step === "hard") {
+      if (value) flow.data.hard = value;
+      await promptEveningGratitude(store, user, chatId);
+      return true;
+    }
+    if (step === "gratitude") {
+      if (!value) {
+        await sendMessage(chatId, "Напиши за що ти вдячний(на) 🌿");
+        return true;
+      }
+      flow.data.gratitude = value;
+      await promptEveningHelped(store, user, chatId);
+      return true;
+    }
+    if (step === "helped") {
+      if (value) flow.data.helped = value;
+      flow.awaitingText = false;
+      await saveUser(store, user.email, user.settings, bot_state);
+      await saveRitualAndFinish(store, user, chatId, null);
+      return true;
+    }
+  }
+
+  if (flow.kind === "gratitude" && step === "text") {
+    if (!value) {
+      await sendMessage(chatId, "Напиши текст вдячності 🌿");
+      return true;
+    }
+    clearPending(bot_state);
+    await saveUser(store, user.email, user.settings, bot_state);
+    try {
+      await store.syncDailyNote(user.email, "gratitude", { dayKey: flow.dayKey, text: value });
+    } catch (err) {
+      console.error("syncDailyNote gratitude", err);
+      await sendMessage(chatId, "Не вдалося зберегти. Спробуй ще раз 🌿", { replyMarkup: mainMenuKeyboard() });
+      return true;
+    }
+    await sendMessage(chatId, TEXT.gratitudeSaved, { replyMarkup: notesMenuKeyboard() });
+    return true;
+  }
+
+  if (flow.kind === "good" && step === "text") {
+    if (!value) {
+      await sendMessage(chatId, "Напиши хорошу подію 🌿");
+      return true;
+    }
+    clearPending(bot_state);
+    await saveUser(store, user.email, user.settings, bot_state);
+    try {
+      await store.syncDailyNote(user.email, "good", { dayKey: flow.dayKey, text: value });
+    } catch (err) {
+      console.error("syncDailyNote good", err);
+      await sendMessage(chatId, "Не вдалося зберегти. Спробуй ще раз 🌿", { replyMarkup: mainMenuKeyboard() });
+      return true;
+    }
+    await sendMessage(chatId, TEXT.goodSaved, { replyMarkup: notesMenuKeyboard() });
+    return true;
+  }
+
+  if (flow.kind === "diary" && step === "text") {
+    if (!value) {
+      await sendMessage(chatId, "Напиши свої думки 🌿");
+      return true;
+    }
+    flow.data.text = value;
+    flow.step = "anxiety";
+    flow.awaitingText = false;
+    await saveUser(store, user.email, user.settings, bot_state);
+    await sendMessage(chatId, TEXT.diaryAnxiety, { replyMarkup: anxietyKeyboard() });
+    return true;
+  }
+
+  // mid/now note text
+  if (flow.step === "note_text" || (bot_state.pendingNote && bot_state.pendingNote.awaitingText)) {
+    return applyMoodNote(store, user, chatId, value);
+  }
+
+  return false;
+}
+
+async function handleFlowSkip(store, user, chatId) {
+  const flow = user.bot_state.pendingFlow;
+  if (!flow || flowExpired(flow)) {
+    await sendNotesMenu(chatId);
+    return;
+  }
+
+  if (flow.kind === "morning") {
+    if (flow.step === "sleep") {
+      flow.step = "worry";
+      await saveUser(store, user.email, user.settings, user.bot_state);
+      await promptMorningWorry(chatId);
+      return;
+    }
+    if (flow.step === "worry") {
+      await promptMorningGratitude(store, user, chatId);
+      return;
+    }
+    if (flow.step === "goal") {
+      flow.awaitingText = false;
+      await saveUser(store, user.email, user.settings, user.bot_state);
+      await saveRitualAndFinish(store, user, chatId, null);
+      return;
+    }
+  }
+
+  if (flow.kind === "evening") {
+    if (flow.step === "hard") {
+      await promptEveningGratitude(store, user, chatId);
+      return;
+    }
+    if (flow.step === "helped") {
+      flow.awaitingText = false;
+      await saveUser(store, user.email, user.settings, user.bot_state);
+      await saveRitualAndFinish(store, user, chatId, null);
+      return;
+    }
+  }
+
+  await sendMessage(chatId, "Цей крок не можна пропустити — напиши відповідь ✍️", { replyMarkup: cancelKeyboard() });
+}
+
+async function startStandalone(store, user, chatId, kind) {
+  const dayKey = todayKeyInTz(user.settings.timezone);
+  const bot_state = user.bot_state;
+
+  if (kind === "wellbeing") {
+    bot_state.pendingFlow = newFlow("wellbeing", dayKey, { step: "level" });
+    await saveUser(store, user.email, user.settings, bot_state);
+    await sendMessage(chatId, TEXT.wellbeingPrompt, { replyMarkup: wellbeingKeyboard() });
+    return;
+  }
+
+  if (kind === "gratitude") {
+    bot_state.pendingFlow = newFlow("gratitude", dayKey, { step: "text", awaitingText: true });
+    await saveUser(store, user.email, user.settings, bot_state);
+    await sendMessage(chatId, TEXT.gratitudePrompt, { replyMarkup: cancelKeyboard() });
+    return;
+  }
+
+  if (kind === "good") {
+    bot_state.pendingFlow = newFlow("good", dayKey, { step: "text", awaitingText: true });
+    await saveUser(store, user.email, user.settings, bot_state);
+    await sendMessage(chatId, TEXT.goodPrompt, { replyMarkup: cancelKeyboard() });
+    return;
+  }
+
+  if (kind === "diary") {
+    bot_state.pendingFlow = newFlow("diary", dayKey, { step: "text", awaitingText: true, data: {} });
+    await saveUser(store, user.email, user.settings, bot_state);
+    await sendMessage(chatId, TEXT.diaryPrompt, { replyMarkup: cancelKeyboard() });
+  }
 }
 
 async function handleCallback(store, cb) {
@@ -218,6 +581,123 @@ async function handleCallback(store, cb) {
   const settings = user.settings;
   let bot_state = user.bot_state;
 
+  if (data === "notes:menu") {
+    clearPending(bot_state);
+    await saveUser(store, user.email, settings, bot_state);
+    await sendNotesMenu(chatId);
+    return;
+  }
+
+  if (data === "nt:mrn") {
+    await startRitualFlow(store, user, chatId, "morning");
+    return;
+  }
+  if (data === "nt:mid") {
+    await startRitualFlow(store, user, chatId, "midday");
+    return;
+  }
+  if (data === "nt:eve") {
+    await startRitualFlow(store, user, chatId, "evening");
+    return;
+  }
+  if (data === "nt:now") {
+    await startRitualFlow(store, user, chatId, "now");
+    return;
+  }
+  if (data === "nt:well") {
+    await startStandalone(store, user, chatId, "wellbeing");
+    return;
+  }
+  if (data === "nt:gr") {
+    await startStandalone(store, user, chatId, "gratitude");
+    return;
+  }
+  if (data === "nt:good") {
+    await startStandalone(store, user, chatId, "good");
+    return;
+  }
+  if (data === "nt:diary") {
+    await startStandalone(store, user, chatId, "diary");
+    return;
+  }
+
+  if (data === "flow:skip") {
+    await handleFlowSkip(store, user, chatId);
+    return;
+  }
+
+  if (data.startsWith("sl:")) {
+    const flow = bot_state.pendingFlow;
+    if (!flow || flow.kind !== "morning" || flow.step !== "sleep") {
+      await sendNotesMenu(chatId);
+      return;
+    }
+    const sleep = Math.max(1, Math.min(5, +data.slice(3) || 0));
+    flow.data.sleep = sleep;
+    flow.step = "worry";
+    await saveUser(store, user.email, settings, bot_state);
+    await promptMorningWorry(chatId);
+    return;
+  }
+
+  if (data.startsWith("wr:")) {
+    const flow = bot_state.pendingFlow;
+    if (!flow || flow.kind !== "morning" || flow.step !== "worry") {
+      await sendNotesMenu(chatId);
+      return;
+    }
+    const code = data.slice(3);
+    flow.data.worry = WORRIES[code] || code;
+    await saveUser(store, user.email, settings, bot_state);
+    await promptMorningGratitude(store, user, chatId);
+    return;
+  }
+
+  if (data.startsWith("wb:")) {
+    const flow = bot_state.pendingFlow;
+    const level = Math.max(1, Math.min(10, +data.slice(3) || 0));
+    if (!flow || flow.kind !== "wellbeing") {
+      await sendNotesMenu(chatId);
+      return;
+    }
+    const dayKey = flow.dayKey || todayKeyInTz(settings.timezone);
+    clearPending(bot_state);
+    await saveUser(store, user.email, settings, bot_state);
+    try {
+      await store.syncDailyNote(user.email, "wellbeing", { dayKey, level });
+    } catch (err) {
+      console.error("syncDailyNote wellbeing", err);
+      await sendMessage(chatId, "Не вдалося зберегти. Спробуй ще раз 🌿", { replyMarkup: mainMenuKeyboard() });
+      return;
+    }
+    await sendMessage(chatId, TEXT.wellbeingSaved, { replyMarkup: notesMenuKeyboard() });
+    return;
+  }
+
+  // diary anxiety (reuse wb: only for wellbeing — diary uses same keyboard but check kind)
+  // Actually anxietyKeyboard uses wb: — conflict. Use anx: instead for diary.
+  if (data.startsWith("anx:")) {
+    const flow = bot_state.pendingFlow;
+    const anxiety = Math.max(1, Math.min(10, +data.slice(4) || 5));
+    if (!flow || flow.kind !== "diary" || !flow.data || !flow.data.text) {
+      await sendNotesMenu(chatId);
+      return;
+    }
+    const dayKey = flow.dayKey || todayKeyInTz(settings.timezone);
+    const text = flow.data.text;
+    clearPending(bot_state);
+    await saveUser(store, user.email, settings, bot_state);
+    try {
+      await store.syncDailyNote(user.email, "diary", { dayKey, text, anxiety });
+    } catch (err) {
+      console.error("syncDailyNote diary", err);
+      await sendMessage(chatId, "Не вдалося зберегти. Спробуй ще раз 🌿", { replyMarkup: mainMenuKeyboard() });
+      return;
+    }
+    await sendMessage(chatId, TEXT.diarySaved, { replyMarkup: notesMenuKeyboard() });
+    return;
+  }
+
   if (data === "note:skip") {
     await applyMoodNote(store, user, chatId, "");
     return;
@@ -225,24 +705,30 @@ async function handleCallback(store, cb) {
 
   if (data === "note:write") {
     const pending = bot_state.pendingNote;
-    if (!pending) {
+    const flow = bot_state.pendingFlow;
+    if (!pending && !(flow && flow.step === "note_choice")) {
       await sendMessage(chatId, "Спочатку обери настрій 🌿", { replyMarkup: mainMenuKeyboard() });
       return;
     }
-    bot_state.pendingNote = {
-      ...pending,
-      awaitingText: true,
-      expiresAt: Date.now() + 15 * 60 * 1000
-    };
+    if (pending) {
+      bot_state.pendingNote = {
+        ...pending,
+        awaitingText: true,
+        expiresAt: Date.now() + 15 * 60 * 1000
+      };
+    }
+    if (flow) {
+      flow.step = "note_text";
+      flow.awaitingText = true;
+      flow.expiresAt = Date.now() + 15 * 60 * 1000;
+    }
     await saveUser(store, user.email, settings, bot_state);
-    await sendMessage(chatId, TEXT.askMoodNotePrompt);
+    await sendMessage(chatId, TEXT.askMoodNotePrompt, { replyMarkup: cancelKeyboard() });
     return;
   }
 
   if (data === "act:now") {
-    await sendMessage(chatId, "Як ти зараз?", {
-      replyMarkup: { inline_keyboard: [moodRow("now")] }
-    });
+    await startRitualFlow(store, user, chatId, "now");
     return;
   }
   if (data === "act:calm") {
@@ -364,17 +850,33 @@ async function handleMessage(store, msg) {
     return;
   }
 
-  const user = await store.getByTelegramId(telegramId);
-  const pending = user && user.bot_state && user.bot_state.pendingNote;
-  if (pending && pending.awaitingText && text && !text.startsWith("/")) {
-    await applyMoodNote(store, normalizeUserRow(user) || user, chatId, text);
-    return;
+  const raw = await store.getByTelegramId(telegramId);
+  const user = raw ? (normalizeUserRow(raw) || raw) : null;
+
+  if (user && text && !text.startsWith("/")) {
+    const flow = user.bot_state && user.bot_state.pendingFlow;
+    const pending = user.bot_state && user.bot_state.pendingNote;
+    if (flow && flow.awaitingText && !flowExpired(flow)) {
+      await handleFlowText(store, user, chatId, text);
+      return;
+    }
+    if (pending && pending.awaitingText) {
+      await applyMoodNote(store, user, chatId, text);
+      return;
+    }
   }
 
   if (text === "/settings" || text === "⚙️ Налаштування") {
     const linked = await requireLinked(store, chatId, telegramId);
     if (!linked) return;
     await sendMessage(chatId, "Налаштування нагадувань", { replyMarkup: settingsMenu(linked.settings) });
+    return;
+  }
+
+  if (text === "/notes" || text === "📝 Щоденні нотатки") {
+    const linked = await requireLinked(store, chatId, telegramId);
+    if (!linked) return;
+    await sendNotesMenu(chatId);
     return;
   }
 

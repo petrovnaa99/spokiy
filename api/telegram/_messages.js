@@ -14,6 +14,16 @@ const MOODS = {
   hard: { emoji: "😣", label: "Дуже важко", value: 1 }
 };
 
+const WORRIES = {
+  job: "Робота",
+  rel: "Стосунки",
+  money: "Гроші",
+  health: "Здоров'я",
+  fam: "Родина",
+  alone: "Самотність",
+  other: "Інше"
+};
+
 const DAY_LABELS = ["Нд", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 
 function siteUrl() {
@@ -31,12 +41,37 @@ function mainMenuKeyboard() {
   return {
     inline_keyboard: [
       [{ text: "🌿 Відкрити Спокій", url: siteUrl() }],
+      [{ text: "📝 Щоденні нотатки", callback_data: "notes:menu" }],
       [
         { text: "😊 Як я зараз?", callback_data: "act:now" },
         { text: "🧘 Швидко заспокоїтися", callback_data: "act:calm" }
       ],
       [{ text: "₴ Оплата та доступ", callback_data: "act:pay" }],
       [{ text: "⚙️ Налаштування", callback_data: "set:menu" }]
+    ]
+  };
+}
+
+function notesMenuKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: "🌅 Ранок", callback_data: "nt:mrn" },
+        { text: "☀️ День", callback_data: "nt:mid" }
+      ],
+      [
+        { text: "🌙 Вечір", callback_data: "nt:eve" },
+        { text: "😊 Зараз", callback_data: "nt:now" }
+      ],
+      [
+        { text: "📊 Самопочуття 1–10", callback_data: "nt:well" },
+        { text: "🙏 Вдячність", callback_data: "nt:gr" }
+      ],
+      [
+        { text: "✨ Хороша подія", callback_data: "nt:good" },
+        { text: "📝 Думки", callback_data: "nt:diary" }
+      ],
+      [{ text: "← Назад", callback_data: "menu:home" }]
     ]
   };
 }
@@ -57,12 +92,79 @@ function moodRow(prefix) {
   }));
 }
 
+function sleepKeyboard() {
+  return {
+    inline_keyboard: [
+      [1, 2, 3, 4, 5].map((n) => ({ text: `${"★".repeat(n)}`, callback_data: `sl:${n}` })),
+      [{ text: "Пропустити", callback_data: "flow:skip" }],
+      [{ text: "← Скасувати", callback_data: "notes:menu" }]
+    ]
+  };
+}
+
+function worryKeyboard() {
+  const entries = Object.entries(WORRIES);
+  const rows = [];
+  for (let i = 0; i < entries.length; i += 2) {
+    rows.push(entries.slice(i, i + 2).map(([k, label]) => ({
+      text: label,
+      callback_data: `wr:${k}`
+    })));
+  }
+  rows.push([{ text: "Пропустити", callback_data: "flow:skip" }]);
+  rows.push([{ text: "← Скасувати", callback_data: "notes:menu" }]);
+  return { inline_keyboard: rows };
+}
+
+function wellbeingKeyboard() {
+  const rows = [];
+  for (let i = 1; i <= 10; i += 5) {
+    rows.push(
+      [i, i + 1, i + 2, i + 3, i + 4].map((n) => ({
+        text: String(n),
+        callback_data: `wb:${n}`
+      }))
+    );
+  }
+  rows.push([{ text: "← Скасувати", callback_data: "notes:menu" }]);
+  return { inline_keyboard: rows };
+}
+
+function anxietyKeyboard() {
+  const rows = [];
+  for (let i = 1; i <= 10; i += 5) {
+    rows.push(
+      [i, i + 1, i + 2, i + 3, i + 4].map((n) => ({
+        text: String(n),
+        callback_data: `anx:${n}`
+      }))
+    );
+  }
+  rows.push([{ text: "← Скасувати", callback_data: "notes:menu" }]);
+  return { inline_keyboard: rows };
+}
+
+function skipOrCancelKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: "Пропустити", callback_data: "flow:skip" }],
+      [{ text: "← Скасувати", callback_data: "notes:menu" }]
+    ]
+  };
+}
+
+function cancelKeyboard() {
+  return {
+    inline_keyboard: [[{ text: "← Скасувати", callback_data: "notes:menu" }]]
+  };
+}
+
 function calmKeyboard() {
   return {
     inline_keyboard: [
       [{ text: "🧘 Дихання", url: `${siteUrl()}/?sos=breath` }],
       [{ text: "🌳 Заземлення", url: `${siteUrl()}/?sos=ground` }],
-      [{ text: "📝 Записати думки", url: `${siteUrl()}/?route=new` }],
+      [{ text: "📝 Записати думки", callback_data: "nt:diary" }],
       [{ text: "← Назад", callback_data: "menu:home" }]
     ]
   };
@@ -141,15 +243,29 @@ const TEXT = {
 
 Тепер я можу надсилати нагадування та зберігати твої відповіді.
 
-У налаштуваннях можна увімкнути ранкові, денні та вечірні повідомлення.`,
+У налаштуваннях можна увімкнути ранкові, денні та вечірні повідомлення.
+
+Або одразу: «Щоденні нотатки» — усі позиції, як на сайті.`,
 
   needLink: "Спочатку підключи Telegram на сайті «Спокій»: Профіль → Підключити Telegram 🌿",
+
+  notesMenu: `📝 Щоденні нотатки
+
+Обери, що хочеш записати — усе потрапить у загальну статистику на сайті.`,
 
   morningPrompt: `🌿
 
 Доброго ранку.
 
 Як ти сьогодні?`,
+
+  morningSleep: "Як ти спав(ла)? Оціни сон зірочками:",
+
+  morningWorry: "Що найбільше турбує сьогодні?",
+
+  morningGratitude: "За що ти вдячний(на) сьогодні? Напиши одним-двома реченнями ✍️",
+
+  morningGoal: "Яка одна маленька мета на сьогодні? (можна пропустити)",
 
   morningThanks: `Дякую ❤️
 
@@ -159,7 +275,38 @@ const TEXT = {
 
   eveningPrompt: "Як минув день?",
 
+  eveningWin: "Що сьогодні вдалося? Навіть щось маленьке…",
+
+  eveningHard: "Що було важко? (можна пропустити)",
+
+  eveningGratitude: "За що ти вдячний(на) сьогодні? ✍️",
+
+  eveningHelped: "Що допомогло хоча б трохи? (прогулянка, музика, друг…)",
+
   eveningThanks: "Дякую.\n\nДо зустрічі завтра 🌿",
+
+  nowPrompt: "Як ти зараз?",
+
+  wellbeingPrompt: `📊 Самопочуття
+
+Оціни рівень напруги / тривоги від 1 до 10
+(1 — спокійно, 10 — дуже важко)`,
+
+  wellbeingSaved: "Самопочуття збережено ✅ Воно вже в аналітиці.",
+
+  gratitudePrompt: "🙏 За що ти вдячний(на) зараз? Напиши коротко ✍️",
+
+  gratitudeSaved: "Вдячність збережено 🌿",
+
+  goodPrompt: "✨ Яка хороша подія сьогодні? Навіть дрібниця ✍️",
+
+  goodSaved: "Хорошу подію збережено ✅",
+
+  diaryPrompt: "📝 Що тебе турбує або хочеш записати? Напиши одним-двома реченнями ✍️",
+
+  diaryAnxiety: "Який зараз рівень тривоги (1–10)?",
+
+  diarySaved: "Запис збережено 🌿 Він уже в аналітиці на сайті.",
 
   calmIntro: "Ось кілька коротких кроків, які можуть допомогти прямо зараз:",
 
@@ -172,6 +319,10 @@ const TEXT = {
   noteSaved: "Думки збережено 🌿 Вони вже в аналітиці на сайті.",
 
   noteSkipped: "Добре. Настрій збережено ❤️",
+
+  flowSaved: "Збережено ✅ Усе вже на сайті в статистиці.",
+
+  flowCancelled: "Добре, скасовано. Можеш обрати іншу нотатку будь-коли.",
 
   invalidLink: "Посилання застаріло або вже використане. Створи нове на сайті в розділі Профіль.",
 
@@ -208,15 +359,23 @@ function noteSkipKeyboard() {
 module.exports = {
   DEFAULT_SETTINGS,
   MOODS,
+  WORRIES,
   DAY_LABELS,
   TEXT,
   siteUrl,
   paymentUrl,
   mainMenuKeyboard,
+  notesMenuKeyboard,
   paymentKeyboard,
   noteChoiceKeyboard,
   noteSkipKeyboard,
   moodRow,
+  sleepKeyboard,
+  worryKeyboard,
+  wellbeingKeyboard,
+  anxietyKeyboard,
+  skipOrCancelKeyboard,
+  cancelKeyboard,
   calmKeyboard,
   settingsMenu,
   timePickKeyboard,
