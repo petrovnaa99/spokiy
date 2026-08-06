@@ -942,7 +942,32 @@ window.Store = (function () {
       }
       return e;
     },
-    removeEntry(id) { state.entries = state.entries.filter(x => x.id !== id); persist(); },
+    /** Прибрати з активного щоденника → «Тіні забутих предків». */
+    archiveEntry(id) {
+      const e = state.entries.find(x => x.id === id);
+      if (!e) return null;
+      e.archived = true;
+      e.archivedAt = new Date().toISOString();
+      e.updatedAt = e.archivedAt;
+      persist();
+      return e;
+    },
+    restoreEntry(id) {
+      const e = state.entries.find(x => x.id === id);
+      if (!e) return null;
+      delete e.archived;
+      delete e.archivedAt;
+      e.updatedAt = new Date().toISOString();
+      persist();
+      return e;
+    },
+    /** Остаточне видалення (лише з папки тіней). */
+    purgeEntry(id) {
+      state.entries = state.entries.filter(x => x.id !== id);
+      persist();
+    },
+    /** Сумісність: «видалити» = архів у тіні. */
+    removeEntry(id) { return this.archiveEntry(id); },
 
     addEvidence(ev) {
       ev.id = "ev" + Date.now() + Math.random().toString(36).slice(2, 5);

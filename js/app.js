@@ -558,7 +558,7 @@
 
   function pendingReminders() {
     const tk = todayKey();
-    return S.state.entries.filter(e => !e.reviewed && e.openDate && e.openDate <= tk);
+    return activeEntries().filter(e => !e.reviewed && e.openDate && e.openDate <= tk);
   }
 
   function renderNav() {
@@ -663,6 +663,14 @@
     return dayKeyLocal(d);
   }
 
+  function isArchivedEntry(e) { return !!(e && e.archived); }
+  function activeEntries() { return (S.state.entries || []).filter(e => !isArchivedEntry(e)); }
+  function shadowedEntries() {
+    return (S.state.entries || [])
+      .filter(isArchivedEntry)
+      .sort((a, b) => Date.parse(b.archivedAt || b.updatedAt || 0) - Date.parse(a.archivedAt || a.updatedAt || 0));
+  }
+
   /** Тривога 1–10 з wellbeing (сайт). Telegram раніше писав mood×2 — нормалізуємо. */
   function wellbeingAnxiety(wbEntry) {
     if (!wbEntry || typeof wbEntry.level !== "number") return null;
@@ -676,7 +684,7 @@
   /** Унікальні дні з активністю: запис, оцінка стану, ритуал (сайт/Telegram) або check-in */
   function activityDayKeys() {
     const keys = new Set();
-    S.state.entries.forEach(e => {
+    activeEntries().forEach(e => {
       if (e.createdAt) keys.add(dayKeyFromIso(e.createdAt));
       if (e.dayKey) keys.add(String(e.dayKey).slice(0, 10));
     });
@@ -710,7 +718,7 @@
         }
       });
     });
-    (S.state.entries || []).forEach((e) => {
+    activeEntries().forEach((e) => {
       if (e && e.source === "telegram") {
         marks++;
         if (e.dayKey) days.add(String(e.dayKey).slice(0, 10));
@@ -760,12 +768,12 @@
   function filledDays() { return activityDayKeys().length; }
 
   function totalDiaryEntries() {
-    return S.state.entries.filter(e => e.type !== "letter").length;
+    return activeEntries().filter(e => e.type !== "letter").length;
   }
 
   function last7DayLevels() {
     const anxietyByDay = {};
-    S.state.entries.forEach(e => {
+    activeEntries().forEach(e => {
       if (typeof e.anxiety !== "number") return;
       const k = e.dayKey ? String(e.dayKey).slice(0, 10) : dayKeyFromIso(e.createdAt);
       anxietyByDay[k] = Math.max(anxietyByDay[k] || 0, e.anxiety);
@@ -801,13 +809,13 @@
   }
   function entriesInLastDays(days) {
     const since = Date.now() - days * 86400000;
-    return S.state.entries.filter(e => new Date(e.createdAt).getTime() >= since);
+    return activeEntries().filter(e => new Date(e.createdAt).getTime() >= since);
   }
 
   /* Червоні прапорці: 5 днів поспіль з тривогою 8-10 (за останніми днями) */
   function checkRedFlag() {
     const byDay = {};
-    S.state.entries.forEach(e => {
+    activeEntries().forEach(e => {
       if (typeof e.anxiety !== "number") return;
       const k = e.dayKey ? String(e.dayKey).slice(0, 10) : dayKeyFromIso(e.createdAt);
       byDay[k] = Math.max(byDay[k] || 0, e.anxiety);
@@ -829,7 +837,7 @@
     const newly = [];
     const streak = computeStreak();
     const ev = S.state.evidence.length;
-    const letters = S.state.entries.some(e => e.type === "letter");
+    const letters = activeEntries().some(e => e.type === "letter");
     const filled = filledDays();
     const map = {
       streak7: streak >= 7, streak14: streak >= 14, streak30: streak >= 30,
@@ -1008,7 +1016,7 @@
   }
 
   function selfSupportMomentsCount() {
-    const reviewed = S.state.entries.filter(e => e.reviewed).length;
+    const reviewed = activeEntries().filter(e => e.reviewed).length;
     const evidence = S.state.evidence.length;
     const achievements = Object.keys(S.state.achievements || {}).length;
     const wellbeingDays = S.state.wellbeing && !Array.isArray(S.state.wellbeing) ? Object.keys(S.state.wellbeing).length : 0;
@@ -1025,7 +1033,7 @@
       openPracticeStep(next.id);
       return;
     }
-    const last = S.state.entries[0];
+    const last = activeEntries()[0];
     if (last && !last.reviewed) { go("history"); return; }
     go("new");
   }
@@ -1303,7 +1311,7 @@
 
   function viewHome() {
     const routeInfo = monthRouteInfo();
-    const lastEntry = S.state.entries[0] || null;
+    const lastEntry = activeEntries()[0] || null;
     const unfinished = lastUnfinishedTask();
     const week = weekDynamics();
     const tip = randomAff();
@@ -2011,7 +2019,7 @@
   /* ===================== НАГАДУВАННЯ / ВІДКРИТТЯ ===================== */
   function viewReminders() {
     const pend = pendingReminders();
-    const upcoming = S.state.entries.filter(e => !e.reviewed && e.openDate && e.openDate > todayKey())
+    const upcoming = activeEntries().filter(e => !e.reviewed && e.openDate && e.openDate > todayKey())
       .sort((a, b) => a.openDate.localeCompare(b.openDate));
 
     $("#view").innerHTML = `
@@ -2080,7 +2088,13 @@
         checkAchievements();
         go("reminders");
       };
-      $("[data-del]", card).onclick = () => confirmModal("Видалити запис?", "Цю дію не можна скасувати.", () => { S.removeEntry(e.id); go("reminders"); }, "Видалити", true);
+      $("[data-del]", card).onclick = () => confirmModal(
+        "Прибрати запис?",
+        "Він потрапить у папку «Тіні забутих предків» унизу щоденника. Звідти можна повернути або видалити назавжди.",
+        () => { S.archiveEntry(e.id); toast("У тінях забутих предків 🌑", "good"); go("history"); },
+        "Прибрати",
+        true
+      );
 
       list.appendChild(card);
     });
@@ -3011,7 +3025,7 @@
 
   function viewAnalytics() {
     destroyCharts();
-    const entries = S.state.entries.slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    const entries = activeEntries().slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     const streak = computeStreak();
     const activeDays = filledDays();
     const diaryCount = totalDiaryEntries();
@@ -3021,8 +3035,8 @@
     const triggers = topCounts(entries.map(e => e.trigger), 3);
     const ranking = S.resourceRanking().slice(0, 3);
 
-    const last7 = entriesInLastDays(7), prev7 = S.state.entries.filter(e => { const t = new Date(e.createdAt).getTime(); return t < Date.now()-7*86400000 && t >= Date.now()-14*86400000; });
-    const last30 = entriesInLastDays(30), prev30 = S.state.entries.filter(e => { const t = new Date(e.createdAt).getTime(); return t < Date.now()-30*86400000 && t >= Date.now()-60*86400000; });
+    const last7 = entriesInLastDays(7), prev7 = activeEntries().filter(e => { const t = new Date(e.createdAt).getTime(); return t < Date.now()-7*86400000 && t >= Date.now()-14*86400000; });
+    const last30 = entriesInLastDays(30), prev30 = activeEntries().filter(e => { const t = new Date(e.createdAt).getTime(); return t < Date.now()-30*86400000 && t >= Date.now()-60*86400000; });
     const a7 = avgAnxiety(last7), p7 = avgAnxiety(prev7);
     const a30 = avgAnxiety(last30), p30 = avgAnxiety(prev30);
     function trend(cur, prev) {
@@ -3224,7 +3238,8 @@
 
   /* ===================== МОЯ ІСТОРІЯ ===================== */
   function viewHistory() {
-    const e = S.state.entries;
+    const e = activeEntries();
+    const shadows = shadowedEntries();
     const diary = e.filter(x => x.type !== "letter");
     const letters = e.filter(x => x.type === "letter");
     const reviewed = e.filter(x => x.reviewed && x.review);
@@ -3237,15 +3252,28 @@
         <button class="chip" data-tab="reviewed">✅ Завершені відкриття (${reviewed.length})</button>
         <button class="chip" data-tab="treasure">💝 Скарбничка (${S.state.treasure.length})</button>
       </div>
-      <div id="hist-body"></div>`;
+      <div id="hist-body"></div>
+      <details class="shadows-folder" id="shadows-folder">
+        <summary class="shadows-folder-summary">
+          <span class="shadows-folder-ico">🌑</span>
+          <span class="shadows-folder-title">Тіні забутих предків</span>
+          <span class="shadows-folder-count">${shadows.length}</span>
+        </summary>
+        <p class="shadows-folder-hint">Записи поза активним щоденником. Можна повернути сюди або стерти назавжди.</p>
+        <div id="shadows-body"></div>
+      </details>`;
 
     const tabs = $("#hist-tabs");
     const body = $("#hist-body");
-    function entryCard(x) {
+    const shadowsBody = $("#shadows-body");
+
+    function entryCard(x, opts) {
       const r = x.review;
-      return `<div class="item"><div class="item-head">
+      const shadow = opts && opts.shadow;
+      return `<div class="item${shadow ? " item-shadow" : ""}" data-eid="${esc(x.id)}"><div class="item-head">
         <div><span class="pill ${x.type==="letter"?"pill-violet":x.anxiety>=8?"pill-red":"pill-green"}">${x.type==="letter"?"Лист":"Тривога "+ (x.anxiety||"–")+"/10"}</span>
-        ${x.category?`<span class="chip" style="margin-left:6px">${esc(x.category)}</span>`:""}</div>
+        ${x.category?`<span class="chip" style="margin-left:6px">${esc(x.category)}</span>`:""}
+        ${x.source==="telegram"?`<span class="chip" style="margin-left:6px">Telegram</span>`:""}</div>
         <span class="item-date">${fmtDateTime(x.createdAt)}</span></div>
         <div class="item-body">${esc(x.fear)}</div>
         ${x.cause?`<div class="faint" style="margin-top:6px">Причина: ${esc(x.cause)}</div>`:""}
@@ -3254,19 +3282,73 @@
           ${r.whatHappened?`<div style="margin-top:4px"><b>Сталося:</b> ${esc(r.whatHappened)}</div>`:""}
           ${r.lesson?`<div style="margin-top:4px"><b>Урок:</b> ${esc(r.lesson)}</div>`:""}
           ${r.toSelf?`<div style="margin-top:4px"><b>Собі:</b> ${esc(r.toSelf)}</div>`:""}
-        </div>`:""}</div>`;
+        </div>`:""}
+        <div class="row item-actions" style="justify-content:flex-end;margin-top:10px;gap:8px">
+          ${shadow
+            ? `<button class="btn btn-ghost btn-sm" data-restore="${esc(x.id)}">Повернути</button>
+               <button class="btn btn-ghost btn-sm" data-purge="${esc(x.id)}">Стерти назавжди</button>`
+            : `<button class="btn btn-ghost btn-sm" data-archive="${esc(x.id)}">Прибрати</button>`}
+        </div>
+      </div>`;
     }
+
+    function wireArchiveButtons(root) {
+      $$("[data-archive]", root).forEach((b) => {
+        b.onclick = () => confirmModal(
+          "Прибрати запис?",
+          "Він потрапить у папку «Тіні забутих предків» унизу. Звідти можна повернути або видалити назавжди.",
+          () => {
+            S.archiveEntry(b.dataset.archive);
+            toast("У тінях забутих предків 🌑", "good");
+            go("history");
+          },
+          "Прибрати",
+          true
+        );
+      });
+    }
+
+    function paintShadows() {
+      if (!shadows.length) {
+        shadowsBody.innerHTML = `<p class="analytics-none">Порожньо. Прибрані записи з’являться тут.</p>`;
+        return;
+      }
+      shadowsBody.innerHTML = shadows.map((x) => entryCard(x, { shadow: true })).join("");
+      $$("[data-restore]", shadowsBody).forEach((b) => {
+        b.onclick = () => {
+          S.restoreEntry(b.dataset.restore);
+          toast("Запис повернуто в щоденник", "good");
+          go("history");
+        };
+      });
+      $$("[data-purge]", shadowsBody).forEach((b) => {
+        b.onclick = () => confirmModal(
+          "Стерти назавжди?",
+          "Цю дію не можна скасувати.",
+          () => {
+            S.purgeEntry(b.dataset.purge);
+            toast("Запис стерто", "good");
+            go("history");
+          },
+          "Стерти",
+          true
+        );
+      });
+    }
+
     function paint(tab) {
       let html = "";
-      if (tab === "diary") html = diary.length ? diary.map(entryCard).join("") : emptyBlock("📓","Ще немає записів");
-      else if (tab === "letters") html = letters.length ? letters.map(entryCard).join("") : emptyBlock("✉️","Ще немає листів");
-      else if (tab === "reviewed") html = reviewed.length ? reviewed.map(entryCard).join("") : emptyBlock("✅","Немає завершених відкриттів");
+      if (tab === "diary") html = diary.length ? diary.map((x) => entryCard(x)).join("") : emptyBlock("📓","Ще немає записів");
+      else if (tab === "letters") html = letters.length ? letters.map((x) => entryCard(x)).join("") : emptyBlock("✉️","Ще немає листів");
+      else if (tab === "reviewed") html = reviewed.length ? reviewed.map((x) => entryCard(x)).join("") : emptyBlock("✅","Немає завершених відкриттів");
       else if (tab === "evidence") html = S.state.evidence.length ? S.state.evidence.map(x=>`<div class="item"><div class="item-head"><span class="pill pill-red">Страх</span><span class="item-date">${fmtDate(x.date)}</span></div><div class="item-body">${esc(x.fear)}</div><div style="margin-top:6px"><b>Реальність:</b> ${esc(x.realResult)}</div></div>`).join("") : emptyBlock("🛡️","Банк порожній");
       else if (tab === "treasure") html = S.state.treasure.length ? `<div class="gallery">${S.state.treasure.map(x=>`<div class="t-card">${x.image?`<img src="${x.image}">`:""}<div class="t-body"><div class="t-type">${esc(treasureLabel(x.type))}</div>${x.content?`<div class="t-content">${esc(x.content)}</div>`:""}</div></div>`).join("")}</div>` : emptyBlock("💝","Скарбничка порожня");
       body.innerHTML = html;
+      if (tab === "diary" || tab === "letters" || tab === "reviewed") wireArchiveButtons(body);
     }
     $$(".chip", tabs).forEach(b => b.onclick = () => { $$(".chip", tabs).forEach(x=>x.classList.remove("sel")); b.classList.add("sel"); paint(b.dataset.tab); });
     paint("diary");
+    paintShadows();
   }
 
   /* ===================== БІБЛІОТЕКА ===================== */
@@ -3497,10 +3579,10 @@
   }
 
   function exportCSV() {
-    const rows = [["Дата","Тип","Тривога","Настрій","Енергія","Страх","Причина","Тригер","Категорія","Допомогло","День відкриття","Справдився","Що сталося","Урок"]];
+    const rows = [["Дата","Тип","Тривога","Настрій","Енергія","Страх","Причина","Тригер","Категорія","Допомогло","День відкриття","Справдився","Що сталося","Урок","Тіні"]];
     S.state.entries.forEach(e => {
       const r = e.review || {};
-      rows.push([fmtDate(e.createdAt), e.type, e.anxiety||"", e.mood||"", e.energy||"", e.fear||"", e.cause||"", e.trigger||"", e.category||"", (e.helped||[]).join("; "), e.openDate||"", r.cameTrue||"", r.whatHappened||"", r.lesson||""]);
+      rows.push([fmtDate(e.createdAt), e.type, e.anxiety||"", e.mood||"", e.energy||"", e.fear||"", e.cause||"", e.trigger||"", e.category||"", (e.helped||[]).join("; "), e.openDate||"", r.cameTrue||"", r.whatHappened||"", r.lesson||"", e.archived ? "так" : ""]);
     });
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\r\n");
     downloadFile("spokiy-data.csv", csv, "text/csv");
@@ -3511,13 +3593,15 @@
     const win = window.open("", "_blank");
     const style = `body{font-family:Comfortaa,Arial,sans-serif;color:#233029;padding:30px;line-height:1.5}h1{color:#1f9579}h2{color:#2fae8e;margin-top:24px;border-bottom:1px solid #eee;padding-bottom:4px}.it{margin:10px 0;padding:10px;border:1px solid #eee;border-radius:8px}.d{color:#999;font-size:12px}@media print{button{display:none}}`;
     const evHtml = S.state.evidence.map(x=>`<div class="it"><b>Страх:</b> ${esc(x.fear)}<br><b>Реальність:</b> ${esc(x.realResult)}<br>${x.conclusion?`<b>Висновок:</b> ${esc(x.conclusion)}`:""}</div>`).join("") || "<p>—</p>";
-    const enHtml = S.state.entries.map(x=>`<div class="it"><div class="d">${fmtDateTime(x.createdAt)} · ${x.type==="letter"?"Лист":"Тривога "+(x.anxiety||"–")+"/10"}</div>${esc(x.fear)}${x.review?`<br><i>Підсумок: ${x.review.cameTrue==="no"?"страх не справдився":x.review.cameTrue==="partly"?"справдився частково":"справдився"}. ${esc(x.review.whatHappened||"")}</i>`:""}</div>`).join("") || "<p>—</p>";
+    const enHtml = activeEntries().map(x=>`<div class="it"><div class="d">${fmtDateTime(x.createdAt)} · ${x.type==="letter"?"Лист":"Тривога "+(x.anxiety||"–")+"/10"}</div>${esc(x.fear)}${x.review?`<br><i>Підсумок: ${x.review.cameTrue==="no"?"страх не справдився":x.review.cameTrue==="partly"?"справдився частково":"справдився"}. ${esc(x.review.whatHappened||"")}</i>`:""}</div>`).join("") || "<p>—</p>";
+    const shHtml = shadowedEntries().map(x=>`<div class="it"><div class="d">${fmtDateTime(x.createdAt)} · тінь</div>${esc(x.fear)}</div>`).join("") || "<p>—</p>";
     win.document.write(`<html><head><meta charset="utf-8"><title>Спокій — звіт</title><style>${style}</style></head><body>
       <h1>🌿 Спокій — особистий звіт</h1>
       <p class="d">${esc(p.name||"")} · ${esc(p.email)} · ${fmtDate(new Date().toISOString())}</p>
       <p>Активних днів: <b>${filledDays()}</b> · Серія: <b>${computeStreak()}</b> · Страхів не справдилось: <b>${S.state.evidence.length}</b></p>
       <h2>🛡️ Банк доказів</h2>${evHtml}
       <h2>📜 Записи</h2>${enHtml}
+      <h2>🌑 Тіні забутих предків</h2>${shHtml}
       <button onclick="window.print()" style="margin-top:20px;padding:10px 18px;background:#2fae8e;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨️ Зберегти як PDF</button>
       </body></html>`);
     win.document.close();
