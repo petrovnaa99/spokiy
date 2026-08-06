@@ -1110,6 +1110,68 @@ button.analytics-metric:hover {
 }
 .item-actions { flex-wrap: wrap; }
 
+/* Конфіденційність */
+.privacy-stack { display: grid; gap: 12px; }
+.privacy-card { position: relative; padding-left: 52px; }
+.privacy-card-num {
+  position: absolute;
+  left: 14px;
+  top: 16px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--primary, #2fae8e) 16%, transparent);
+  color: var(--primary-ink, #1a6b58);
+}
+.privacy-card-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.privacy-card-body {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.privacy-footer { margin: 16px 0 0; font-size: 12.5px; line-height: 1.45; }
+.privacy-modal-body { max-height: min(60vh, 420px); overflow: auto; }
+.privacy-modal-block { margin-bottom: 12px; }
+.privacy-modal-block b { display: block; margin-bottom: 4px; }
+.privacy-modal-block p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+
+/* Адмін */
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.admin-stat {
+  padding: 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary, #2fae8e) 8%, var(--card, #fff));
+  border: 1px solid var(--line);
+}
+.admin-stat b { display: block; font-size: 22px; line-height: 1.1; }
+.admin-stat span { font-size: 12px; color: var(--ink-soft); }
+.admin-user-list { display: grid; gap: 8px; margin-top: 8px; }
+.admin-user-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.admin-user-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+@media (min-width: 720px) {
+  .admin-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
 /* Ряд 2: панелі прогресу / тесту */
 .analytics-panel { min-height: 124px; }
 .analytics-panel-action { margin-top: auto; align-self: flex-start; }

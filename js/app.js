@@ -283,15 +283,15 @@
     { id: "support", icon: "♡", label: "Опора" },
     { id: "info", icon: "ℹ", label: "Інформація" }
   ];
-  const SUPPORT_ROUTES = ["support", "resources", "friend", "treasure", "library", "joys", "gratitude", "evidence", "profile"];
-  const INFO_ROUTES = ["info", "payment"];
+  const SUPPORT_ROUTES = ["support", "resources", "friend", "treasure", "library", "joys", "gratitude", "evidence", "profile", "privacy", "admin"];
+  const INFO_ROUTES = ["info", "payment", "privacy"];
   const ROUTE_TITLES = {
     home: "Сьогодні", history: "Щоденник", analytics: "Моя динаміка", support: "Опора",
     new: "Новий запис", types: "Типи тривоги", typeTest: "Розбір ситуації", reminders: "Нагадування",
     evidence: "Банк доказів", resources: "Мої ресурси", treasure: "Скарбничка", joys: "Мої радощі",
     good: "Хороші події", gratitude: "Вдячність", friend: "Порада подрузі", library: "Бібліотека",
     achievements: "Прогрес", profile: "Профіль", recoverySelect: "Твоє деревце",
-    info: "Інформація", payment: "Оплата"
+    info: "Інформація", payment: "Оплата", privacy: "Конфіденційність", admin: "Адмін"
   };
 
   let route = "home";
@@ -435,6 +435,25 @@
       </div>`);
   }
 
+  function openPrivacyInfo() {
+    const priv = C.PRIVACY || {};
+    const sections = Array.isArray(priv.sections) ? priv.sections : [];
+    openModal(`
+      <h2>${esc(priv.title || "Конфіденційність")}</h2>
+      <div class="privacy-modal-body">
+        <p class="muted" style="margin:0 0 12px;line-height:1.55">${esc(priv.intro || "")}</p>
+        ${sections.map((s) => `
+          <div class="privacy-modal-block">
+            <b>${esc(s.title || "")}</b>
+            <p>${esc(s.body || "")}</p>
+          </div>`).join("")}
+        ${priv.footer ? `<p class="faint" style="margin-top:10px;font-size:12.5px">${esc(priv.footer)}</p>` : ""}
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:14px">
+        <button type="button" class="btn btn-ghost btn-sm" data-close>Закрити</button>
+      </div>`);
+  }
+
   function viewPayment() {
     const pay = C.PAYMENT || {};
     $("#view").innerHTML = `
@@ -448,6 +467,100 @@
       <button class="btn btn-ghost btn-sm" id="payment-back" type="button" style="margin-top:12px">← Назад до інформації</button>`;
     const back = $("#payment-back");
     if (back) back.onclick = () => go("info");
+  }
+
+  function viewPrivacy() {
+    const priv = C.PRIVACY || {};
+    const sections = Array.isArray(priv.sections) ? priv.sections : [];
+    $("#view").innerHTML = `
+      <div class="page-head">
+        <h1>${esc(priv.title || "Конфіденційність")}</h1>
+        <p>${esc(priv.intro || "")}</p>
+      </div>
+      <div class="privacy-stack">
+        ${sections.map((s, i) => `
+          <article class="card privacy-card">
+            <div class="privacy-card-num">${i + 1}</div>
+            <h2 class="privacy-card-title">${esc(s.title || "")}</h2>
+            <p class="privacy-card-body">${esc(s.body || "")}</p>
+          </article>`).join("")}
+      </div>
+      ${priv.footer ? `<p class="faint privacy-footer">${esc(priv.footer)}</p>` : ""}
+      <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:14px">
+        <button class="btn btn-ghost btn-sm" id="privacy-back" type="button">← Назад</button>
+        <button class="btn btn-ghost btn-sm" id="privacy-to-data" type="button">Керувати даними в профілі</button>
+      </div>`;
+    const back = $("#privacy-back");
+    if (back) back.onclick = () => go("info");
+    const toData = $("#privacy-to-data");
+    if (toData) toData.onclick = () => go("profile");
+  }
+
+  async function viewAdmin() {
+    const p = S.state.profile || {};
+    const allowed = S.isAdminEmail(p.email);
+    $("#view").innerHTML = `
+      <div class="page-head">
+        <h1>Адмін-панель</h1>
+        <p>Службова статистика сервісу. Тексти щоденників тут не показуються.</p>
+      </div>
+      <div class="card" id="admin-body"><p class="muted">Завантаження…</p></div>
+      <button class="btn btn-ghost btn-sm" id="admin-back" type="button" style="margin-top:12px">← До профілю</button>`;
+    const back = $("#admin-back");
+    if (back) back.onclick = () => go("profile");
+
+    if (!allowed && !(window.SPOKIY_CONFIG && window.SPOKIY_CONFIG.admin)) {
+      $("#admin-body").innerHTML = `
+        <p class="muted">Цей розділ лише для адміністратора.</p>
+        <p class="faint" style="margin-top:8px;font-size:12.5px;line-height:1.45">
+          Увійди з email власника або додай свій email у <code>api/admin-emails.js</code>
+          і в Vercel → <code>ADMIN_EMAILS</code>, потім онови сторінку.
+        </p>`;
+      return;
+    }
+
+    const res = await S.fetchAdminOverview();
+    if (!res.ok) {
+      $("#admin-body").innerHTML = `
+        <p class="muted">Не вдалося відкрити адмінку (${esc(res.error || "помилка")}).</p>
+        <p class="faint" style="margin-top:8px;font-size:12.5px;line-height:1.45">
+          Перевір, що твій email є в списку адмінів на сервері, і що ти онлайн.
+        </p>`;
+      return;
+    }
+
+    const st = res.stats || {};
+    const users = Array.isArray(res.users) ? res.users : [];
+    $("#admin-body").innerHTML = `
+      <p class="faint" style="margin:0 0 12px;font-size:12px">Акаунт: ${esc(res.admin || p.email || "")}</p>
+      <div class="admin-stats">
+        <div class="admin-stat"><b>${st.usersTotal ?? "—"}</b><span>користувачів</span></div>
+        <div class="admin-stat"><b>${st.telegramLinked ?? "—"}</b><span>Telegram</span></div>
+        <div class="admin-stat"><b>${st.diaryEntries ?? "—"}</b><span>записів</span></div>
+        <div class="admin-stat"><b>${st.activeLast7Days ?? "—"}</b><span>активні за 7 днів</span></div>
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap;margin:12px 0">
+        <span class="pill ${st.supabase ? "pill-green" : "pill-red"}">Supabase ${st.supabase ? "ok" : "ні"}</span>
+        <span class="pill ${st.telegramBot ? "pill-green" : "pill-violet"}">Бот ${st.telegramBot ? "налаштований" : "вимкнений"}</span>
+      </div>
+      ${res.note ? `<p class="faint" style="font-size:12.5px;margin:0 0 12px">${esc(res.note)}</p>` : ""}
+      <div class="card-title" style="margin-top:8px">Останні акаунти</div>
+      <div class="admin-user-list">
+        ${users.length ? users.map((u) => `
+          <div class="admin-user-row">
+            <div>
+              <b>${esc(u.name || "—")}</b>
+              <div class="faint" style="font-size:12px">${esc(u.email)}</div>
+            </div>
+            <div class="admin-user-meta">
+              ${u.telegram ? `<span class="pill pill-green">TG</span>` : ""}
+              <span class="faint">${u.updatedAt ? fmtDateTime(u.updatedAt) : "—"}</span>
+            </div>
+          </div>`).join("") : `<p class="analytics-none">Поки немає даних</p>`}
+      </div>
+      <button class="btn btn-ghost btn-sm" id="admin-refresh" type="button" style="margin-top:12px">Оновити</button>`;
+    const refresh = $("#admin-refresh");
+    if (refresh) refresh.onclick = () => viewAdmin();
   }
 
   /* ===================== ТЕМА (день / ніч) ===================== */
@@ -1490,12 +1603,18 @@
         icon: "3",
         title: "Оплата та доступ",
         desc: "Умови доступу до сервісу та інформація про оплату чи підтримку."
+      },
+      {
+        id: "privacy",
+        icon: "4",
+        title: "Конфіденційність",
+        desc: "Що зберігається, де лежать дані і як ти ними керуєш."
       }
     ];
     $("#view").innerHTML = `
       <div class="page-head">
         <h1>Інформація</h1>
-        <p>Поетапно: спочатку сьогоднішній крок, потім інструкція й оплата.</p>
+        <p>Поетапно: сьогоднішній крок, огляд функцій, оплата й конфіденційність.</p>
       </div>
       <div class="support-grid">
         ${cards.map(c => `
@@ -1510,6 +1629,7 @@
         if (id === "today") openPracticeGuide();
         else if (id === "guide") openGuide();
         else if (id === "payment") go("payment");
+        else if (id === "privacy") go("privacy");
       };
     });
   }
@@ -3443,6 +3563,19 @@
       </div>
 
       <div class="card">
+        <div class="card-title">🔒 Конфіденційність</div>
+        <p class="muted">Що зберігається, де лежать дані, Telegram, експорт і видалення.</p>
+        <button class="btn btn-primary btn-sm" id="open-privacy" type="button" style="margin-top:8px">Читати</button>
+      </div>
+
+      ${S.isAdminEmail(p.email) || (window.SPOKIY_CONFIG && window.SPOKIY_CONFIG.admin) ? `
+      <div class="card">
+        <div class="card-title">🛠 Адмін-панель</div>
+        <p class="muted">Статистика сервісу для власника. Тексти щоденників не показуються.</p>
+        <button class="btn btn-primary btn-sm" id="open-admin" type="button" style="margin-top:8px">Відкрити</button>
+      </div>` : ""}
+
+      <div class="card">
         <div class="card-title">💾 Твої дані</div>
         <div class="stack data-actions">
           <button class="btn btn-ghost btn-sm btn-block" id="exp-backup" type="button">⬇️ Завантажити копію даних</button>
@@ -3487,6 +3620,10 @@
     $("#logout").onclick = () => confirmModal("Вийти?", null, () => { S.logout(); location.reload(); });
     const openPay = $("#open-payment");
     if (openPay) openPay.onclick = () => go("payment");
+    const openPriv = $("#open-privacy");
+    if (openPriv) openPriv.onclick = () => go("privacy");
+    const openAdm = $("#open-admin");
+    if (openAdm) openAdm.onclick = () => go("admin");
     $("#del-all").onclick = () => confirmModal("Видалити всі дані?", "Профіль і всі записи буде видалено назавжди.", () => {
       S.deleteAllData(); location.reload();
     }, "Видалити назавжди", true);
@@ -3686,7 +3823,7 @@
       home: viewHome, types: viewTypes, typeTest: viewTypeTest, new: viewNew, reminders: viewReminders, evidence: viewEvidence,
       resources: viewResources, treasure: viewTreasure, analytics: viewAnalytics, joys: viewJoys, good: viewGoodEvents, gratitude: viewGratitude, friend: viewFriendPractice,
       history: viewHistory, library: viewLibrary, achievements: viewAchievements, profile: viewProfile, support: viewSupport,
-      recoverySelect: viewRecoverySelect, payment: viewPayment, info: viewInfo
+      recoverySelect: viewRecoverySelect, payment: viewPayment, privacy: viewPrivacy, admin: viewAdmin, info: viewInfo
     };
     (map[route] || viewHome)();
     mountSongBar();
@@ -3804,6 +3941,7 @@
         <div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap">
           <button type="button" class="btn btn-ghost" id="landing-about-guide">Детальніше про функції</button>
           <button type="button" class="btn btn-ghost" id="landing-about-payment">Оплата</button>
+          <button type="button" class="btn btn-ghost" id="landing-about-privacy">Конфіденційність</button>
           <button type="button" class="btn btn-sos" id="landing-about-sos">Мені тривожно зараз</button>
         </div>
       </div>`);
@@ -3811,6 +3949,8 @@
     if (guideBtn) guideBtn.onclick = () => { closeModal(); openGuide(); };
     const payAbout = $("#landing-about-payment");
     if (payAbout) payAbout.onclick = () => { closeModal(); openPaymentInfo(); };
+    const privAbout = $("#landing-about-privacy");
+    if (privAbout) privAbout.onclick = () => { closeModal(); openPrivacyInfo(); };
     const sosBtn = $("#landing-about-sos");
     if (sosBtn) sosBtn.onclick = () => { closeModal(); openQuickCalm(); };
   }
@@ -4007,6 +4147,8 @@
     if (aboutBtn) aboutBtn.onclick = openLandingAbout;
     const landingPay = $("#landing-payment");
     if (landingPay) landingPay.onclick = openPaymentInfo;
+    const landingPriv = $("#landing-privacy");
+    if (landingPriv) landingPriv.onclick = openPrivacyInfo;
 
     const submitBtn = $("#auth-submit");
     if (submitBtn) submitBtn.onclick = () => (authMode === "signup" ? submitSignup() : submitLogin());
@@ -4100,13 +4242,21 @@
 
   async function loadPublicConfig() {
     try {
-      const r = await fetch("/api/config", { headers: { Accept: "application/json" } });
+      const headers = { Accept: "application/json" };
+      try {
+        const t = localStorage.getItem("spokiy:token");
+        if (t) headers.Authorization = "Bearer " + t;
+      } catch (e) {}
+      const r = await fetch("/api/config", { headers });
       if (!r.ok) return;
       const j = await r.json();
       if (j && j.googleClientId) {
         GOOGLE_CLIENT_ID = String(j.googleClientId).trim();
-        window.SPOKIY_CONFIG = Object.assign({}, window.SPOKIY_CONFIG || {}, { googleClientId: GOOGLE_CLIENT_ID });
       }
+      window.SPOKIY_CONFIG = Object.assign({}, window.SPOKIY_CONFIG || {}, {
+        googleClientId: GOOGLE_CLIENT_ID,
+        admin: !!(j && j.admin)
+      });
     } catch (e) { /* ignore */ }
   }
 

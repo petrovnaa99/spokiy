@@ -101,6 +101,7 @@ const {
   codeExpiry,
   isExpired,
   verifyGoogleIdToken,
+  bearerToken,
   devCodeHint
 } = require("./api/_auth");
 
@@ -426,10 +427,65 @@ async function handleApi(req, res, pathname) {
   }
 
   if (pathname === "/api/config" && req.method === "GET") {
+    let admin = false;
+    try {
+      const { isAdminEmail } = require("./api/_admin");
+      const token = bearerToken(req);
+      if (token) {
+        const sessRow = db.prepare("SELECT email, expires_at FROM auth_sessions WHERE token = ?").get(token);
+        if (sessRow && !isExpired(sessRow.expires_at) && isAdminEmail(sessRow.email)) admin = true;
+      }
+    } catch (e) { admin = false; }
     return sendJSON(res, 200, {
       ok: true,
-      googleClientId: process.env.GOOGLE_CLIENT_ID || ""
+      googleClientId: process.env.GOOGLE_CLIENT_ID || "",
+      admin
     });
+  }
+
+  if (pathname === "/api/admin/overview" && req.method === "GET") {
+    try {
+      const { isAdminEmail } = require("./api/_admin");
+      const token = bearerToken(req);
+      if (!token) return sendJSON(res, 401, { ok: false, error: "auth_required" });
+      const sessRow = db.prepare("SELECT email, expires_at FROM auth_sessions WHERE token = ?").get(token);
+      if (!sessRow || isExpired(sessRow.expires_at)) return sendJSON(res, 401, { ok: false, error: "auth_required" });
+      if (!isAdminEmail(sessRow.email)) return sendJSON(res, 403, { ok: false, error: "forbidden" });
+      const users = db.prepare("SELECT email, data, updated_at FROM users ORDER BY updated_at DESC LIMIT 40").all();
+      const tgSet = new Set();
+      try {
+        db.prepare("SELECT email FROM telegram_users").all().forEach((r) => tgSet.add(String(r.email).toLowerCase()));
+      } catch (e) {}
+      const since7 = Date.now() - 7 * 86400000;
+      const mapped = users.map((u) => {
+        let data = {};
+        try { data = JSON.parse(u.data || "{}"); } catch { data = {}; }
+        const profile = data.profile && typeof data.profile === "object" ? data.profile : {};
+        return {
+          email: u.email,
+          name: profile.name || String(u.email).split("@")[0],
+          updatedAt: u.updated_at,
+          telegram: tgSet.has(String(u.email).toLowerCase()),
+          recoveryStage: profile.recoveryStage || null
+        };
+      });
+      return sendJSON(res, 200, {
+        ok: true,
+        admin: sessRow.email,
+        stats: {
+          usersTotal: users.length,
+          telegramLinked: tgSet.size,
+          diaryEntries: null,
+          activeLast7Days: mapped.filter((u) => Date.parse(u.updatedAt || 0) >= since7).length,
+          telegramBot: tgConfigured(),
+          supabase: false
+        },
+        users: mapped,
+        note: "Локальний режим (SQLite). Тексти щоденників не показуються."
+      });
+    } catch (e) {
+      return sendJSON(res, 502, { ok: false, error: "admin_overview_failed", detail: String(e && e.message || e) });
+    }
   }
 
   if (pathname.startsWith("/api/telegram/") || pathname === "/api/cron/rituals") {

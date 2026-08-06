@@ -1135,6 +1135,31 @@ window.Store = (function () {
       return Auth.telegramUnlink();
     },
 
+    isAdminEmail(email) {
+      const list = (typeof window !== "undefined" && window.CONTENT && Array.isArray(window.CONTENT.ADMIN_EMAILS))
+        ? window.CONTENT.ADMIN_EMAILS
+        : [];
+      const e = String(email || "").trim().toLowerCase();
+      if (!e) return false;
+      if (list.some((x) => String(x).trim().toLowerCase() === e)) return true;
+      if (window.SPOKIY_CONFIG && window.SPOKIY_CONFIG.admin) return true;
+      return false;
+    },
+
+    async fetchAdminOverview() {
+      if (!Auth.enabled || !currentEmail) return { ok: false, error: "offline" };
+      try {
+        const r = await fetch("/api/admin/overview", {
+          headers: { Accept: "application/json", ...authHeaders() }
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) return { ok: false, error: (j && j.error) || ("http_" + r.status), status: r.status };
+        return j;
+      } catch (e) {
+        return { ok: false, error: "network" };
+      }
+    },
+
     /** Підтягнути стан з хмари (Telegram + сайт) і злити з локальним. */
     refreshFromCloud
   };

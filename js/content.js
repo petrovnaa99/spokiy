@@ -1197,12 +1197,56 @@ window.CONTENT = (function () {
     contactHint: "Питання щодо оплати можна поставити через звернення з email, яким ти користуєшся на сайті."
   };
 
+  /**
+   * Політика конфіденційності / захист даних (видима користувачам).
+   */
+  const PRIVACY = {
+    title: "Конфіденційність і захист даних",
+    intro: "«Спокій» створений як особистий простір. Нижче — простою мовою, що зберігається, навіщо і як ти цим керуєш.",
+    sections: [
+      {
+        title: "Які дані зберігаються",
+        body: "Обліковий запис (email, ім’я, стать), записи щоденника, ритуали, оцінки стану, вдячність, хороші події, банк доказів, налаштування нагадувань і прогрес деревця. Якщо підключиш Telegram — також прив’язка чату й відповіді в боті."
+      },
+      {
+        title: "Де лежать дані",
+        body: "На твоєму пристрої (локальна копія / чернетки) і в захищеному хмарному сховищі сервісу (Supabase), доступному лише через сервер «Спокою». Сторонні не бачать твої записи в аналітиці реклами."
+      },
+      {
+        title: "Автозбереження і офлайн",
+        body: "Чернетки зберігаються локально, навіть без інтернету. Коли зв’язок з’являється — дані м’яко синхронізуються. Перед закриттям вкладки з незбереженим текстом з’являється попередження."
+      },
+      {
+        title: "Telegram",
+        body: "Підключення бота добровільне. Відмітки з бота потрапляють у твій акаунт на сайті. Від’єднати бота можна в Профілі."
+      },
+      {
+        title: "«Тіні забутих предків»",
+        body: "Прибрані записи не зникають одразу: вони потрапляють у папку внизу щоденника. Звідти можна повернути запис або стерти його назавжди."
+      },
+      {
+        title: "Твій контроль",
+        body: "У Профілі можна завантажити копію даних, перенести з файлу, експортувати PDF або видалити всі дані акаунта. Після повного видалення відновлення неможливе."
+      },
+      {
+        title: "Важливо",
+        body: "Сервіс для самопідтримки й не замінює психологічну чи медичну допомогу. Ми не продаємо твої особисті записи. Адміністратор бачить лише службову статистику сервісу, не тексти твоїх думок у адмін-панелі."
+      }
+    ],
+    footer: "Питання щодо даних можна надіслати з того email, яким ти користуєшся на сайті."
+  };
+
+  /** Email адмінів для показу пункту меню (має збігатися з api/admin-emails.js / ADMIN_EMAILS). */
+  const ADMIN_EMAILS = [
+    "petrovna.a99@gmail.com"
+  ];
+
   return {
     AFFIRMATIONS, MALE_AFFIRMATIONS, QUOTES, BREATHING, GROUNDING, LIBRARY, TEST,
     CATEGORIES, TRIGGERS, RESOURCE_SUGGESTIONS, ACHIEVEMENTS, ANXIETY_TYPES, CALM, FINANCE, SONGS,
     RECOVERY_SYMBOLS, RECOVERY_STAGES_GENTLE, RECOVERY_STAGES_SOLID, RECOVERY_STAGES_CORE,
     RECOVERY_AWARD_ACTIONS, RECOVERY_POINTS_PER_ACTION, RECOVERY_STAGE_UP_MESSAGES,
-    RECOVERY_PRACTICE_GUIDE, RECOVERY_PLANT_REF, PAYMENT, WELCOME_FEATURES,
+    RECOVERY_PRACTICE_GUIDE, RECOVERY_PLANT_REF, PAYMENT, PRIVACY, ADMIN_EMAILS, WELCOME_FEATURES,
     orderRecoverySymbolsForGender, getRecoverySymbolById, buildRecoveryStages,
     orderRecoverySymbolsForGender, getRecoverySymbolById, buildRecoveryStages,
     resolveCommunicationTone, getRecoveryTimeOfDay, getRecoveryGreeting,
