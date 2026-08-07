@@ -281,10 +281,13 @@
     { id: "history", icon: "≡", label: "Щоденник" },
     { id: "analytics", icon: "∿", label: "Моя динаміка" },
     { id: "support", icon: "♡", label: "Опора" },
-    { id: "info", icon: "ℹ", label: "Інформація" }
+    { id: "info", icon: "ℹ", label: "Інформація" },
+    { id: "privacy", icon: "◌", label: "Конфіденційність" }
   ];
-  const SUPPORT_ROUTES = ["support", "resources", "friend", "treasure", "library", "joys", "gratitude", "evidence", "profile", "privacy", "admin"];
-  const INFO_ROUTES = ["info", "payment", "privacy"];
+  /** Мобільне нижнє меню — без конфіденційності (вона в профілі / інфо). */
+  const BOTTOM_NAV = NAV.filter((n) => n.id !== "privacy");
+  const SUPPORT_ROUTES = ["support", "resources", "friend", "treasure", "library", "joys", "gratitude", "evidence", "profile", "admin"];
+  const INFO_ROUTES = ["info", "payment"];
   const ROUTE_TITLES = {
     home: "Сьогодні", history: "Щоденник", analytics: "Моя динаміка", support: "Опора",
     new: "Новий запис", types: "Типи тривоги", typeTest: "Розбір ситуації", reminders: "Нагадування",
@@ -315,16 +318,32 @@
 
   /* ===================== ІНСТРУКЦІЯ / ВІКНО НА ВХОДІ ===================== */
   let welcomeFollowUp = null;
+  let tourState = null;
 
   function shouldShowWelcome() {
     if (!S.state || !S.state.settings) return true;
     return !S.state.settings.welcomeSeen;
   }
 
+  function shouldShowTour() {
+    if (!S.state || !S.state.settings) return true;
+    if (S.state.settings.tourSeen) return false;
+    // Старі акаунти (вже бачили вітання до появи туру) — не нав'язуємо автоматично
+    if (S.state.settings.welcomeSeen) return false;
+    return true;
+  }
+
   function markWelcomeSeen() {
     if (!S.state) return;
     if (!S.state.settings) S.state.settings = {};
     S.state.settings.welcomeSeen = true;
+    S.save();
+  }
+
+  function markTourSeen() {
+    if (!S.state) return;
+    if (!S.state.settings) S.state.settings = {};
+    S.state.settings.tourSeen = true;
     S.save();
   }
 
@@ -356,8 +375,14 @@
     closeModal();
     if (!follow) return;
     setTimeout(() => {
-      if (follow.thenOnboarding) startOnboarding();
-      if (follow.thenPracticeGuide) setTimeout(() => runAfterModal(openPracticeGuide), 900);
+      if (follow.thenOnboarding || follow.thenTour) {
+        startSiteTour({
+          thenWellbeing: true,
+          thenPracticeGuide: !!follow.thenPracticeGuide
+        });
+      } else if (follow.thenPracticeGuide) {
+        setTimeout(() => runAfterModal(openPracticeGuide), 400);
+      }
     }, 320);
   }
 
@@ -366,6 +391,7 @@
     const options = opts || {};
     welcomeFollowUp = {
       thenOnboarding: !!options.thenOnboarding,
+      thenTour: options.thenTour !== false && !!options.thenOnboarding,
       thenPracticeGuide: !!options.thenPracticeGuide
     };
     openModal(`
@@ -376,17 +402,206 @@
         ${welcomeFeaturesHTML()}
         <p class="welcome-footer">Тут не треба бути сильною чи ідеальною. Достатньо одного маленького кроку до себе.</p>
         <div class="row welcome-actions">
-          <button type="button" class="btn btn-primary" id="welcome-start">Зрозуміло, почати</button>
+          <button type="button" class="btn btn-primary" id="welcome-start">Далі — коротке навчання</button>
+          <button type="button" class="btn btn-ghost" id="welcome-skip-tour">Пропустити навчання</button>
         </div>
       </div>`);
     const modal = $(".modal", $("#modal-root"));
     if (modal) modal.classList.add("modal--welcome");
     const start = $("#welcome-start");
     if (start) start.onclick = () => finishWelcomeModal();
+    const skip = $("#welcome-skip-tour");
+    if (skip) skip.onclick = () => {
+      markWelcomeSeen();
+      markTourSeen();
+      welcomeFollowUp = null;
+      closeModal();
+      setTimeout(() => startOnboarding(), 280);
+    };
     const root = $("#modal-root");
     root.onclick = (e) => {
       if (e.target === root || e.target.hasAttribute("data-close")) finishWelcomeModal();
     };
+  }
+
+  function tourSteps() {
+    const mobile = window.matchMedia("(max-width: 880px)").matches;
+    const steps = [
+      {
+        key: mobile ? "bn-home" : "nav-home",
+        title: "Сьогодні",
+        text: "Головна сторінка дня: ритуали, оцінка стану, деревце й швидкі кроки турботи."
+      },
+      {
+        key: mobile ? "bn-sos" : "nav-sos",
+        title: "SOS",
+        text: "Коли накриває — коротке дихання або заземлення прямо зараз, без довгих записів."
+      },
+      {
+        key: mobile ? "bn-history" : "nav-history",
+        title: "Щоденник",
+        text: "Усі записи в одному місці. Прибрані потрапляють у «Тіні забутих предків» унизу."
+      },
+      {
+        key: mobile ? "bn-analytics" : "nav-analytics",
+        title: "Моя динаміка",
+        text: "Статистика настрою й тривоги з сайту та Telegram — щоб бачити зміни в часі."
+      },
+      {
+        key: mobile ? "bn-support" : "nav-support",
+        title: "Опора",
+        text: "Ресурси, вдячність, скарбничка, банк доказів і бібліотека — усе, що тримає."
+      },
+      {
+        key: mobile ? "bn-info" : "nav-info",
+        title: "Інформація",
+        text: "Путівник по сайту, оплата та доступ — якщо треба згадати, як усім користуватися."
+      }
+    ];
+    if (!mobile) {
+      steps.push({
+        key: "nav-privacy",
+        title: "Конфіденційність",
+        text: "Що зберігається, де лежать дані й як ти ними керуєш."
+      });
+    }
+    steps.push({
+      key: mobile ? "topbar-profile" : "nav-profile",
+      title: "Твій акаунт",
+      text: mobile
+        ? "Профіль угорі праворуч: дані, Telegram, експорт і налаштування."
+        : "Твій акаунт угорі зліва: профіль, дані, Telegram і адмін (якщо є доступ)."
+    });
+    return steps;
+  }
+
+  function tourTargetEl(key) {
+    if (key === "topbar-profile") return $("#topbar-profile");
+    return document.querySelector(`[data-tour="${key}"]`);
+  }
+
+  function endSiteTour(opts) {
+    const options = opts || {};
+    const root = $("#tour-root");
+    if (root) {
+      root.classList.add("hidden");
+      root.innerHTML = "";
+      root.setAttribute("aria-hidden", "true");
+    }
+    document.body.classList.remove("tour-active");
+    window.removeEventListener("resize", onTourReposition);
+    tourState = null;
+    markTourSeen();
+    if (options.thenWellbeing) setTimeout(() => startOnboarding(), 350);
+    if (options.thenPracticeGuide) {
+      setTimeout(() => runAfterModal(openPracticeGuide), options.thenWellbeing ? 1200 : 400);
+    }
+  }
+
+  function onTourReposition() {
+    if (tourState) paintTourStep(tourState.index, true);
+  }
+
+  function startSiteTour(opts) {
+    const options = opts || {};
+    if (!shouldShowTour() && !options.force) {
+      if (options.thenWellbeing) startOnboarding();
+      return;
+    }
+    go("home");
+    tourState = {
+      index: 0,
+      thenWellbeing: !!options.thenWellbeing,
+      thenPracticeGuide: !!options.thenPracticeGuide
+    };
+    document.body.classList.add("tour-active");
+    window.addEventListener("resize", onTourReposition);
+    // На мобільному профіль у topbar; на десктопі відкриваємо сайдбар (він уже видимий)
+    setTimeout(() => paintTourStep(0), 80);
+  }
+
+  function paintTourStep(index, quiet) {
+    if (!tourState) return;
+    const steps = tourSteps();
+    if (index < 0 || index >= steps.length) {
+      endSiteTour(tourState);
+      return;
+    }
+    tourState.index = index;
+    const step = steps[index];
+    const root = $("#tour-root");
+    if (!root) return;
+
+    const el = tourTargetEl(step.key);
+    const rect = el ? el.getBoundingClientRect() : null;
+    const pad = 8;
+    const spot = rect
+      ? {
+          top: Math.max(6, rect.top - pad),
+          left: Math.max(6, rect.left - pad),
+          width: Math.min(window.innerWidth - 12, rect.width + pad * 2),
+          height: Math.min(window.innerHeight - 12, rect.height + pad * 2)
+        }
+      : { top: 80, left: 24, width: 200, height: 48 };
+
+    const mobile = window.matchMedia("(max-width: 880px)").matches;
+    let cardTop;
+    let cardLeft;
+    let arrowSide;
+    if (mobile) {
+      // Картка над нижнім меню / під topbar
+      const preferAbove = spot.top > window.innerHeight * 0.45;
+      cardTop = preferAbove
+        ? Math.max(16, spot.top - 170)
+        : Math.min(window.innerHeight - 200, spot.top + spot.height + 18);
+      cardLeft = Math.max(12, Math.min(window.innerWidth - 312, spot.left + spot.width / 2 - 150));
+      arrowSide = preferAbove ? "down" : "up";
+    } else {
+      cardLeft = Math.min(window.innerWidth - 320, spot.left + spot.width + 18);
+      if (cardLeft + 300 > window.innerWidth - 12) {
+        cardLeft = Math.max(12, spot.left - 318);
+        arrowSide = "right";
+      } else {
+        arrowSide = "left";
+      }
+      cardTop = Math.max(16, Math.min(window.innerHeight - 220, spot.top + spot.height / 2 - 70));
+    }
+
+    const isLast = index === steps.length - 1;
+    root.classList.remove("hidden");
+    root.setAttribute("aria-hidden", "false");
+    root.innerHTML = `
+      <div class="tour-backdrop" data-tour-skip></div>
+      <div class="tour-spotlight" style="top:${spot.top}px;left:${spot.left}px;width:${spot.width}px;height:${spot.height}px"></div>
+      <div class="tour-card tour-arrow-${arrowSide}" style="top:${cardTop}px;left:${cardLeft}px" role="dialog" aria-labelledby="tour-title">
+        <div class="tour-card-arrow" aria-hidden="true"></div>
+        <p class="tour-step">${index + 1} з ${steps.length}</p>
+        <h3 id="tour-title">${esc(step.title)}</h3>
+        <p>${esc(step.text)}</p>
+        <div class="tour-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="tour-skip">Пропустити</button>
+          <div class="row" style="gap:8px">
+            ${index > 0 ? `<button type="button" class="btn btn-ghost btn-sm" id="tour-prev">Назад</button>` : ""}
+            <button type="button" class="btn btn-primary btn-sm" id="tour-next">${isLast ? "Готово" : "Далі"}</button>
+          </div>
+        </div>
+      </div>`;
+
+    const skip = $("#tour-skip");
+    if (skip) skip.onclick = () => endSiteTour(tourState);
+    $$("[data-tour-skip]", root).forEach((b) => {
+      b.onclick = () => endSiteTour(tourState);
+    });
+    const prev = $("#tour-prev");
+    if (prev) prev.onclick = () => paintTourStep(index - 1);
+    const next = $("#tour-next");
+    if (next) next.onclick = () => {
+      if (isLast) endSiteTour(tourState);
+      else paintTourStep(index + 1);
+    };
+    if (!quiet && el && el.scrollIntoView) {
+      try { el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e) {}
+    }
   }
 
   function openGuide() {
@@ -751,7 +966,7 @@
     nav.innerHTML = NAV.map(n => {
       const active = navItemActive(n.id);
       const cls = "nav-item" + (active ? " active" : "") + (n.action ? " nav-sos" : "");
-      return `<button class="${cls}" data-route="${n.id}" type="button">
+      return `<button class="${cls}" data-route="${n.id}" data-tour="nav-${n.id}" type="button">
         <span class="ico">${n.icon}</span><span>${uiText(genderize(n.label))}</span></button>`;
     }).join("");
     $$(".nav-item", nav).forEach(b => b.onclick = () => {
@@ -763,10 +978,14 @@
 
     const p = S.state.profile;
     const initials = (p.name || p.email || "?").trim().charAt(0).toUpperCase();
-    $("#user-chip").innerHTML = `
-      <div class="user-avatar">${esc(initials)}</div>
-      <div class="user-meta"><b>${esc(p.name || "Користувач")}</b><span>${esc(p.email)}</span></div>`;
-    $("#user-chip").onclick = () => go("profile");
+    const chip = $("#user-chip");
+    if (chip) {
+      chip.setAttribute("data-tour", "nav-profile");
+      chip.innerHTML = `
+        <div class="user-avatar">${esc(initials)}</div>
+        <div class="user-meta"><b>${esc(p.name || "Користувач")}</b><span>${esc(p.email)}</span></div>`;
+      chip.onclick = () => { closeSidebar(); go("profile"); };
+    }
 
     renderBottomNav();
   }
@@ -774,10 +993,10 @@
   function renderBottomNav() {
     const bar = $("#bottom-nav");
     if (!bar) return;
-    bar.innerHTML = NAV.map(n => {
+    bar.innerHTML = BOTTOM_NAV.map(n => {
       const active = n.action ? false : navItemActive(n.id);
       const cls = "bottom-nav-item" + (active ? " active" : "") + (n.action ? " bottom-nav-sos" : "");
-      return `<button class="${cls}" type="button" data-route="${n.id}">
+      return `<button class="${cls}" type="button" data-route="${n.id}" data-tour="bn-${n.id}">
         <span class="bn-ico">${n.icon}</span><span class="bn-lbl">${uiText(genderize(n.label))}</span></button>`;
     }).join("");
     $$(".bottom-nav-item", bar).forEach(b => b.onclick = () => {
@@ -1744,6 +1963,8 @@
       go("home");
       if (shouldShowWelcome()) {
         openWelcomeFeatures({ thenOnboarding: true, thenPracticeGuide: true });
+      } else if (shouldShowTour()) {
+        startSiteTour({ thenWellbeing: true, thenPracticeGuide: true });
       } else {
         startOnboarding();
         setTimeout(() => runAfterModal(openPracticeGuide), 900);
@@ -3640,6 +3861,12 @@
         <button class="btn btn-primary btn-sm" id="open-privacy" type="button" style="margin-top:8px">Читати</button>
       </div>
 
+      <div class="card">
+        <div class="card-title">🎓 Навчання по сайту</div>
+        <p class="muted">Короткий тур зі стрілочками по меню — можна пройти знову будь-коли.</p>
+        <button class="btn btn-ghost btn-sm" id="open-tour" type="button" style="margin-top:8px">Пройти навчання</button>
+      </div>
+
       ${S.isAdminEmail(p.email) || (window.SPOKIY_CONFIG && window.SPOKIY_CONFIG.admin) ? `
       <div class="card">
         <div class="card-title">🛠 Адмін-панель</div>
@@ -3694,6 +3921,8 @@
     if (openPay) openPay.onclick = () => go("payment");
     const openPriv = $("#open-privacy");
     if (openPriv) openPriv.onclick = () => go("privacy");
+    const openTour = $("#open-tour");
+    if (openTour) openTour.onclick = () => startSiteTour({ force: true });
     const openAdm = $("#open-admin");
     if (openAdm) openAdm.onclick = () => go("admin");
     $("#del-all").onclick = () => confirmModal("Видалити всі дані?", "Профіль і всі записи буде видалено назавжди.", () => {
@@ -3933,6 +4162,8 @@
     render();
     if (shouldShowWelcome()) {
       setTimeout(() => openWelcomeFeatures({ thenOnboarding: true }), 450);
+    } else if (shouldShowTour()) {
+      setTimeout(() => startSiteTour({ thenWellbeing: true }), 450);
     } else {
       startOnboarding();
     }
@@ -4347,7 +4578,10 @@
       Safeguard.handleConflictEvent(ev.detail);
     });
     const profileBtn = $("#topbar-profile");
-    if (profileBtn) profileBtn.onclick = () => go("profile");
+    if (profileBtn) {
+      profileBtn.setAttribute("data-tour", "topbar-profile");
+      profileBtn.onclick = () => go("profile");
+    }
     const scrim = $("#scrim");
     if (scrim) scrim.onclick = closeSidebar;
     document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); closeCrisis(); if (calmState) closeCalm(); } });

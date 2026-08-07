@@ -371,7 +371,7 @@ window.Safeguard = (function () {
     if (now) now.onclick = async () => {
       deps.closeModal();
       const res = await flushToServer({ silent: false });
-      if (res && res.ok) location.reload();
+      if (res && res.ok) reloadAfterSave();
       else if (deps.toast) deps.toast("Спочатку дочекайся синхронізації запису", "warn");
     };
   }
@@ -407,9 +407,18 @@ window.Safeguard = (function () {
 
   function onBeforeUnload(e) {
     if (!hasUnsaved()) return;
+    // Сучасні браузери ігнорують власний текст і показують системне вікно
+    // мовою інтерфейсу браузера (не сайту). Текст нижче — лише для старих браузерів.
     e.preventDefault();
     e.returnValue = "У вас є незбережені зміни. Ви дійсно хочете залишити сторінку?";
     return e.returnValue;
+  }
+
+  /** Навмисне перезавантаження після збереження — без системного діалогу. */
+  function reloadAfterSave() {
+    dirty = false;
+    pendingDraft = null;
+    location.reload();
   }
 
   function setEditingRoute(isEditing) {

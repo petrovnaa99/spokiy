@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0a2248" />
-  <meta name="spokiy-build" content="20260806d" />
+  <meta name="spokiy-build" content="20260807a" />
   <title>Спокій — щоденник тривожності</title>
   <script>
     (function () {
@@ -106,16 +106,18 @@
         <span class="brand-logo">S</span>
         <span class="brand-name">Спокій</span>
       </div>
-      <nav class="nav" id="nav"></nav>
-      <div class="sidebar-foot">
-        <div class="user-chip" id="user-chip"></div>
+      <div class="sidebar-user">
+        <button type="button" class="user-chip" id="user-chip" aria-label="Профіль"></button>
       </div>
+      <nav class="nav" id="nav"></nav>
     </aside>
     <div class="scrim" id="scrim"></div>
 
     <main class="content" id="view"></main>
     <nav class="bottom-nav" id="bottom-nav" aria-label="Головна навігація"></nav>
   </div>
+
+  <div id="tour-root" class="tour-root hidden" aria-live="polite"></div>
 
   <div id="connectivity-banner" class="connectivity-banner hidden" role="status" aria-live="polite" aria-hidden="true"></div>
 
@@ -134,11 +136,11 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-<script src="js/content.js?v=20260801a"></script>
-<script src="js/storage.js?v=20260806a"></script>
-<script src="js/safeguard.js?v=20260806a"></script>
+<script src="js/content.js?v=20260807a"></script>
+<script src="js/storage.js?v=20260807a"></script>
+<script src="js/safeguard.js?v=20260807a"></script>
 <script src="js/rituals.js?v=20260802b"></script>
 <script src="js/recovery-art.js?v=20260725k"></script>
-<script src="js/app.js?v=20260806b"></script>
+<script src="js/app.js?v=20260807a"></script>
 </body>
 </html>

@@ -689,6 +689,18 @@ a { color: var(--primary); }
 .sidebar .nav-item.nav-sos { color: #ffb4a0; }
 .sidebar .nav-item.nav-sos .ico { color: #ffb4a0; background: rgba(255, 140, 110, .12); }
 .sidebar .sidebar-foot { border-top: 1px solid rgba(255, 244, 234, .14); }
+.sidebar .sidebar-user {
+  padding: 0 4px 12px;
+  margin: 0 0 8px;
+  border-bottom: 1px solid rgba(255, 244, 234, .14);
+}
+.sidebar .user-chip {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+}
 .sidebar .user-chip:hover { background: rgba(255, 244, 234, .08); }
 .sidebar .user-meta b { color: #fff8ef; }
 .sidebar .user-meta span { color: rgba(244, 239, 230, .62); }
@@ -721,6 +733,7 @@ a { color: var(--primary); }
 .nav-item.active { background: var(--primary-soft); color: var(--primary-d); }
 .nav-badge { margin-left: auto; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; }
 .sidebar-foot { border-top: 1px solid var(--line); padding-top: 12px; }
+.sidebar-user { flex: none; }
 .user-chip { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; cursor: pointer; }
 .user-chip:hover { background: var(--surface-2); }
 .user-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--accent)); color: #fff; display: grid; place-items: center; font-weight: 700; }
@@ -1842,11 +1855,113 @@ input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border: none;
 .welcome-actions {
   justify-content: center;
   margin-top: 4px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 @media (max-width: 640px) {
   .modal.modal--welcome { max-width: 100%; padding: 20px 16px 16px; }
   .welcome-grid { grid-template-columns: 1fr; }
   .welcome-groups { max-height: 52vh; }
+}
+
+/* Навчання по сайту (tour) */
+.tour-root {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  pointer-events: none;
+}
+.tour-root.hidden { display: none; }
+.tour-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 22, 51, .42);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.tour-spotlight {
+  position: absolute;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 2px rgba(255, 226, 138, .95),
+    0 0 0 9999px rgba(6, 22, 51, .55);
+  pointer-events: none;
+  transition: top .22s ease, left .22s ease, width .22s ease, height .22s ease;
+  z-index: 1;
+}
+.tour-card {
+  position: absolute;
+  width: min(300px, calc(100vw - 24px));
+  background: var(--surface, #fffaf4);
+  color: var(--ink, #233029);
+  border-radius: 16px;
+  padding: 14px 14px 12px;
+  box-shadow: 0 18px 40px -18px rgba(6, 22, 51, .55);
+  border: 1px solid color-mix(in srgb, var(--line, #e8dfd4) 80%, #061633 20%);
+  pointer-events: auto;
+  z-index: 2;
+  animation: tour-pop .28s ease;
+}
+@keyframes tour-pop {
+  from { opacity: 0; transform: translateY(8px) scale(.96); }
+  to { opacity: 1; transform: none; }
+}
+.tour-card h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.tour-card p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink-soft, #5c6b63);
+}
+.tour-step {
+  margin: 0 0 4px !important;
+  font-size: 11.5px !important;
+  font-weight: 700;
+  color: var(--primary-d, #1a6b58) !important;
+  letter-spacing: .02em;
+}
+.tour-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.tour-card-arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 10px solid transparent;
+}
+.tour-arrow-left .tour-card-arrow {
+  left: -18px;
+  top: 28px;
+  border-right-color: var(--surface, #fffaf4);
+}
+.tour-arrow-right .tour-card-arrow {
+  right: -18px;
+  top: 28px;
+  border-left-color: var(--surface, #fffaf4);
+}
+.tour-arrow-up .tour-card-arrow {
+  top: -18px;
+  left: 28px;
+  border-bottom-color: var(--surface, #fffaf4);
+}
+.tour-arrow-down .tour-card-arrow {
+  bottom: -18px;
+  left: 28px;
+  border-top-color: var(--surface, #fffaf4);
+}
+body.tour-active { overflow: hidden; }
+
+@media (max-width: 880px) {
+  .tour-spotlight { border-radius: 12px; }
 }
 
 /* Connectivity / sync banner — оверлей, не займає місце в layout */

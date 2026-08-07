@@ -137,6 +137,8 @@ window.Store = (function () {
         songReminder: "",
         /** Чи вже бачив(ла) вікно огляду функцій на вході. */
         welcomeSeen: false,
+        /** Чи вже пройшов(ла) або пропустив(ла) навчання по меню. */
+        tourSeen: false,
         /** Тон комунікації: "gentle" | "solid" | null (null = визначити з символу / статі). */
         communicationTone: null,
         ritualDismiss: {},
