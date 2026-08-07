@@ -493,9 +493,43 @@
     return steps;
   }
 
+  function tourTargetVisible(el) {
+    if (!el || !el.getBoundingClientRect) return false;
+    const st = window.getComputedStyle(el);
+    if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 2 && r.height > 2;
+  }
+
   function tourTargetEl(key) {
-    if (key === "topbar-profile") return $("#topbar-profile");
-    return document.querySelector(`[data-tour="${key}"]`);
+    if (key === "topbar-profile") {
+      const el = $("#topbar-profile");
+      return tourTargetVisible(el) ? el : null;
+    }
+    // SOS: лише видима кнопка з data-route=sos (не бренд і не прихований bottom-nav)
+    if (key === "nav-sos" || key === "bn-sos") {
+      const candidates = [
+        document.querySelector('#nav button[data-route="sos"]'),
+        document.querySelector('#bottom-nav button[data-route="sos"]'),
+        document.querySelector('#nav [data-tour="nav-sos"]'),
+        document.querySelector('#bottom-nav [data-tour="bn-sos"]')
+      ];
+      for (let i = 0; i < candidates.length; i++) {
+        if (tourTargetVisible(candidates[i])) return candidates[i];
+      }
+      return null;
+    }
+    if (key && key.indexOf("nav-") === 0) {
+      const el = document.querySelector("#nav [data-tour=\"" + key + "\"]")
+        || document.querySelector("aside.sidebar [data-tour=\"" + key + "\"]");
+      return tourTargetVisible(el) ? el : null;
+    }
+    if (key && key.indexOf("bn-") === 0) {
+      const el = document.querySelector("#bottom-nav [data-tour=\"" + key + "\"]");
+      return tourTargetVisible(el) ? el : null;
+    }
+    const el = document.querySelector("[data-tour=\"" + key + "\"]");
+    return tourTargetVisible(el) ? el : null;
   }
 
   function endSiteTour(opts) {
@@ -564,11 +598,14 @@
       mountSongBar();
       el = tourTargetEl("music");
     }
+    // nearest + auto: щоб координати підсвітки збігалися з реальною кнопкою (без «плаваючого» scroll)
     if (el && el.scrollIntoView && !quiet) {
-      try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {}
+      try { el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" }); } catch (e) {}
     }
 
-    const rect = el ? el.getBoundingClientRect() : null;
+    // Повторно взяти елемент після можливого re-render навігації
+    el = tourTargetEl(step.key) || el;
+    const rect = el && tourTargetVisible(el) ? el.getBoundingClientRect() : null;
     const pad = 10;
     const spot = rect && rect.width > 2 && rect.height > 2
       ? {
