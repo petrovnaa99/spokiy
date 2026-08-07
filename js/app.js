@@ -563,7 +563,7 @@
     closeModal();
     // Завжди малюємо «Сьогодні», щоб музика/настрій і контент були на місці
     applyGo("home");
-    mountSongBar();
+    // render() уже викликає mountSongBar — без повторного insert
     tourState = {
       index: 0,
       thenWellbeing: !!options.thenWellbeing,
@@ -588,9 +588,9 @@
     const root = $("#tour-root");
     if (!root) return;
 
-    // Кроки на головній (музика / настрій) — контент уже на home з startSiteTour
-    if (step.key === "music" || step.key === "mood") {
-      if (route === "home") mountSongBar();
+    // Кроки на головній: лише переконатися, що смуга музики одна (без дублікатів)
+    if ((step.key === "music" || step.key === "mood") && route === "home") {
+      mountSongBar();
     }
 
     let el = tourTargetEl(step.key);
@@ -1145,14 +1145,26 @@
     if (theme) theme.onclick = toggleTheme;
   }
   function refreshSongBar() {
-    const bar = $("#song-bar");
-    if (!bar) { mountSongBar(); return; }
-    bar.outerHTML = songBarHTML();
+    const view = $("#view");
+    const bars = view ? $$(".song-bar", view) : $$(".song-bar");
+    if (!bars.length) { mountSongBar(); return; }
+    // Залишити одну смугу, оновити її вміст
+    bars.slice(1).forEach((el) => el.remove());
+    bars[0].outerHTML = songBarHTML();
     wireSongBar();
   }
   function mountSongBar() {
     const view = $("#view");
     if (!view) return;
+    const bars = $$(".song-bar", view);
+    if (bars.length) {
+      bars.slice(1).forEach((el) => el.remove());
+      const bar = bars[0];
+      if (bar && !bar.id) bar.id = "song-bar";
+      if (bar && !bar.getAttribute("data-tour")) bar.setAttribute("data-tour", "music");
+      wireSongBar();
+      return;
+    }
     view.insertAdjacentHTML("afterbegin", songBarHTML());
     wireSongBar();
   }
