@@ -277,7 +277,7 @@
   /* ===================== Навігація ===================== */
   const NAV = [
     { id: "home", icon: "☀", label: "Сьогодні" },
-    { id: "sos", icon: "SOS", label: "SOS", action: true },
+    { id: "sos", icon: "◎", label: "SOS", action: true },
     { id: "history", icon: "≡", label: "Щоденник" },
     { id: "analytics", icon: "∿", label: "Моя динаміка" },
     { id: "support", icon: "♡", label: "Опора" },
@@ -287,14 +287,14 @@
   /** Мобільне нижнє меню — без конфіденційності (вона в профілі / інфо). */
   const BOTTOM_NAV = NAV.filter((n) => n.id !== "privacy");
   const SUPPORT_ROUTES = ["support", "resources", "friend", "treasure", "library", "joys", "gratitude", "evidence", "profile", "admin"];
-  const INFO_ROUTES = ["info", "payment"];
+  const INFO_ROUTES = ["info", "payment", "privacy", "faq"];
   const ROUTE_TITLES = {
     home: "Сьогодні", history: "Щоденник", analytics: "Моя динаміка", support: "Опора",
     new: "Новий запис", types: "Типи тривоги", typeTest: "Розбір ситуації", reminders: "Нагадування",
     evidence: "Банк доказів", resources: "Мої ресурси", treasure: "Скарбничка", joys: "Мої радощі",
     good: "Хороші події", gratitude: "Вдячність", friend: "Порада подрузі", library: "Бібліотека",
     achievements: "Прогрес", profile: "Профіль", recoverySelect: "Твоє деревце",
-    info: "Інформація", payment: "Оплата", privacy: "Конфіденційність", admin: "Адмін"
+    info: "Інформація", payment: "Оплата", privacy: "Конфіденційність", faq: "FAQ", admin: "Адмін"
   };
 
   let route = "home";
@@ -376,7 +376,9 @@
     if (!follow) return;
     setTimeout(() => {
       if (follow.thenOnboarding || follow.thenTour) {
+        // force: welcomeAlready marked — без цього тур одразу скасовується
         startSiteTour({
+          force: true,
           thenWellbeing: true,
           thenPracticeGuide: !!follow.thenPracticeGuide
         });
@@ -428,50 +430,66 @@
     const mobile = window.matchMedia("(max-width: 880px)").matches;
     const steps = [
       {
+        key: mobile ? "topbar-profile" : "nav-profile",
+        title: "Твій акаунт",
+        text: mobile
+          ? "Профіль угорі: ім’я, Telegram, експорт і навчання ще раз."
+          : "Акаунт угорі зліва: профіль, дані, Telegram і налаштування."
+      },
+      {
         key: mobile ? "bn-home" : "nav-home",
         title: "Сьогодні",
-        text: "Головна сторінка дня: ритуали, оцінка стану, деревце й швидкі кроки турботи."
+        text: "Головна дня: деревце, ритуали й швидкі кроки турботи."
+      },
+      {
+        key: "music",
+        title: "Музика",
+        text: "Смуга вгорі: рекомендована пісня. «Слухати» — знайти на YouTube."
+      },
+      {
+        key: "mood",
+        title: "Настрій",
+        text: "Блок «Як ти зараз?»: стан дня, підказки й продовження маленьким кроком."
       },
       {
         key: mobile ? "bn-sos" : "nav-sos",
         title: "SOS",
-        text: "Коли накриває — коротке дихання або заземлення прямо зараз, без довгих записів."
+        text: "Коли накриває — коротке дихання прямо зараз, без довгих записів."
       },
       {
         key: mobile ? "bn-history" : "nav-history",
         title: "Щоденник",
-        text: "Усі записи в одному місці. Прибрані потрапляють у «Тіні забутих предків» унизу."
+        text: "Усі записи в одному місці. Прибрані — у «Тіні забутих предків»."
       },
       {
         key: mobile ? "bn-analytics" : "nav-analytics",
         title: "Моя динаміка",
-        text: "Статистика настрою й тривоги з сайту та Telegram — щоб бачити зміни в часі."
+        text: "Настрій і тривога з сайту та Telegram — зміни в часі."
       },
       {
         key: mobile ? "bn-support" : "nav-support",
         title: "Опора",
-        text: "Ресурси, вдячність, скарбничка, банк доказів і бібліотека — усе, що тримає."
+        text: "Ресурси, вдячність, скарбничка, докази й бібліотека."
       },
       {
         key: mobile ? "bn-info" : "nav-info",
         title: "Інформація",
-        text: "Путівник по сайту, оплата та доступ — якщо треба згадати, як усім користуватися."
+        text: "Путівник, оплата й доступ — якщо треба згадати, як користуватися."
       }
     ];
     if (!mobile) {
       steps.push({
         key: "nav-privacy",
         title: "Конфіденційність",
-        text: "Що зберігається, де лежать дані й як ти ними керуєш."
+        text: "Політика: що зберігається, де лежать дані й як ти ними керуєш."
+      });
+    } else {
+      steps.push({
+        key: "topbar-profile",
+        title: "Конфіденційність",
+        text: "Політика приватності — у профілі (угорі) та в розділі «Інформація»."
       });
     }
-    steps.push({
-      key: mobile ? "topbar-profile" : "nav-profile",
-      title: "Твій акаунт",
-      text: mobile
-        ? "Профіль угорі праворуч: дані, Telegram, експорт і налаштування."
-        : "Твій акаунт угорі зліва: профіль, дані, Telegram і адмін (якщо є доступ)."
-    });
     return steps;
   }
 
@@ -508,7 +526,10 @@
       if (options.thenWellbeing) startOnboarding();
       return;
     }
-    go("home");
+    closeModal();
+    // Завжди малюємо «Сьогодні», щоб музика/настрій і контент були на місці
+    applyGo("home");
+    mountSongBar();
     tourState = {
       index: 0,
       thenWellbeing: !!options.thenWellbeing,
@@ -516,8 +537,9 @@
     };
     document.body.classList.add("tour-active");
     window.addEventListener("resize", onTourReposition);
-    // На мобільному профіль у topbar; на десктопі відкриваємо сайдбар (він уже видимий)
-    setTimeout(() => paintTourStep(0), 80);
+    requestAnimationFrame(() => {
+      setTimeout(() => paintTourStep(0), 60);
+    });
   }
 
   function paintTourStep(index, quiet) {
@@ -532,47 +554,82 @@
     const root = $("#tour-root");
     if (!root) return;
 
-    const el = tourTargetEl(step.key);
+    // Кроки на головній (музика / настрій) — контент уже на home з startSiteTour
+    if (step.key === "music" || step.key === "mood") {
+      if (route === "home") mountSongBar();
+    }
+
+    let el = tourTargetEl(step.key);
+    if (step.key === "music" && !el) {
+      mountSongBar();
+      el = tourTargetEl("music");
+    }
+    if (el && el.scrollIntoView && !quiet) {
+      try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {}
+    }
+
     const rect = el ? el.getBoundingClientRect() : null;
-    const pad = 8;
-    const spot = rect
+    const pad = 10;
+    const spot = rect && rect.width > 2 && rect.height > 2
       ? {
           top: Math.max(6, rect.top - pad),
           left: Math.max(6, rect.left - pad),
           width: Math.min(window.innerWidth - 12, rect.width + pad * 2),
           height: Math.min(window.innerHeight - 12, rect.height + pad * 2)
         }
-      : { top: 80, left: 24, width: 200, height: 48 };
+      : { top: Math.max(24, window.innerHeight * 0.2), left: Math.max(24, window.innerWidth * 0.5 - 140), width: 280, height: 64 };
 
     const mobile = window.matchMedia("(max-width: 880px)").matches;
+    const cardW = Math.min(300, window.innerWidth - 24);
     let cardTop;
     let cardLeft;
     let arrowSide;
     if (mobile) {
-      // Картка над нижнім меню / під topbar
-      const preferAbove = spot.top > window.innerHeight * 0.45;
+      const preferAbove = spot.top > window.innerHeight * 0.42;
       cardTop = preferAbove
-        ? Math.max(16, spot.top - 170)
-        : Math.min(window.innerHeight - 200, spot.top + spot.height + 18);
-      cardLeft = Math.max(12, Math.min(window.innerWidth - 312, spot.left + spot.width / 2 - 150));
+        ? Math.max(12, spot.top - 178)
+        : Math.min(window.innerHeight - 210, spot.top + spot.height + 22);
+      cardLeft = Math.max(12, Math.min(window.innerWidth - cardW - 12, spot.left + spot.width / 2 - cardW / 2));
       arrowSide = preferAbove ? "down" : "up";
     } else {
-      cardLeft = Math.min(window.innerWidth - 320, spot.left + spot.width + 18);
-      if (cardLeft + 300 > window.innerWidth - 12) {
-        cardLeft = Math.max(12, spot.left - 318);
+      const rightOf = spot.left + spot.width + 20;
+      if (rightOf + cardW < window.innerWidth - 12) {
+        cardLeft = rightOf;
+        arrowSide = "left";
+      } else if (spot.left - cardW - 20 > 12) {
+        cardLeft = spot.left - cardW - 20;
         arrowSide = "right";
       } else {
-        arrowSide = "left";
+        cardLeft = Math.max(12, Math.min(window.innerWidth - cardW - 12, spot.left));
+        arrowSide = spot.top > window.innerHeight * 0.5 ? "down" : "up";
+        cardTop = arrowSide === "down"
+          ? Math.max(12, spot.top - 178)
+          : Math.min(window.innerHeight - 210, spot.top + spot.height + 22);
       }
-      cardTop = Math.max(16, Math.min(window.innerHeight - 220, spot.top + spot.height / 2 - 70));
+      if (cardTop == null) {
+        cardTop = Math.max(16, Math.min(window.innerHeight - 220, spot.top + spot.height / 2 - 72));
+      }
     }
 
     const isLast = index === steps.length - 1;
+    const spotCx = spot.left + spot.width / 2;
+    const spotCy = spot.top + spot.height / 2;
+    const cardCx = cardLeft + cardW / 2;
+    const cardCy = cardTop + 70;
+    const dx = spotCx - cardCx;
+    const dy = spotCy - cardCy;
+    const dist = Math.max(36, Math.hypot(dx, dy) - 28);
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
     root.classList.remove("hidden");
     root.setAttribute("aria-hidden", "false");
     root.innerHTML = `
       <div class="tour-backdrop" data-tour-skip></div>
       <div class="tour-spotlight" style="top:${spot.top}px;left:${spot.left}px;width:${spot.width}px;height:${spot.height}px"></div>
+      <div class="tour-guide-arrow" style="top:${cardCy}px;left:${cardCx}px;width:${dist}px;transform:rotate(${angle}deg)" aria-hidden="true">
+        <span class="tour-guide-shaft"></span>
+        <span class="tour-guide-head"></span>
+      </div>
       <div class="tour-card tour-arrow-${arrowSide}" style="top:${cardTop}px;left:${cardLeft}px" role="dialog" aria-labelledby="tour-title">
         <div class="tour-card-arrow" aria-hidden="true"></div>
         <p class="tour-step">${index + 1} з ${steps.length}</p>
@@ -599,9 +656,6 @@
       if (isLast) endSiteTour(tourState);
       else paintTourStep(index + 1);
     };
-    if (!quiet && el && el.scrollIntoView) {
-      try { el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e) {}
-    }
   }
 
   function openGuide() {
@@ -669,6 +723,30 @@
       </div>`);
   }
 
+  function openFaqInfo() {
+    const faq = C.FAQ || {};
+    const items = Array.isArray(faq.items) ? faq.items : [];
+    const rules = Array.isArray(faq.rules) ? faq.rules : [];
+    openModal(`
+      <h2>${esc(faq.title || "FAQ")}</h2>
+      <div class="faq-modal-body">
+        <p class="muted" style="margin:0 0 12px;line-height:1.55">${esc(faq.intro || "")}</p>
+        <b>${esc(faq.rulesTitle || "Правила")}</b>
+        <ul class="faq-rules-list" style="margin:8px 0 14px">
+          ${rules.map((r) => `<li>${esc(r)}</li>`).join("")}
+        </ul>
+        ${items.map((it) => `
+          <div class="privacy-modal-block">
+            <b>${esc(it.q || "")}</b>
+            <p>${esc(it.a || "")}</p>
+          </div>`).join("")}
+        <p class="faint" style="margin-top:10px;font-size:12.5px">Залишити відгук можна після входу: Інформація → FAQ і відгук.</p>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:14px">
+        <button type="button" class="btn btn-ghost btn-sm" data-close>Закрити</button>
+      </div>`);
+  }
+
   function viewPayment() {
     const pay = C.PAYMENT || {};
     $("#view").innerHTML = `
@@ -692,23 +770,104 @@
         <h1>${esc(priv.title || "Конфіденційність")}</h1>
         <p>${esc(priv.intro || "")}</p>
       </div>
-      <div class="privacy-stack">
-        ${sections.map((s, i) => `
-          <article class="card privacy-card">
-            <div class="privacy-card-num">${i + 1}</div>
-            <h2 class="privacy-card-title">${esc(s.title || "")}</h2>
-            <p class="privacy-card-body">${esc(s.body || "")}</p>
-          </article>`).join("")}
+      <div class="card privacy-page">
+        ${sections.map((s) => `
+          <div class="privacy-block">
+            <h3>${esc(s.title || "")}</h3>
+            <p>${esc(s.body || "")}</p>
+          </div>`).join("")}
+        ${priv.footer ? `<p class="faint" style="margin-top:12px;font-size:12.5px">${esc(priv.footer)}</p>` : ""}
       </div>
-      ${priv.footer ? `<p class="faint privacy-footer">${esc(priv.footer)}</p>` : ""}
-      <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:14px">
-        <button class="btn btn-ghost btn-sm" id="privacy-back" type="button">← Назад</button>
-        <button class="btn btn-ghost btn-sm" id="privacy-to-data" type="button">Керувати даними в профілі</button>
-      </div>`;
+      <button class="btn btn-ghost btn-sm" id="privacy-back" type="button" style="margin-top:12px">← Назад до інформації</button>`;
     const back = $("#privacy-back");
     if (back) back.onclick = () => go("info");
-    const toData = $("#privacy-to-data");
-    if (toData) toData.onclick = () => go("profile");
+  }
+
+  function viewFaq() {
+    const faq = C.FAQ || {};
+    const items = Array.isArray(faq.items) ? faq.items : [];
+    const rules = Array.isArray(faq.rules) ? faq.rules : [];
+    const types = Array.isArray(faq.feedbackTypes) ? faq.feedbackTypes : [
+      { id: "feedback", label: "Відгук" },
+      { id: "wish", label: "Побажання" }
+    ];
+    $("#view").innerHTML = `
+      <div class="page-head">
+        <h1>${esc(faq.title || "FAQ")}</h1>
+        <p>${esc(faq.intro || "")}</p>
+      </div>
+
+      <div class="card faq-rules">
+        <h2 class="faq-section-title">${esc(faq.rulesTitle || "Правила простору")}</h2>
+        <ul class="faq-rules-list">
+          ${rules.map((r) => `<li>${esc(r)}</li>`).join("")}
+        </ul>
+      </div>
+
+      <div class="card faq-list" style="margin-top:14px">
+        <h2 class="faq-section-title">Часті питання</h2>
+        <div class="faq-accordion" id="faq-accordion">
+          ${items.map((it, i) => `
+            <details class="faq-item" ${i === 0 ? "open" : ""}>
+              <summary>${esc(it.q || "")}</summary>
+              <p>${esc(it.a || "")}</p>
+            </details>`).join("")}
+        </div>
+      </div>
+
+      <div class="card faq-feedback" style="margin-top:14px" id="faq-feedback">
+        <h2 class="faq-section-title">${esc(faq.feedbackTitle || "Відгук або побажання")}</h2>
+        <p class="muted" style="margin:0 0 12px;line-height:1.5">${esc(faq.feedbackLead || "")}</p>
+        <label class="field"><span>Тип</span>
+          <select id="fb-kind">
+            ${types.map((t) => `<option value="${esc(t.id)}">${esc(t.label)}</option>`).join("")}
+          </select>
+        </label>
+        <label class="field" style="margin-top:10px"><span>Повідомлення</span>
+          <textarea id="fb-message" rows="5" maxlength="4000" placeholder="Що сподобалось, що заважає або яку функцію хотілось би…"></textarea>
+        </label>
+        <p class="faint" style="margin:6px 0 0;font-size:12px">${esc(faq.feedbackHint || "")}</p>
+        <div class="row" style="justify-content:flex-end;margin-top:12px;gap:8px">
+          <button type="button" class="btn btn-primary" id="fb-send">Надіслати</button>
+        </div>
+      </div>
+
+      <button class="btn btn-ghost btn-sm" id="faq-back" type="button" style="margin-top:12px">← Назад до інформації</button>`;
+
+    const back = $("#faq-back");
+    if (back) back.onclick = () => go("info");
+    const send = $("#fb-send");
+    if (send) {
+      send.onclick = async () => {
+        const kind = ($("#fb-kind") && $("#fb-kind").value) || "feedback";
+        const message = ($("#fb-message") && $("#fb-message").value || "").trim();
+        if (message.length < 5) {
+          toast(faq.feedbackHint || "Напиши трохи докладніше", "warn");
+          return;
+        }
+        send.disabled = true;
+        const res = await S.submitFeedback({
+          kind,
+          message,
+          name: (S.state.profile && S.state.profile.name) || null
+        });
+        send.disabled = false;
+        if (!res.ok) {
+          const map = {
+            message_too_short: "Напиши трохи докладніше",
+            message_too_long: "Повідомлення задовге",
+            db_missing: "Сервер ще не готовий прийняти відгук. Напиши пізніше або на email підтримки.",
+            db_error: "Не вдалося зберегти. Спробуй ще раз.",
+            offline: "Потрібен інтернет і вхід в акаунт",
+            network: "Немає з’єднання"
+          };
+          toast(map[res.error] || "Не вдалося надіслати", "warn");
+          return;
+        }
+        if ($("#fb-message")) $("#fb-message").value = "";
+        toast(faq.feedbackThanks || "Дякуємо за повідомлення", "good");
+      };
+    }
   }
 
   async function viewAdmin() {
@@ -807,10 +966,38 @@
             </div>
           </div>`).join("") : `<p class="analytics-none">Поки немає даних</p>`}
       </div>
+
+      <div class="card-title" style="margin-top:18px">Відгуки та побажання</div>
+      <div id="admin-feedback-list"><p class="muted">Завантаження…</p></div>
+
       <button class="btn btn-ghost btn-sm" id="admin-refresh" type="button" style="margin-top:12px">Оновити</button>`;
 
     const refresh = $("#admin-refresh");
     if (refresh) refresh.onclick = () => viewAdmin();
+
+    const kindLabel = { feedback: "Відгук", wish: "Побажання", bug: "Помилка", other: "Інше" };
+    S.fetchFeedbackAdmin(30).then((fb) => {
+      const box = $("#admin-feedback-list");
+      if (!box) return;
+      if (!fb.ok) {
+        box.innerHTML = `<p class="faint" style="font-size:12.5px;line-height:1.45">
+          ${fb.error === "db_missing"
+            ? "Таблиця site_feedback ще не створена в Supabase. Запусти supabase/site_feedback.sql."
+            : "Не вдалося завантажити відгуки (" + esc(fb.error || "помилка") + ")."}
+        </p>`;
+        return;
+      }
+      const items = Array.isArray(fb.items) ? fb.items : [];
+      box.innerHTML = items.length ? items.map((it) => `
+        <div class="admin-feedback-row">
+          <div class="admin-feedback-top">
+            <span class="pill pill-violet">${esc(kindLabel[it.kind] || it.kind || "Відгук")}</span>
+            <span class="faint">${it.createdAt ? fmtDateTime(it.createdAt) : "—"}</span>
+          </div>
+          <p class="admin-feedback-msg">${esc(it.message || "")}</p>
+          <div class="faint" style="font-size:12px">${esc(it.name || "—")} · ${esc(it.email || "")}</div>
+        </div>`).join("") : `<p class="analytics-none">Поки немає відгуків</p>`;
+    });
 
     const addBtn = $("#admin-helper-add");
     const emailInp = $("#admin-helper-email");
@@ -896,7 +1083,7 @@
   function songBarHTML() {
     const song = currentSongText();
     return `
-      <div class="song-bar" id="song-bar">
+      <div class="song-bar" id="song-bar" data-tour="music">
         <span class="song-ico">♪</span>
         <div class="song-main">
           <div class="song-label">Рекомендована позитивна іноземна музика</div>
@@ -1051,7 +1238,7 @@
     render();
     if (window.Safeguard) Safeguard.setEditingRoute(r === "new");
     if (r === "analytics" && prevRoute !== "analytics" && S.refreshFromCloud) {
-      S.refreshFromCloud(true).catch(() => {});
+      S.refreshFromCloud().catch(() => {});
     }
     $("#view").scrollTo?.(0, 0);
     window.scrollTo(0, 0);
@@ -1757,7 +1944,7 @@
         ${careBanner}
         ${ritualCard}
         ${recoveryBlock}
-        <header class="today-head">
+        <header class="today-head" data-tour="mood">
           <h1>Як ти зараз?</h1>
           <p>${esc(sub)}</p>
         </header>
@@ -1900,12 +2087,18 @@
         icon: "4",
         title: "Конфіденційність",
         desc: "Що зберігається, де лежать дані і як ти ними керуєш."
+      },
+      {
+        id: "faq",
+        icon: "?",
+        title: "FAQ і відгук",
+        desc: "Правила простору, часті питання та форма для відгуку чи побажання."
       }
     ];
     $("#view").innerHTML = `
       <div class="page-head">
         <h1>Інформація</h1>
-        <p>Поетапно: сьогоднішній крок, огляд функцій, оплата й конфіденційність.</p>
+        <p>Крок на сьогодні, огляд функцій, оплата, конфіденційність і FAQ.</p>
       </div>
       <div class="support-grid">
         ${cards.map(c => `
@@ -1921,6 +2114,7 @@
         else if (id === "guide") openGuide();
         else if (id === "payment") go("payment");
         else if (id === "privacy") go("privacy");
+        else if (id === "faq") go("faq");
       };
     });
   }
@@ -3460,7 +3654,7 @@
       return `${cur}/10 <span class="pill ${better?"pill-green":d>0?"pill-red":"pill-violet"}">${d<0?"▼":d>0?"▲":"="} ${Math.abs(d)}</span>`;
     }
 
-    const tests = S.state.tests;
+    const tests = Array.isArray(S.state.tests) ? S.state.tests : [];
     const firstTest = tests[0], lastTest = tests[tests.length - 1];
 
     const anxietyEntries = entries.filter(e => typeof e.anxiety === "number");
@@ -3538,7 +3732,13 @@
           <div class="s-hint">${tgStats.notes ? `${tgStats.notes} з Telegram · натисни` : "натисни — переглянути"}</div>
         </button>`;
 
-    let bodyHTML = window.Rituals ? Rituals.dynamicsSectionHTML() : "";
+    let bodyHTML = "";
+    try {
+      bodyHTML = window.Rituals ? Rituals.dynamicsSectionHTML() : "";
+    } catch (err) {
+      console.error("dynamicsSectionHTML failed", err);
+      bodyHTML = `<div class="card analytics-card analytics-span-12"><p class="analytics-none">Не вдалося зібрати блок ритуалів. Інші показники нижче.</p></div>`;
+    }
     bodyHTML += analyticsWeek7Card(week7);
     if (!enoughRecords || (tgStats.marks > 0 && diaryCount < 3 && dayKeys.length < 2)) {
       bodyHTML = analyticsNoticeBanner(diaryCount, tgStats) + bodyHTML;
@@ -4124,11 +4324,30 @@
       home: viewHome, types: viewTypes, typeTest: viewTypeTest, new: viewNew, reminders: viewReminders, evidence: viewEvidence,
       resources: viewResources, treasure: viewTreasure, analytics: viewAnalytics, joys: viewJoys, good: viewGoodEvents, gratitude: viewGratitude, friend: viewFriendPractice,
       history: viewHistory, library: viewLibrary, achievements: viewAchievements, profile: viewProfile, support: viewSupport,
-      recoverySelect: viewRecoverySelect, payment: viewPayment, privacy: viewPrivacy, admin: viewAdmin, info: viewInfo
+      recoverySelect: viewRecoverySelect, payment: viewPayment, privacy: viewPrivacy, faq: viewFaq, admin: viewAdmin, info: viewInfo
     };
-    (map[route] || viewHome)();
+    try {
+      (map[route] || viewHome)();
+    } catch (err) {
+      console.error("render failed", route, err);
+      const view = $("#view");
+      if (view) {
+        view.innerHTML = `<div class="page-head"><h1>Щось пішло не так</h1>
+          <p class="muted">Спробуй оновити сторінку або відкрити «Сьогодні» ще раз.</p>
+          <button type="button" class="btn btn-primary" id="render-retry">На головну</button></div>`;
+        const btn = $("#render-retry");
+        if (btn) btn.onclick = () => applyGo("home");
+      }
+    }
     mountSongBar();
     genderizeDOM($("#view"));
+    if (tourState && !document.body.dataset.tourPainting) {
+      document.body.dataset.tourPainting = "1";
+      requestAnimationFrame(() => {
+        delete document.body.dataset.tourPainting;
+        if (tourState) paintTourStep(tourState.index, true);
+      });
+    }
   }
 
   /* ===================== АВТОРИЗАЦІЯ ===================== */
@@ -4170,10 +4389,7 @@
   }
 
   function startOnboarding() {
-    if (window.Rituals) {
-      Rituals.maybePrompt();
-      return;
-    }
+    if (window.Rituals) Rituals.maybePrompt();
     if (S.todayWellbeing()) return;
     const scale = Array.from({ length: 10 }, (_, i) =>
       `<button class="well-btn" data-onb-well="${i + 1}">${i + 1}</button>`).join("");
@@ -4452,6 +4668,8 @@
     if (landingPay) landingPay.onclick = openPaymentInfo;
     const landingPriv = $("#landing-privacy");
     if (landingPriv) landingPriv.onclick = openPrivacyInfo;
+    const landingFaq = $("#landing-faq");
+    if (landingFaq) landingFaq.onclick = openFaqInfo;
 
     const submitBtn = $("#auth-submit");
     if (submitBtn) submitBtn.onclick = () => (authMode === "signup" ? submitSignup() : submitLogin());
@@ -4608,7 +4826,7 @@
       const now = Date.now();
       if (now - lastFocusPull < 8000) return;
       lastFocusPull = now;
-      S.refreshFromCloud(true).catch(() => {});
+      S.refreshFromCloud().catch(() => {});
     };
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") pullOnFocus();

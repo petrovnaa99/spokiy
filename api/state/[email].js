@@ -254,9 +254,76 @@ function mergeSnapshots(incoming, existing) {
   out.gratitude = mergeListById(arr(a.gratitude), arr(b.gratitude));
   out.goodEvents = mergeListById(arr(a.goodEvents), arr(b.goodEvents));
 
+  // Деревце: не відкочувати прогрес і не губити денні нарахування
+  out.profile = mergeRecoveryProfileFields(a.profile, b.profile);
+  out.recoveryAwards = mergeRecoveryAwardsMaps(a.recoveryAwards, b.recoveryAwards);
+
   const at = Date.parse(a.updatedAt || 0) || 0;
   const bt = Date.parse(b.updatedAt || 0) || 0;
   out.updatedAt = new Date(Math.max(at, bt, Date.now())).toISOString();
+  return out;
+}
+
+function mergeRecoveryProfileFields(incoming, existing) {
+  const A = incoming && typeof incoming === "object" ? incoming : {};
+  const B = existing && typeof existing === "object" ? existing : {};
+  const out = Object.assign({}, B, A);
+
+  const aSym = A.recoverySymbolId || null;
+  const bSym = B.recoverySymbolId || null;
+  if (aSym && bSym && aSym !== bSym) {
+    const aAt = Date.parse(A.recoveryLastActivityAt || A.recoverySymbolSelectedAt || 0) || 0;
+    const bAt = Date.parse(B.recoveryLastActivityAt || B.recoverySymbolSelectedAt || 0) || 0;
+    if (bAt > aAt) {
+      out.recoverySymbolId = bSym;
+      out.recoverySymbolName = B.recoverySymbolName || "Деревце";
+      out.recoverySymbolSelectedAt = B.recoverySymbolSelectedAt || A.recoverySymbolSelectedAt || null;
+    }
+  } else if (!aSym && bSym) {
+    out.recoverySymbolId = bSym;
+    out.recoverySymbolName = B.recoverySymbolName || "Деревце";
+    out.recoverySymbolSelectedAt = B.recoverySymbolSelectedAt || null;
+  }
+
+  const aProg = Math.max(0, Number(A.recoveryProgress) || 0);
+  const bProg = Math.max(0, Number(B.recoveryProgress) || 0);
+  out.recoveryProgress = Math.min(100, Math.max(aProg, bProg));
+
+  const aStage = Math.max(0, Math.floor(Number(A.recoveryStage) || 0));
+  const bStage = Math.max(0, Math.floor(Number(B.recoveryStage) || 0));
+  out.recoveryStage = Math.max(aStage, bStage);
+
+  const aAct = Date.parse(A.recoveryLastActivityAt || 0) || 0;
+  const bAct = Date.parse(B.recoveryLastActivityAt || 0) || 0;
+  if (aAct || bAct) {
+    out.recoveryLastActivityAt = aAct >= bAct
+      ? (A.recoveryLastActivityAt || B.recoveryLastActivityAt)
+      : (B.recoveryLastActivityAt || A.recoveryLastActivityAt);
+  }
+  return out;
+}
+
+function mergeRecoveryAwardsMaps(a, b) {
+  const left = a && typeof a === "object" && !Array.isArray(a) ? a : {};
+  const right = b && typeof b === "object" && !Array.isArray(b) ? b : {};
+  const out = {};
+  new Set([...Object.keys(left), ...Object.keys(right)]).forEach((day) => {
+    const L = left[day] && typeof left[day] === "object" ? left[day] : {};
+    const R = right[day] && typeof right[day] === "object" ? right[day] : {};
+    const dayOut = {};
+    new Set([...Object.keys(L), ...Object.keys(R)]).forEach((action) => {
+      const lv = L[action];
+      const rv = R[action];
+      if (!lv) dayOut[action] = rv;
+      else if (!rv) dayOut[action] = lv;
+      else {
+        const lt = Date.parse(lv) || 0;
+        const rt = Date.parse(rv) || 0;
+        dayOut[action] = (lt && rt && rt < lt) ? rv : lv;
+      }
+    });
+    out[day] = dayOut;
+  });
   return out;
 }
 

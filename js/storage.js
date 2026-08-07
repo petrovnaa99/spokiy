@@ -66,6 +66,146 @@ window.Store = (function () {
     return st;
   }
 
+  /** Дні, коли була будь-яка турбота (ритуал / check-in / самопочуття). */
+  function careDayKeysFromState(st) {
+    const keys = new Set();
+    if (!st) return [];
+    Object.keys(st.rituals || {}).forEach((k) => {
+      const day = st.rituals[k];
+      if (day && (day.morning || day.midday || day.evening || day.now)) keys.add(k);
+    });
+    Object.keys(st.checkins || {}).forEach((k) => keys.add(k));
+    const wb = st.wellbeing;
+    if (wb && typeof wb === "object" && !Array.isArray(wb)) {
+      Object.keys(wb).forEach((k) => keys.add(k));
+    }
+    return [...keys].sort();
+  }
+
+  /**
+   * Оцінити прогрес деревця з історії турботи.
+   * Потрібно, бо вибір символу раніше обнуляв progress, а дні ритуалів лишалися.
+   */
+  function estimateRecoveryProgressFromCare(st) {
+    if (!st) return 0;
+    const C = (typeof window !== "undefined") ? window.CONTENT : null;
+    const points = (C && C.RECOVERY_POINTS_PER_ACTION) || 3;
+    const allowedList = (C && C.RECOVERY_AWARD_ACTIONS) || [
+      "ritual", "diary", "breath", "gratitude", "wellbeing", "good", "past", "exercise"
+    ];
+    const allowed = new Set(allowedList);
+    ensureRecoveryAwards(st);
+
+    let total = 0;
+    const daysWithAwards = new Set();
+    Object.keys(st.recoveryAwards || {}).forEach((day) => {
+      const ledger = st.recoveryAwards[day];
+      if (!ledger || typeof ledger !== "object") return;
+      let n = 0;
+      Object.keys(ledger).forEach((action) => {
+        if (ledger[action] && allowed.has(action)) n += 1;
+      });
+      if (n > 0) {
+        total += n * points;
+        daysWithAwards.add(day);
+      }
+    });
+
+    // Дні турботи до появи нарахувань / після обнулення символу
+    careDayKeysFromState(st).forEach((day) => {
+      if (!daysWithAwards.has(day)) total += points;
+    });
+
+    return Math.min(100, Math.max(0, total));
+  }
+
+  /** Підняти progress/stage до оцінки з історії (ніколи не зменшує). */
+  function reconcileRecoveryProgress(st) {
+    if (!st || !st.profile || !st.profile.recoverySymbolId) return false;
+    ensureRecoveryFields(st.profile);
+    ensureRecoveryAwards(st);
+    const estimated = estimateRecoveryProgressFromCare(st);
+    const current = Math.max(0, Number(st.profile.recoveryProgress) || 0);
+    if (estimated <= current) {
+      ensureRecoveryFields(st.profile);
+      return false;
+    }
+    st.profile.recoveryProgress = estimated;
+    ensureRecoveryFields(st.profile);
+    return true;
+  }
+
+  /** Гарантувати форму snapshot після sync/load — інакше падають динаміка й інші екрани. */
+  function normalizeStateShape(st) {
+    if (!st || typeof st !== "object") return st;
+    if (!Array.isArray(st.entries)) st.entries = [];
+    if (!Array.isArray(st.evidence)) st.evidence = [];
+    if (!Array.isArray(st.treasure)) st.treasure = [];
+    if (!Array.isArray(st.tests)) st.tests = [];
+    if (!Array.isArray(st.joys)) st.joys = [];
+    if (!Array.isArray(st.littleJoys)) st.littleJoys = [];
+    if (!Array.isArray(st.friendNotes)) st.friendNotes = [];
+    if (!Array.isArray(st.gratitude)) st.gratitude = [];
+    if (!Array.isArray(st.goodEvents)) st.goodEvents = [];
+    if (!st.resources || typeof st.resources !== "object" || Array.isArray(st.resources)) st.resources = {};
+    if (!st.wellbeing || typeof st.wellbeing !== "object" || Array.isArray(st.wellbeing)) st.wellbeing = {};
+    if (!st.checkins || typeof st.checkins !== "object" || Array.isArray(st.checkins)) st.checkins = {};
+    if (!st.rituals || typeof st.rituals !== "object" || Array.isArray(st.rituals)) st.rituals = {};
+    if (!st.achievements || typeof st.achievements !== "object" || Array.isArray(st.achievements)) st.achievements = {};
+    if (!st.settings || typeof st.settings !== "object" || Array.isArray(st.settings)) st.settings = {};
+    ensureRecoveryAwards(st);
+    Object.keys(st.rituals).forEach((k) => {
+      const day = st.rituals[k];
+      if (!day || typeof day !== "object" || Array.isArray(day)) delete st.rituals[k];
+    });
+    if (st.profile) ensureRecoveryFields(st.profile);
+    return st;
+  }
+
+  function mergeListByIdGeneric(a, b) {
+    const map = {};
+    [].concat(a || [], b || []).forEach((item) => {
+      if (!item || !item.id) return;
+      const prev = map[item.id];
+      if (!prev) map[item.id] = item;
+      else {
+        const pt = Date.parse(prev.date || prev.updatedAt || prev.createdAt || 0) || 0;
+        const et = Date.parse(item.date || item.updatedAt || item.createdAt || 0) || 0;
+        if (et >= pt) map[item.id] = item;
+      }
+    });
+    return Object.values(map).sort(
+      (x, y) => Date.parse(y.date || y.updatedAt || y.createdAt || 0) - Date.parse(x.date || x.updatedAt || x.createdAt || 0)
+    );
+  }
+
+  function mergeTestsLists(a, b) {
+    const seen = new Set();
+    const out = [];
+    [].concat(a || [], b || []).forEach((t) => {
+      if (!t || typeof t !== "object") return;
+      const key = String(t.date || "") + ":" + String(t.score) + ":" + String(t.level || "");
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(t);
+    });
+    return out.sort((x, y) => (Date.parse(x.date || 0) || 0) - (Date.parse(y.date || 0) || 0));
+  }
+
+  function mergeResourcesMaps(a, b) {
+    const out = Object.assign({}, a && typeof a === "object" ? a : {});
+    const right = b && typeof b === "object" && !Array.isArray(b) ? b : {};
+    Object.keys(right).forEach((name) => {
+      const R = right[name] || {};
+      const L = out[name] || { uses: 0, sumEffect: 0 };
+      out[name] = {
+        uses: Math.max(Number(L.uses) || 0, Number(R.uses) || 0),
+        sumEffect: Math.max(Number(L.sumEffect) || 0, Number(R.sumEffect) || 0)
+      };
+    });
+    return out;
+  }
+
   function dayKeyLocal(d = new Date()) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -109,6 +249,72 @@ window.Store = (function () {
       return Math.max(1, Math.min(10, Math.round(11 - entry.level)));
     }
     return entry.level;
+  }
+
+  /** Злити профіль так, щоб прогрес деревця ніколи не відкочувався назад. */
+  function mergeRecoveryProfile(remP, localP, email) {
+    const R = remP && typeof remP === "object" ? remP : {};
+    const L = localP && typeof localP === "object" ? localP : {};
+    const out = Object.assign({}, R, L, { email: email || L.email || R.email || null });
+
+    const rSym = R.recoverySymbolId || null;
+    const lSym = L.recoverySymbolId || null;
+    if (rSym && lSym && rSym !== lSym) {
+      const rAt = Date.parse(R.recoveryLastActivityAt || R.recoverySymbolSelectedAt || 0) || 0;
+      const lAt = Date.parse(L.recoveryLastActivityAt || L.recoverySymbolSelectedAt || 0) || 0;
+      if (rAt > lAt) {
+        out.recoverySymbolId = rSym;
+        out.recoverySymbolName = R.recoverySymbolName || "Деревце";
+        out.recoverySymbolSelectedAt = R.recoverySymbolSelectedAt || L.recoverySymbolSelectedAt || null;
+      }
+    } else if (rSym && !lSym) {
+      out.recoverySymbolId = rSym;
+      out.recoverySymbolName = R.recoverySymbolName || "Деревце";
+      out.recoverySymbolSelectedAt = R.recoverySymbolSelectedAt || null;
+    }
+
+    const rProg = Math.max(0, Number(R.recoveryProgress) || 0);
+    const lProg = Math.max(0, Number(L.recoveryProgress) || 0);
+    out.recoveryProgress = Math.min(100, Math.max(rProg, lProg));
+
+    const rStage = Math.max(0, Math.floor(Number(R.recoveryStage) || 0));
+    const lStage = Math.max(0, Math.floor(Number(L.recoveryStage) || 0));
+    out.recoveryStage = Math.max(rStage, lStage);
+
+    const rAct = Date.parse(R.recoveryLastActivityAt || 0) || 0;
+    const lAct = Date.parse(L.recoveryLastActivityAt || 0) || 0;
+    if (rAct || lAct) {
+      out.recoveryLastActivityAt = rAct >= lAct
+        ? (R.recoveryLastActivityAt || L.recoveryLastActivityAt)
+        : (L.recoveryLastActivityAt || R.recoveryLastActivityAt);
+    }
+
+    return ensureRecoveryFields(out);
+  }
+
+  /** Об’єднати денні нарахування (union по днях і діях). */
+  function mergeRecoveryAwardsMaps(a, b) {
+    const left = a && typeof a === "object" && !Array.isArray(a) ? a : {};
+    const right = b && typeof b === "object" && !Array.isArray(b) ? b : {};
+    const out = {};
+    new Set([...Object.keys(left), ...Object.keys(right)]).forEach((day) => {
+      const L = left[day] && typeof left[day] === "object" ? left[day] : {};
+      const R = right[day] && typeof right[day] === "object" ? right[day] : {};
+      const dayOut = {};
+      new Set([...Object.keys(L), ...Object.keys(R)]).forEach((action) => {
+        const lv = L[action];
+        const rv = R[action];
+        if (!lv) dayOut[action] = rv;
+        else if (!rv) dayOut[action] = lv;
+        else {
+          const lt = Date.parse(lv) || 0;
+          const rt = Date.parse(rv) || 0;
+          dayOut[action] = (lt && rt && rt < lt) ? rv : lv;
+        }
+      });
+      out[day] = dayOut;
+    });
+    return out;
   }
 
   function emptyState(profile) {
@@ -330,14 +536,20 @@ window.Store = (function () {
       logout();
       return { ok: false, error: "forbidden" };
     }
-    if (!remote) { Cloud.push(currentEmail, state); return { ok: true }; }
+    if (!remote) {
+      reconcileRecoveryProgress(state);
+      Cloud.push(currentEmail, state);
+      return { ok: true };
+    }
     if (remote.profile && remote.profile.email && remote.profile.email !== currentEmail) {
       return { ok: false, error: "email_mismatch" };
     }
 
     function mergeCloud(local, rem) {
       const out = Object.assign({}, preferRemote ? rem : local);
-      out.profile = Object.assign({}, rem.profile || {}, local.profile || {}, { email: currentEmail });
+      // Прогрес деревця: max(local, remote), інакше ноут зі старим кешем затирає телефон
+      out.profile = mergeRecoveryProfile(rem.profile, local.profile, currentEmail);
+      out.recoveryAwards = mergeRecoveryAwardsMaps(local.recoveryAwards, rem.recoveryAwards);
 
       const rituals = {};
       const days = new Set([...Object.keys(rem.rituals || {}), ...Object.keys(local.rituals || {})]);
@@ -404,6 +616,27 @@ window.Store = (function () {
       }
       out.gratitude = mergeListById(local.gratitude, rem.gratitude);
       out.goodEvents = mergeListById(local.goodEvents, rem.goodEvents);
+      out.treasure = mergeListByIdGeneric(local.treasure, rem.treasure);
+      out.evidence = mergeListByIdGeneric(local.evidence, rem.evidence);
+      out.friendNotes = mergeListByIdGeneric(local.friendNotes, rem.friendNotes);
+      out.littleJoys = mergeListByIdGeneric(local.littleJoys, rem.littleJoys);
+      out.tests = mergeTestsLists(local.tests, rem.tests);
+      out.joys = [].concat(local.joys || [], rem.joys || []).slice(0, 200);
+      out.resources = mergeResourcesMaps(local.resources, rem.resources);
+      out.achievements = Object.assign({}, rem.achievements || {}, local.achievements || {});
+      out.settings = Object.assign({}, rem.settings || {}, local.settings || {});
+      out.settings.ritualDismiss = Object.assign(
+        {},
+        (rem.settings && rem.settings.ritualDismiss) || {},
+        (local.settings && local.settings.ritualDismiss) || {}
+      );
+      if ((rem.settings && rem.settings.reminders) || (local.settings && local.settings.reminders)) {
+        out.settings.reminders = Object.assign(
+          {},
+          (rem.settings && rem.settings.reminders) || {},
+          (local.settings && local.settings.reminders) || {}
+        );
+      }
 
       // Чернетка: не губити локальний текст, якщо на сервері порожньо або старіше
       const localDraft = local.draft;
@@ -474,8 +707,8 @@ window.Store = (function () {
     delete state.__draftConflict;
     if (!state.profile) state.profile = { email: currentEmail };
     state.profile.email = currentEmail;
-    ensureRecoveryFields(state.profile);
-    ensureRecoveryAwards(state);
+    normalizeStateShape(state);
+    const recoveryBumped = reconcileRecoveryProgress(state);
     const all = db(); all[currentEmail] = state; saveDb(all);
     try { window.dispatchEvent(new CustomEvent("spokiy:synced")); } catch (e) {}
     if (draftConflict) {
@@ -486,8 +719,8 @@ window.Store = (function () {
       } catch (e) {}
       return { ok: false, conflict: true, local: localSnapshot, remote };
     }
-    // Якщо локально були новіші зміни — відправити злитий стан
-    if (!preferRemote && localT >= remoteT) Cloud.push(currentEmail, state);
+    // Якщо локально були новіші зміни АБО підтягнули етап деревця з історії — відправити
+    if (recoveryBumped || (!preferRemote && localT >= remoteT)) Cloud.push(currentEmail, state);
     return { ok: true };
   }
 
@@ -503,11 +736,16 @@ window.Store = (function () {
     if (!currentEmail) return null;
     const all = db();
     state = all[currentEmail] || emptyState({ email: currentEmail });
-    ensureRecoveryAwards(state);
+    normalizeStateShape(state);
     if (state.wellbeing) state.wellbeing = normalizeWellbeingMap(state.wellbeing);
     if (state.profile) {
       state.profile.email = currentEmail;
-      ensureRecoveryFields(state.profile);
+      if (reconcileRecoveryProgress(state)) {
+        state.updatedAt = new Date().toISOString();
+        all[currentEmail] = state;
+        saveDb(all);
+        pendingSync = true;
+      }
     }
     return state;
   }
@@ -667,6 +905,8 @@ window.Store = (function () {
       state.profile.recoveryProgress = 0;
       state.profile.recoverySymbolSelectedAt = now;
       state.profile.recoveryLastActivityAt = now;
+      // Не втрачати вже накопичену турботу (ритуали / записи до вибору символу)
+      reconcileRecoveryProgress(state);
       persist();
       return true;
     },
@@ -699,7 +939,9 @@ window.Store = (function () {
       if (!state.profile.recoverySymbolId) return Object.assign(empty(), { reason: "no_symbol" });
 
       const C = (typeof window !== "undefined") ? window.CONTENT : null;
-      const allowed = (C && C.RECOVERY_AWARD_ACTIONS) || ["wellbeing", "diary", "breath", "good", "past", "exercise"];
+      const allowed = (C && C.RECOVERY_AWARD_ACTIONS) || [
+        "ritual", "diary", "breath", "gratitude", "wellbeing", "good", "past", "exercise"
+      ];
       if (!allowed.includes(action)) return Object.assign(empty(), { reason: "bad_action" });
 
       const day = recoveryDayKey();
@@ -986,8 +1228,13 @@ window.Store = (function () {
       state.resources[name] = r; persist();
     },
     resourceRanking() {
+      if (!state || !state.resources || typeof state.resources !== "object") return [];
       return Object.entries(state.resources)
-        .map(([name, r]) => ({ name, uses: r.uses, avg: r.uses ? +(r.sumEffect / r.uses).toFixed(1) : 0 }))
+        .map(([name, r]) => ({
+          name,
+          uses: (r && r.uses) || 0,
+          avg: r && r.uses ? +(((r.sumEffect || 0) / r.uses).toFixed(1)) : 0
+        }))
         .sort((a, b) => (b.avg * 2 + b.uses) - (a.avg * 2 + a.uses));
     },
 
@@ -1191,6 +1438,37 @@ window.Store = (function () {
         return j;
       } catch (e) {
         return { ok: false, error: "network" };
+      }
+    },
+
+    async submitFeedback({ kind, message, name }) {
+      if (!Auth.enabled || !currentEmail) return { ok: false, error: "offline" };
+      try {
+        const r = await fetch("/api/feedback", {
+          method: "POST",
+          headers: { Accept: "application/json", "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ kind, message, name: name || null })
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) return { ok: false, error: (j && j.error) || ("http_" + r.status), status: r.status };
+        return j;
+      } catch (e) {
+        return { ok: false, error: "network" };
+      }
+    },
+
+    async fetchFeedbackAdmin(limit) {
+      if (!Auth.enabled || !currentEmail) return { ok: false, error: "offline" };
+      try {
+        const q = typeof limit === "number" ? ("?limit=" + encodeURIComponent(limit)) : "";
+        const r = await fetch("/api/feedback" + q, {
+          headers: { Accept: "application/json", ...authHeaders() }
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) return { ok: false, error: (j && j.error) || ("http_" + r.status), status: r.status, items: [] };
+        return j;
+      } catch (e) {
+        return { ok: false, error: "network", items: [] };
       }
     },
 

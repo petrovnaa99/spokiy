@@ -461,6 +461,7 @@ window.Rituals = (function () {
 
     keys.forEach((k) => {
       const day = rituals[k];
+      if (!day || typeof day !== "object") return;
       ["morning", "midday", "evening", "now"].forEach((type) => {
         const r = day[type];
         if (!r || (!r.mood && r.value == null)) return;
@@ -633,6 +634,9 @@ window.Rituals = (function () {
   }
 
   function dynamicsSectionHTML() {
+    if (!deps || !deps.S || !deps.S.state) {
+      return `<div class="card analytics-card analytics-span-12"><p class="analytics-none">Дані ритуалів ще підвантажуються.</p></div>`;
+    }
     const a = analyticsData();
     if (!a.moods.length) {
       return `<div class="card analytics-card analytics-span-12"><p class="analytics-none">Пройди ранковий або вечірній ритуал — тут з’явиться твоя динаміка. Без медичних висновків: лише твої спостереження.</p></div>`;

@@ -16,6 +16,9 @@
 -- Пропуски днів НЕ зменшують progress; символ не «помирає».
 -- Це адитивне розширення JSON: існуючі рядки й ключі не видаляються.
 -- НЕ виконувати DROP TABLE / TRUNCATE / REPLACE цілого profile під час впровадження.
+--
+-- Відгуки користувачів: окрема таблиця public.site_feedback
+-- (див. supabase/site_feedback.sql).
 
 create table if not exists public.users (
   email       text primary key,

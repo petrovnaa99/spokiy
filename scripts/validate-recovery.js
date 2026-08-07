@@ -129,9 +129,12 @@ if (orderedFemale[0].visualStyle !== "gentle") errors.push("для female пер
   if (!C || typeof C[name] !== "function") errors.push(`CONTENT.${name} відсутній`);
 });
 
-if (!Array.isArray(C.RECOVERY_AWARD_ACTIONS) || C.RECOVERY_AWARD_ACTIONS.length !== 6) {
-  errors.push("RECOVERY_AWARD_ACTIONS має містити 6 дій");
+if (!Array.isArray(C.RECOVERY_AWARD_ACTIONS) || C.RECOVERY_AWARD_ACTIONS.length < 6) {
+  errors.push("RECOVERY_AWARD_ACTIONS має містити щонайменше 6 дій");
 }
+["ritual", "diary", "breath", "gratitude", "wellbeing", "good"].forEach((a) => {
+  if (!C.RECOVERY_AWARD_ACTIONS.includes(a)) errors.push("RECOVERY_AWARD_ACTIONS без " + a);
+});
 if (typeof C.RECOVERY_POINTS_PER_ACTION !== "number" || C.RECOVERY_POINTS_PER_ACTION <= 0) {
   errors.push("RECOVERY_POINTS_PER_ACTION має бути > 0");
 }
