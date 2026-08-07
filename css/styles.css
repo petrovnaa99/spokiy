@@ -697,6 +697,55 @@ a { color: var(--primary); }
 }
 .sidebar .nav-item.nav-sos { color: #ffb4a0; }
 .sidebar .nav-item.nav-sos .ico { color: #ffb4a0; background: rgba(255, 140, 110, .12); }
+/* ?????? ?????? ? ???????; ??????? (FAQ/????) ? ??????????, ????? ?????????? */
+.sidebar .nav-item:not(.nav-meta):not(.nav-sos) {
+  color: color-mix(in srgb, #f4efe6 78%, transparent);
+}
+.sidebar .nav-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 4px 6px;
+  padding: 0 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: rgba(186, 210, 230, .55);
+  user-select: none;
+  pointer-events: none;
+}
+.sidebar .nav-divider::before,
+.sidebar .nav-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(170, 200, 230, .18);
+}
+.sidebar .nav-item.nav-meta {
+  color: rgba(176, 204, 228, .72);
+  font-weight: 550;
+  font-size: 13.5px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+.sidebar .nav-item.nav-meta .ico {
+  background: rgba(150, 190, 230, .10);
+  color: #9ec0de;
+  font-size: 12px;
+}
+.sidebar .nav-item.nav-meta:hover {
+  background: rgba(150, 190, 230, .10);
+  color: #d7e8f6;
+}
+.sidebar .nav-item.nav-meta.active {
+  background: color-mix(in srgb, #1a3a5c 70%, #7eb0d4 30%);
+  color: #eaf4fc;
+}
+.sidebar .nav-item.nav-meta.active .ico {
+  background: rgba(234, 244, 252, .14);
+  color: #d5e8f7;
+}
 .sidebar .sidebar-foot { border-top: 1px solid rgba(255, 244, 234, .14); }
 .sidebar .sidebar-user {
   padding: 0 4px 12px;

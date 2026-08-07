@@ -281,11 +281,12 @@
     { id: "history", icon: "≡", label: "Щоденник" },
     { id: "analytics", icon: "∿", label: "Моя динаміка" },
     { id: "support", icon: "♡", label: "Опора" },
-    { id: "info", icon: "ℹ", label: "Інформація" },
-    { id: "privacy", icon: "◌", label: "Конфіденційність" }
+    { id: "info", icon: "ℹ", label: "Інформація", meta: true },
+    { id: "faq", icon: "?", label: "FAQ", meta: true },
+    { id: "privacy", icon: "◌", label: "Конфіденційність", meta: true }
   ];
-  /** Мобільне нижнє меню — без конфіденційності (вона в профілі / інфо). */
-  const BOTTOM_NAV = NAV.filter((n) => n.id !== "privacy");
+  /** Мобільне нижнє меню — лише робочі пункти (довідка в «Інформації»). */
+  const BOTTOM_NAV = NAV.filter((n) => !n.meta);
   const SUPPORT_ROUTES = ["support", "resources", "friend", "treasure", "library", "joys", "gratitude", "evidence", "profile", "admin"];
   const INFO_ROUTES = ["info", "payment", "privacy", "faq"];
   const ROUTE_TITLES = {
@@ -479,6 +480,11 @@
     ];
     if (!mobile) {
       steps.push({
+        key: "nav-faq",
+        title: "FAQ",
+        text: "Правила простору, часті питання та форма для відгуку чи побажання."
+      });
+      steps.push({
         key: "nav-privacy",
         title: "Конфіденційність",
         text: "Політика: що зберігається, де лежать дані й як ти ними керуєш."
@@ -486,8 +492,8 @@
     } else {
       steps.push({
         key: "topbar-profile",
-        title: "Конфіденційність",
-        text: "Політика приватності — у профілі (угорі) та в розділі «Інформація»."
+        title: "Конфіденційність і FAQ",
+        text: "Політика та FAQ — у профілі й у розділі «Інформація»."
       });
     }
     return steps;
@@ -1199,12 +1205,22 @@
 
   function renderNav() {
     const nav = $("#nav");
-    nav.innerHTML = NAV.map(n => {
+    let html = "";
+    let metaStarted = false;
+    NAV.forEach((n) => {
+      if (n.meta && !metaStarted) {
+        metaStarted = true;
+        html += `<div class="nav-divider" role="separator" aria-hidden="true"><span>Довідка</span></div>`;
+      }
       const active = navItemActive(n.id);
-      const cls = "nav-item" + (active ? " active" : "") + (n.action ? " nav-sos" : "");
-      return `<button class="${cls}" data-route="${n.id}" data-tour="nav-${n.id}" type="button">
+      const cls = "nav-item"
+        + (active ? " active" : "")
+        + (n.action ? " nav-sos" : "")
+        + (n.meta ? " nav-meta" : "");
+      html += `<button class="${cls}" data-route="${n.id}" data-tour="nav-${n.id}" type="button">
         <span class="ico">${n.icon}</span><span>${uiText(genderize(n.label))}</span></button>`;
-    }).join("");
+    });
+    nav.innerHTML = html;
     $$(".nav-item", nav).forEach(b => b.onclick = () => {
       closeSidebar();
       if (b.dataset.route === "sos") { startCalm("quick"); return; }
