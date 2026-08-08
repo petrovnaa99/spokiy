@@ -3,6 +3,11 @@
   "functions": {
     "api/**/*.js": { "maxDuration": 10 }
   },
+  "rewrites": [
+    { "source": "/about", "destination": "/about.html" },
+    { "source": "/faq", "destination": "/faq.html" },
+    { "source": "/privacy", "destination": "/privacy.html" }
+  ],
   "crons": [
     {
       "path": "/api/cron/rituals",

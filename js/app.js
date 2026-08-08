@@ -4534,7 +4534,9 @@
     const payAbout = $("#landing-about-payment");
     if (payAbout) payAbout.onclick = () => { closeModal(); openPaymentInfo(); };
     const privAbout = $("#landing-about-privacy");
-    if (privAbout) privAbout.onclick = () => { closeModal(); openPrivacyInfo(); };
+    if (privAbout) privAbout.onclick = () => { closeModal(); location.href = "/privacy"; };
+    const faqAbout = $("#landing-about-faq");
+    if (faqAbout) faqAbout.onclick = () => { closeModal(); location.href = "/faq"; };
     const sosBtn = $("#landing-about-sos");
     if (sosBtn) sosBtn.onclick = () => { closeModal(); openQuickCalm(); };
   }
@@ -4731,10 +4733,6 @@
     if (aboutBtn) aboutBtn.onclick = openLandingAbout;
     const landingPay = $("#landing-payment");
     if (landingPay) landingPay.onclick = openPaymentInfo;
-    const landingPriv = $("#landing-privacy");
-    if (landingPriv) landingPriv.onclick = openPrivacyInfo;
-    const landingFaq = $("#landing-faq");
-    if (landingFaq) landingFaq.onclick = openFaqInfo;
 
     const submitBtn = $("#auth-submit");
     if (submitBtn) submitBtn.onclick = () => (authMode === "signup" ? submitSignup() : submitLogin());
