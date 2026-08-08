@@ -3,6 +3,20 @@
   "functions": {
     "api/**/*.js": { "maxDuration": 10 }
   },
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "spokiy-2026.vercel.app" }],
+      "destination": "https://spokiy.me/:path*",
+      "permanent": false
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.spokiy.me" }],
+      "destination": "https://spokiy.me/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     { "source": "/about", "destination": "/about.html" },
     { "source": "/faq", "destination": "/faq.html" },

@@ -4757,10 +4757,15 @@
     $("#auth-google-btn").onclick = () => {
       if (!GOOGLE_CLIENT_ID) {
         confirmModal("Google-вхід ще не налаштовано",
-          "Додай GOOGLE_CLIENT_ID у змінні середовища (Vercel / .env) і дозволені домени в Google Cloud Console: https://spokiy.me, https://www.spokiy.me та http://127.0.0.1:3000. Поки що скористайся входом через Email.", () => {}, "Зрозуміло");
+          "Додай GOOGLE_CLIENT_ID у Vercel і в Google Cloud Console → Credentials → Authorized JavaScript origins додай точно: https://spokiy.me та https://www.spokiy.me (без слеша в кінці). Поки що скористайся email або кодом з листа.", () => {}, "Зрозуміло");
         return;
       }
-      if (window.google && google.accounts && google.accounts.id) google.accounts.id.prompt();
+      try {
+        if (window.google && google.accounts && google.accounts.id) google.accounts.id.prompt();
+        else toast("Google ще завантажується. Спробуй за кілька секунд або увійди email/кодом.", "warn");
+      } catch (e) {
+        toast("Google заблокував цей домен. Додай https://spokiy.me у Authorized JavaScript origins.", "warn", 7000);
+      }
     };
     initGoogle();
   }
@@ -4788,37 +4793,58 @@
     let tries = 0;
     const tryInit = () => {
       if (!(window.google && google.accounts && google.accounts.id)) {
-        if (tries++ < 20) return setTimeout(tryInit, 300);
+        if (tries++ < 40) return setTimeout(tryInit, 250);
         return;
       }
-      google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: async (resp) => {
-          if (!resp || !resp.credential) { toast("Не вдалося увійти через Google", "warn"); return; }
-          const data = parseJwt(resp.credential);
-          if (!data || !data.email) { toast("Не вдалося увійти через Google", "warn"); return; }
-          const doOAuth = async (gender) => {
-            const res = await S.oauthLogin({
-              credential: resp.credential,
-              provider: "google",
-              gender: gender || null
-            });
-            if (!res.ok) { toast(authErrorText(res.error), "warn"); return; }
-            showApp();
-          };
-          const exists = await S.hasAccount(data.email);
-          if (exists) {
-            const g = S.accountGender(data.email);
-            await doOAuth(g);
-          } else {
-            askGender(g => doOAuth(g));
+      try {
+        google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          ux_mode: "popup",
+          auto_select: false,
+          cancel_on_tap_outside: true,
+          callback: async (resp) => {
+            if (!resp || !resp.credential) { toast("Не вдалося увійти через Google", "warn"); return; }
+            const data = parseJwt(resp.credential);
+            if (!data || !data.email) { toast("Не вдалося увійти через Google", "warn"); return; }
+            const doOAuth = async (gender) => {
+              const res = await S.oauthLogin({
+                credential: resp.credential,
+                provider: "google",
+                gender: gender || null
+              });
+              if (!res.ok) { toast(authErrorText(res.error), "warn"); return; }
+              showApp();
+            };
+            const exists = await S.hasAccount(data.email);
+            if (exists) {
+              const g = S.accountGender(data.email);
+              await doOAuth(g);
+            } else {
+              askGender(g => doOAuth(g));
+            }
           }
-        }
-      });
+        });
+      } catch (e) {
+        console.warn("Google Sign-In init failed", e);
+        toast("Google-вхід недоступний на цьому домені. Додай https://spokiy.me у Authorized JavaScript origins.", "warn", 7000);
+        return;
+      }
       const box = $("#google-btn-box");
       if (box) {
-        google.accounts.id.renderButton(box, { theme: "outline", size: "large", width: 320, text: "continue_with", shape: "pill" });
-        const fb = $("#auth-google-btn"); if (fb) fb.classList.add("hidden");
+        try {
+          box.innerHTML = "";
+          google.accounts.id.renderButton(box, {
+            theme: "outline",
+            size: "large",
+            width: Math.min(320, Math.floor((box.parentElement && box.parentElement.clientWidth) || 320)),
+            text: "continue_with",
+            shape: "pill",
+            locale: "uk"
+          });
+          const fb = $("#auth-google-btn"); if (fb) fb.classList.add("hidden");
+        } catch (e) {
+          console.warn("Google button render failed", e);
+        }
       }
     };
     tryInit();
@@ -4846,10 +4872,10 @@
 
   /* ===================== СТАРТ ===================== */
   const NEW_SITE_ORIGIN = "https://spokiy.me";
-  const DOMAIN_MOVE_STAY_KEY = "spokiy:domainMoveStay";
 
   function isLegacyVercelHost() {
     const h = (location.hostname || "").toLowerCase();
+    if (h === "spokiy.me" || h === "www.spokiy.me") return false;
     return h === "spokiy-2026.vercel.app" || /\.vercel\.app$/i.test(h);
   }
 
@@ -4860,24 +4886,18 @@
   function maybeShowDomainMoveNotice() {
     const root = $("#domain-move");
     if (!root || !isLegacyVercelHost()) return;
-    try {
-      if (sessionStorage.getItem(DOMAIN_MOVE_STAY_KEY) === "1") return;
-    } catch (e) { /* ignore */ }
 
+    const target = newSiteUrl();
     const go = $("#domain-move-go");
-    if (go) go.setAttribute("href", newSiteUrl());
+    if (go) go.setAttribute("href", target);
 
     root.classList.remove("hidden");
     root.setAttribute("aria-hidden", "false");
 
-    const stay = $("#domain-move-stay");
-    if (stay) {
-      stay.onclick = () => {
-        try { sessionStorage.setItem(DOMAIN_MOVE_STAY_KEY, "1"); } catch (e) { /* ignore */ }
-        root.classList.add("hidden");
-        root.setAttribute("aria-hidden", "true");
-      };
-    }
+    // Не пропонуємо лишатися на старому домені — лише повідомляємо і переводимо.
+    setTimeout(() => {
+      try { location.replace(target); } catch (e) { location.href = target; }
+    }, 2200);
   }
 
   async function boot() {
