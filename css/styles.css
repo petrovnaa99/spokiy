@@ -3768,3 +3768,47 @@ body.tour-active { overflow: hidden; }
   color: var(--ink-faint, #7a8aa0);
 }
 .public-foot a { color: inherit; }
+
+.blog-list {
+  list-style: none;
+  margin: 20px 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.blog-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px 16px;
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #d9e2ef);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .15s ease, transform .15s ease;
+}
+.blog-card:hover {
+  border-color: color-mix(in srgb, var(--primary, #2f6fed) 45%, var(--line, #d9e2ef));
+  transform: translateY(-1px);
+}
+.blog-card-meta {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-faint, #7a8aa0);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.blog-card strong {
+  font-size: 17px;
+  color: var(--primary-d, #0a2248);
+}
+.blog-card span:last-child {
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink-soft, #4a5d73);
+}
+.public-article .public-eyebrow a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

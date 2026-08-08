@@ -6,7 +6,9 @@
   "rewrites": [
     { "source": "/about", "destination": "/about.html" },
     { "source": "/faq", "destination": "/faq.html" },
-    { "source": "/privacy", "destination": "/privacy.html" }
+    { "source": "/privacy", "destination": "/privacy.html" },
+    { "source": "/blog", "destination": "/blog.html" },
+    { "source": "/blog/yak-zaspokoitisya-za-5-hvilyn", "destination": "/blog/yak-zaspokoitisya-za-5-hvilyn.html" }
   ],
   "crons": [
     {
