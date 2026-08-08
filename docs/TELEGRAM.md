@@ -28,7 +28,7 @@
 | `TELEGRAM_BOT_USERNAME` | Username бота без `@` |
 | `TELEGRAM_WEBHOOK_SECRET` | Довільний секрет (32+ символів) |
 | `CRON_SECRET` | Довільний секрет для cron |
-| `SITE_URL` | `https://your-app.vercel.app` |
+| `SITE_URL` | `https://spokiy.me` |
 
 ## 4. Деплой
 
@@ -43,7 +43,7 @@ git push origin main
 Один раз після деплою (заміни домен і секрет):
 
 ```bash
-curl -X POST "https://YOUR_APP.vercel.app/api/telegram/setup-webhook" \
+curl -X POST "https://spokiy.me/api/telegram/setup-webhook" \
   -H "Authorization: Bearer YOUR_CRON_SECRET" \
   -H "Content-Type: application/json"
 ```
@@ -52,7 +52,7 @@ curl -X POST "https://YOUR_APP.vercel.app/api/telegram/setup-webhook" \
 
 ```bash
 curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
-  -d "url=https://YOUR_APP.vercel.app/api/telegram/webhook" \
+  -d "url=https://spokiy.me/api/telegram/webhook" \
   -d "secret_token=YOUR_TELEGRAM_WEBHOOK_SECRET"
 ```
 
@@ -71,7 +71,7 @@ Cron надсилає Authorization: Bearer CRON_SECRET автоматично (
 Ручна перевірка:
 
 ```bash
-curl "https://YOUR_APP.vercel.app/api/cron/rituals" \
+curl "https://spokiy.me/api/cron/rituals" \
   -H "Authorization: Bearer YOUR_CRON_SECRET"
 ```
 

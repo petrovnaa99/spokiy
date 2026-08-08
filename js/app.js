@@ -4759,7 +4759,7 @@
     $("#auth-google-btn").onclick = () => {
       if (!GOOGLE_CLIENT_ID) {
         confirmModal("Google-вхід ще не налаштовано",
-          "Додай GOOGLE_CLIENT_ID у змінні середовища (Vercel / .env) і дозволені домени в Google Cloud Console: https://spokiy-2026.vercel.app та http://127.0.0.1:3000. Поки що скористайся входом через Email.", () => {}, "Зрозуміло");
+          "Додай GOOGLE_CLIENT_ID у змінні середовища (Vercel / .env) і дозволені домени в Google Cloud Console: https://spokiy.me, https://www.spokiy.me та http://127.0.0.1:3000. Поки що скористайся входом через Email.", () => {}, "Зрозуміло");
         return;
       }
       if (window.google && google.accounts && google.accounts.id) google.accounts.id.prompt();
@@ -4847,7 +4847,43 @@
   }
 
   /* ===================== СТАРТ ===================== */
+  const NEW_SITE_ORIGIN = "https://spokiy.me";
+  const DOMAIN_MOVE_STAY_KEY = "spokiy:domainMoveStay";
+
+  function isLegacyVercelHost() {
+    const h = (location.hostname || "").toLowerCase();
+    return h === "spokiy-2026.vercel.app" || /\.vercel\.app$/i.test(h);
+  }
+
+  function newSiteUrl() {
+    return NEW_SITE_ORIGIN + (location.pathname || "/") + (location.search || "") + (location.hash || "");
+  }
+
+  function maybeShowDomainMoveNotice() {
+    const root = $("#domain-move");
+    if (!root || !isLegacyVercelHost()) return;
+    try {
+      if (sessionStorage.getItem(DOMAIN_MOVE_STAY_KEY) === "1") return;
+    } catch (e) { /* ignore */ }
+
+    const go = $("#domain-move-go");
+    if (go) go.setAttribute("href", newSiteUrl());
+
+    root.classList.remove("hidden");
+    root.setAttribute("aria-hidden", "false");
+
+    const stay = $("#domain-move-stay");
+    if (stay) {
+      stay.onclick = () => {
+        try { sessionStorage.setItem(DOMAIN_MOVE_STAY_KEY, "1"); } catch (e) { /* ignore */ }
+        root.classList.add("hidden");
+        root.setAttribute("aria-hidden", "true");
+      };
+    }
+  }
+
   async function boot() {
+    maybeShowDomainMoveNotice();
     await loadPublicConfig();
     initAuth();
     if (window.Safeguard) {

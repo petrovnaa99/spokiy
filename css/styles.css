@@ -3511,3 +3511,61 @@ body.tour-active { overflow: hidden; }
   line-height: 1.5;
   white-space: pre-wrap;
 }
+
+/* Domain migration notice (old *.vercel.app hosts) */
+.domain-move {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--ink, #0a2248) 48%, transparent);
+  backdrop-filter: blur(4px);
+}
+.domain-move.hidden { display: none !important; }
+.domain-move-card {
+  width: min(420px, 100%);
+  padding: 22px 20px 18px;
+  border-radius: 18px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #d9e2ef);
+  box-shadow: 0 24px 60px -28px rgba(7, 21, 40, .45);
+  text-align: center;
+}
+.domain-move-eyebrow {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--ink-faint, #7a8aa0);
+}
+.domain-move-card h2 {
+  margin: 0 0 10px;
+  font-size: clamp(20px, 5vw, 24px);
+  line-height: 1.25;
+  color: var(--primary-d, #0a2248);
+}
+.domain-move-text,
+.domain-move-note {
+  margin: 0;
+  color: var(--ink-soft, #4a5d73);
+  line-height: 1.5;
+  font-size: 14.5px;
+}
+.domain-move-url {
+  margin: 12px 0;
+  font-family: var(--font-hand, Caveat, cursive);
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--primary-d, #0a2248);
+  line-height: 1;
+}
+.domain-move-note { margin-top: 8px; font-size: 13px; color: var(--ink-faint, #7a8aa0); }
+.domain-move-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+.domain-move-actions .btn { width: 100%; justify-content: center; }
