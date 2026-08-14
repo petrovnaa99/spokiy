@@ -1,27 +1,31 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="uk">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0a2248" />
-  <meta name="spokiy-build" content="20260808g" />
-  <title>Спокій — простір самопідтримки</title>
-  <meta name="description" content="Спокій — особистий простір самопідтримки: короткі вправи, щоденник, SOS-дихання та символ відновлення. Без оцінок." />
+  <meta name="theme-color" content="#0c2e24" />
+  <meta name="spokiy-build" content="20260814" />
+  <title>Sпокій — щоденник стану</title>
+  <meta name="description" content="Sпокій — особистий щоденник стану: записи, check-in, SOS і динаміка. Спершу цінність — реєстрація, щоб зберегти історію." />
   <meta name="robots" content="index,follow" />
   <link rel="canonical" href="https://spokiy.me/" />
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="uk_UA" />
-  <meta property="og:site_name" content="Спокій" />
-  <meta property="og:title" content="Спокій — простір самопідтримки" />
-  <meta property="og:description" content="Особистий простір, коли тривожно або важко: короткі вправи, записи, SOS-дихання." />
+  <meta property="og:site_name" content="Sпокій" />
+  <meta property="og:title" content="Sпокій — щоденник стану" />
+  <meta property="og:description" content="Веди щоденник стану без оцінок. Реєстрація — щоб зберегти записи й аналітику між пристроями." />
   <meta property="og:url" content="https://spokiy.me/" />
   <meta property="og:image" content="https://spokiy.me/og-image.png" />
   <meta property="og:image:type" content="image/png" />
-  <meta property="og:image:alt" content="Спокій — простір самопідтримки" />
+  <meta property="og:image:alt" content="Sпокій — щоденник стану" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Спокій — простір самопідтримки" />
-  <meta name="twitter:description" content="Особистий простір самопідтримки: вправи, щоденник і SOS-дихання." />
+  <meta name="twitter:title" content="Sпокій — щоденник стану" />
+  <meta name="twitter:description" content="Особистий щоденник стану: записи, SOS і динаміка." />
   <meta name="twitter:image" content="https://spokiy.me/og-image.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Sпокій" />
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-667YRQQ9B4"></script>
   <script>
@@ -34,9 +38,9 @@
   {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    "name": "Спокій",
+    "name": "Sпокій",
     "url": "https://spokiy.me/",
-    "description": "Особистий простір самопідтримки: короткі вправи, щоденник, SOS-дихання та символ відновлення.",
+    "description": "Особистий щоденник стану: записи, check-in, SOS і динаміка.",
     "inLanguage": "uk",
     "potentialAction": {
       "@type": "ReadAction",
@@ -56,24 +60,44 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Comfortaa:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260808g" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" />
+  <link rel="stylesheet" href="css/styles.css?v=20260814" />
+  <link rel="icon" href="/favicon-32.png?v=20260811a" type="image/png" sizes="32x32" />
+  <link rel="icon" href="/favicon.png?v=20260811a" type="image/png" sizes="64x64" />
+  <link rel="icon" href="/icon-192.png?v=20260811a" type="image/png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260811a" sizes="180x180" />
 </head>
 <body>
-  <!-- AUTH / WELCOME -->
+  <!-- AUTH / WELCOME: цінність спочатку, логін — щоб зберегти дані -->
   <div id="auth-screen" class="auth-screen">
-    <div class="landing landing--minimal">
+    <div class="landing landing--value">
 
       <section class="landing-hero">
-        <div class="landing-mark" aria-hidden="true">S</div>
-        <h1 class="landing-title">Спокій</h1>
-        <p class="landing-subtitle">Особистий простір самопідтримки, коли тривожно або важко</p>
+        <img class="landing-mark" src="/icon-192.png?v=20260811a" width="64" height="64" alt="" />
+        <h1 class="landing-title">Sпокій</h1>
+        <p class="landing-subtitle">Особистий щоденник стану — без оцінок і без тиску писати багато</p>
+        <a class="btn btn-primary landing-hero-cta" href="#auth-reg">Зберегти записи в акаунті</a>
+        <p class="landing-hero-note">Спочатку подивись, що всередині. Реєстрація потрібна, щоб аналітика й історія не зникли.</p>
+      </section>
+
+      <section class="landing-value" aria-label="Цінність щоденника">
+        <h2>Що дає щоденник</h2>
+        <ul class="landing-value-list">
+          <li><b>Запис стану за хвилину</b> — кілька рядків або оцінка 1–10, без «правильних» відповідей.</li>
+          <li><b>Check-in ранку / дня / вечора</b> — помітити себе в ритмі дня.</li>
+          <li><b>SOS і кризовий пакет</b> — дихання, заземлення й номери допомоги в Україні.</li>
+          <li><b>Динаміка</b> — бачити тиждень і закономірності, коли є збережена історія.</li>
+          <li><b>Free і Pro 99 грн/міс</b> — базовий щоденник безкоштовно; Pro — повна історія, нагадування, PDF.</li>
+        </ul>
+        <div class="landing-value-actions">
+          <a class="btn btn-ghost" href="/blog">Читати статті</a>
+          <a class="btn btn-ghost" href="/offer">Тарифи й оферта</a>
+        </div>
       </section>
 
       <section class="landing-section" id="auth-reg">
         <div class="auth-card">
           <h2 class="auth-card-title" id="auth-card-title">Увійти</h2>
-          <p class="auth-card-sub" id="auth-card-sub">Введи email і пароль — або одноразовий код з листа.</p>
+          <p class="auth-card-sub" id="auth-card-sub">Щоб зберегти щоденник і аналітику між пристроями — email і пароль або код з листа.</p>
 
           <div class="auth-fields">
             <label class="field auth-signup-only hidden" id="auth-name-field">
@@ -84,17 +108,30 @@
               <span>Email</span>
               <input id="auth-email" type="email" placeholder="you@email.com" autocomplete="email" />
             </label>
-            <label class="field" id="auth-password-field">
-              <span>Пароль</span>
-              <input id="auth-password" type="password" placeholder="Мінімум 6 символів" autocomplete="current-password" />
-            </label>
-            <label class="field auth-signup-only hidden" id="auth-password2-field">
-              <span>Повтори пароль</span>
-              <input id="auth-password2" type="password" placeholder="Ще раз" autocomplete="new-password" />
-            </label>
+            <div class="field" id="auth-password-field">
+              <label for="auth-password"><span>Пароль</span></label>
+              <div class="field-password">
+                <input id="auth-password" type="password" placeholder="Мінімум 6 символів" autocomplete="current-password" />
+                <button type="button" class="pw-toggle" data-pw-target="auth-password" aria-label="Показати пароль" title="Показати пароль" aria-pressed="false">
+                  <svg class="pw-ico-show" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/></svg>
+                  <svg class="pw-ico-hide hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 3l18 18M10.5 10.6a3.2 3.2 0 0 0 4 4M9.4 5.5A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a18.6 18.6 0 0 1-3.2 3.9M6.2 6.7C3.9 8.4 2 12 2 12a18.5 18.5 0 0 0 6.1 5.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="field auth-signup-only hidden" id="auth-password2-field">
+              <label for="auth-password2"><span>Повтори пароль</span></label>
+              <div class="field-password">
+                <input id="auth-password2" type="password" placeholder="Ще раз" autocomplete="new-password" />
+                <button type="button" class="pw-toggle" data-pw-target="auth-password2" aria-label="Показати пароль" title="Показати пароль" aria-pressed="false">
+                  <svg class="pw-ico-show" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/></svg>
+                  <svg class="pw-ico-hide hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 3l18 18M10.5 10.6a3.2 3.2 0 0 0 4 4M9.4 5.5A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a18.6 18.6 0 0 1-3.2 3.9M6.2 6.7C3.9 8.4 2 12 2 12a18.5 18.5 0 0 0 6.1 5.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                </button>
+              </div>
+            </div>
             <label class="field auth-login-only hidden" id="auth-code-field">
               <span>Код з email</span>
               <input id="auth-code" type="text" inputmode="numeric" placeholder="6 цифр" maxlength="6" autocomplete="one-time-code" />
+              <button type="button" class="auth-link auth-resend-code" id="auth-resend-code">Надіслати код ще раз</button>
             </label>
             <div class="field auth-signup-only hidden" id="auth-gender-field">
               <span>Як до тебе звертатися?</span>
@@ -109,6 +146,11 @@
             <button type="button" class="auth-link" id="auth-forgot">Забули пароль?</button>
             <button type="button" class="auth-link" id="auth-use-code">Увійти за кодом</button>
           </div>
+
+          <label class="auth-remember auth-login-only" id="auth-remember-wrap">
+            <input type="checkbox" id="auth-remember" />
+            <span>Запам'ятати email</span>
+          </label>
 
           <button class="btn btn-primary btn-block" id="auth-submit" type="button">Увійти</button>
           <div class="auth-divider"><span>або</span></div>
@@ -125,30 +167,31 @@
       </section>
 
       <div class="landing-more">
-        <a class="landing-about-btn" href="/about">Як мною користуватися</a>
+        <a class="landing-about-btn" href="/about">Як користуватися</a>
         <a class="landing-about-btn" href="/blog">Статті</a>
-        <button type="button" class="landing-about-btn" id="landing-payment">Оплата та доступ</button>
+        <button type="button" class="landing-about-btn" id="landing-payment">Free / Pro</button>
+        <a class="landing-about-btn" href="/offer">Оферта</a>
         <a class="landing-about-btn" href="/privacy">Конфіденційність</a>
-        <a class="landing-about-btn" href="/faq">FAQ і правила</a>
+        <a class="landing-about-btn" href="/faq">FAQ</a>
       </div>
 
-      <section class="landing-seo" aria-label="Про сервіс Спокій">
-        <h2>Що таке «Спокій»</h2>
-        <p>«Спокій» — український онлайн-простір для самопідтримки. Тут можна зупинитися, помітити стан і зробити невелику дію саме зараз: коротка вправа, SOS-дихання, запис у щоденнику або тиха опора.</p>
+      <section class="landing-seo" aria-label="Про щоденник Sпокій">
+        <h2>Що таке «Sпокій»</h2>
+        <p>«Sпокій» — український онлайн-щоденник стану. Тут можна коротко записати, як ти зараз, зробити check-in, скористатися SOS і з часом побачити динаміку своїх записів.</p>
 
         <h2>Для кого</h2>
-        <p>Для тих, кому іноді тривожно, важко або треба почути себе без оцінок і тиску «робити все правильно». Підходить для щоденної турботи про себе — не як заміна психолога чи лікаря.</p>
+        <p>Для тих, кому іноді тривожно чи важко і хто хоче вести щоденник без оцінок. Не як заміна психолога чи лікаря — як особистий журнал між днями й (за бажанням) між сесіями.</p>
 
         <h2>Чим допомагає</h2>
         <ul class="landing-seo-list">
-          <li>Короткі практики на 1–5 хвилин, коли накриває</li>
-          <li>Особисті записи й спостереження за станом</li>
-          <li>SOS-дихання в моменті</li>
-          <li>Деревце турботи, що росте разом із тобою</li>
-          <li>Доступ з телефона і ноутбука в одному акаунті</li>
+          <li>Записи стану без тиску писати багато</li>
+          <li>Ритуали check-in і SOS у моменті</li>
+          <li>Кризовий пакет з номерами допомоги</li>
+          <li>Аналітика історії — після збереження в акаунті</li>
+          <li>Один щоденник на телефоні й ноутбуці</li>
         </ul>
 
-        <p class="landing-seo-note">Сервіс для самопідтримки. Не ставить діагнозів і не замінює професійну психологічну або медичну допомогу. Детальніше — у <a href="/about">«Про Спокій»</a>, <a href="/faq">FAQ</a> та <a href="/blog">статтях</a>.</p>
+        <p class="landing-seo-note">Щоденник самоспостереження. Не ставить діагнозів і не замінює професійну допомогу. Детальніше — у <a href="/about">«Про Sпокій»</a>, <a href="/offer">оферті</a>, <a href="/faq">FAQ</a> та <a href="/blog">статтях</a>.</p>
       </section>
 
     </div>
@@ -163,8 +206,8 @@
 
     <aside class="sidebar" id="sidebar">
       <div class="brand">
-        <span class="brand-logo">S</span>
-        <span class="brand-name">Спокій</span>
+        <img class="brand-logo" src="/favicon.png?v=20260811a" width="36" height="36" alt="" />
+        <span class="brand-name">Sпокій</span>
       </div>
       <div class="sidebar-user">
         <button type="button" class="user-chip" id="user-chip" aria-label="Профіль"></button>
@@ -193,8 +236,9 @@
   <!-- Old domain → new domain notice -->
   <div id="domain-move" class="domain-move hidden" role="dialog" aria-modal="true" aria-labelledby="domain-move-title" aria-hidden="true">
     <div class="domain-move-card">
+      <img class="domain-move-mark" src="/icon-192.png?v=20260811a" width="56" height="56" alt="" />
       <p class="domain-move-eyebrow">Оновлення адреси</p>
-      <h2 id="domain-move-title">Спокій переїхав на нову адресу</h2>
+      <h2 id="domain-move-title">Sпокій переїхав на нову адресу</h2>
       <p class="domain-move-text">Основний сайт тепер тут:</p>
       <p class="domain-move-url">spokiy.me</p>
       <p class="domain-move-note">Акаунт той самий — увійди з тим самим email. Зараз відкриємо нову адресу…</p>
@@ -204,17 +248,20 @@
     </div>
   </div>
 
+  <!-- Soft prompt sheet (mobile auto-nudge: open / skip) -->
+  <div id="prompt-sheet" class="prompt-sheet-root hidden" aria-live="polite"></div>
+
   <!-- Modal -->
   <div id="modal-root" class="modal-root hidden"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-<script src="js/content.js?v=20260808g"></script>
-<script src="js/storage.js?v=20260808g"></script>
-<script src="js/safeguard.js?v=20260808g"></script>
-<script src="js/rituals.js?v=20260808g"></script>
-<script src="js/recovery-art.js?v=20260808g"></script>
-<script src="js/app.js?v=20260808g"></script>
+<script src="js/content.js?v=20260811a"></script>
+<script src="js/storage.js?v=20260811a"></script>
+<script src="js/safeguard.js?v=20260811a"></script>
+<script src="js/rituals.js?v=20260811a"></script>
+<script src="js/recovery-art.js?v=20260811a"></script>
+<script src="js/app.js?v=20260811a"></script>
 </body>
 </html>
