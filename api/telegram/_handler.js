@@ -116,8 +116,8 @@ async function sendNotesMenu(chatId) {
   await sendMessage(chatId, TEXT.notesMenu, { replyMarkup: notesMenuKeyboard() });
 }
 
-async function sendMorning(chatId) {
-  await sendMessage(chatId, TEXT.morningPrompt, {
+async function sendMorning(chatId, timezone) {
+  await sendMessage(chatId, TEXT.morningPromptText(timezone || "Europe/Kyiv"), {
     replyMarkup: { inline_keyboard: [moodRow("mrn")] }
   });
 }
@@ -162,7 +162,7 @@ async function startRitualFlow(store, user, chatId, ritual) {
   const dayKey = todayKeyInTz(settings.timezone);
   bot_state.pendingFlow = newFlow(ritual, dayKey, { step: "mood", data: {} });
   await saveUser(store, user.email, settings, bot_state);
-  if (ritual === "morning") await sendMorning(chatId);
+  if (ritual === "morning") await sendMorning(chatId, settings.timezone);
   else if (ritual === "midday") await sendMidday(chatId);
   else if (ritual === "evening") await startEveningFlow(store, user, chatId);
   else {
@@ -885,7 +885,7 @@ async function runRitualCron(store) {
 
     if (settings.morning.enabled && settings.morning.days.includes(day) &&
         !log.morning?.sent && timeWithinWindow(time, settings.morning.time)) {
-      await sendMorning(chatId);
+      await sendMorning(chatId, tz);
       log.morning = { ...(log.morning || {}), sent: true, sentAt: new Date().toISOString() };
       changed = true;
       sent++;

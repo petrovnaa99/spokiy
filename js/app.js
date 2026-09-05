@@ -414,6 +414,135 @@
     S.save();
   }
 
+  /* ===================== СПОВІЩЕННЯ ПРО ОНОВЛЕННЯ САЙТУ ===================== */
+  const BUILD_SEEN_KEY = "spokiy:lastSeenBuild";
+
+  function getSiteBuild() {
+    const cl = window.SPOKIY_CHANGELOG;
+    if (cl && cl.current) return String(cl.current).trim();
+    const meta = document.querySelector('meta[name="spokiy-build"]');
+    return meta && meta.content ? String(meta.content).trim() : "";
+  }
+
+  function getLastSeenBuild() {
+    let local = "";
+    try { local = localStorage.getItem(BUILD_SEEN_KEY) || ""; } catch (e) {}
+    let cloud = "";
+    if (S.state && S.state.settings && S.state.settings.lastSeenBuild) {
+      cloud = String(S.state.settings.lastSeenBuild);
+    }
+    if (local && cloud) return local > cloud ? local : cloud;
+    return local || cloud;
+  }
+
+  function markBuildSeen(build) {
+    if (!build) return;
+    try { localStorage.setItem(BUILD_SEEN_KEY, build); } catch (e) {}
+    if (S.isAuthed && S.isAuthed()) {
+      if (!S.state.settings) S.state.settings = {};
+      S.state.settings.lastSeenBuild = build;
+      S.save();
+    }
+  }
+
+  function getMissedReleases(lastSeen, current) {
+    const list = (window.SPOKIY_CHANGELOG && window.SPOKIY_CHANGELOG.releases) || [];
+    return list
+      .filter((r) => r && r.build && r.build > lastSeen && r.build <= current)
+      .sort((a, b) => a.build.localeCompare(b.build));
+  }
+
+  function formatReleaseDate(dateStr) {
+    if (!dateStr) return "";
+    try {
+      const d = new Date(dateStr + "T12:00:00");
+      return d.toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" });
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
+  function updateNoticeHTML(releases) {
+    const latest = releases[releases.length - 1];
+    const title = latest && latest.title ? latest.title : "Сайт оновлено";
+    const dateLabel = latest && latest.date ? formatReleaseDate(latest.date) : "";
+    const highlights = [];
+    releases.forEach((r) => {
+      (r.highlights || []).forEach((h) => {
+        if (h && highlights.indexOf(h) === -1) highlights.push(h);
+      });
+    });
+    if (!highlights.length) {
+      highlights.push("Ми покращили роботу Sпokiy. Дякуємо, що ти з нами.");
+    }
+    const multi = releases.length > 1;
+    return `
+      <div class="update-notice">
+        <div class="update-notice-head">
+          <span class="update-notice-badge">Оновлення</span>
+          ${dateLabel ? `<span class="update-notice-date">${esc(dateLabel)}</span>` : ""}
+        </div>
+        <h2>${esc(title)}</h2>
+        ${multi ? `<p class="muted update-notice-sub">Кілька оновлень, поки тебе не було:</p>` : ""}
+        <ul class="update-notice-list">
+          ${highlights.map((h) => `<li>${esc(h)}</li>`).join("")}
+        </ul>
+        <div class="row" style="justify-content:flex-end;margin-top:18px">
+          <button class="btn btn-primary" id="update-notice-ok">Зрозуміло 🌿</button>
+        </div>
+      </div>`;
+  }
+
+  function openUpdateNoticeModal(releases, currentBuild, onDone) {
+    openModal(updateNoticeHTML(releases));
+    const ok = $("#update-notice-ok");
+    if (ok) {
+      ok.onclick = () => {
+        closeModal();
+        markBuildSeen(currentBuild);
+        if (typeof onDone === "function") onDone();
+      };
+    }
+  }
+
+  function openLatestChangelog() {
+    const current = getSiteBuild();
+    const releases = (window.SPOKIY_CHANGELOG && window.SPOKIY_CHANGELOG.releases) || [];
+    const latest = releases.find((r) => r.build === current) || releases[0];
+    if (!latest) {
+      toast("Журнал оновлень ще порожній", "warn");
+      return;
+    }
+    openModal(updateNoticeHTML([latest]));
+    const ok = $("#update-notice-ok");
+    if (ok) ok.onclick = () => closeModal();
+  }
+
+  /** Показати модалку, якщо білд змінився з минулого візиту. Перший візит — лише запам’ятати білд. */
+  function maybeShowUpdateNotice(onDone) {
+    const current = getSiteBuild();
+    if (!current) {
+      if (onDone) onDone();
+      return false;
+    }
+    const lastSeen = getLastSeenBuild();
+    if (!lastSeen) {
+      markBuildSeen(current);
+      if (onDone) onDone();
+      return false;
+    }
+    if (lastSeen >= current) {
+      if (onDone) onDone();
+      return false;
+    }
+    const missed = getMissedReleases(lastSeen, current);
+    const releases = missed.length
+      ? missed
+      : [{ build: current, title: "Сайт оновлено", highlights: ["Невеликі покращення інтерфейсу та стабільності."] }];
+    openUpdateNoticeModal(releases, current, onDone);
+    return true;
+  }
+
   function welcomeFeaturesHTML() {
     const groups = C.WELCOME_FEATURES || [];
     return `
@@ -536,7 +665,7 @@
       {
         key: mobile ? "bn-support" : "nav-support",
         title: "Опора",
-        text: "Ресурси, вдячність, скарбничка, докази й бібліотека."
+        text: "Спочатку банк доказів і ресурси. Решта — у «Ще інструменти»."
       },
       {
         key: mobile ? "bn-info" : "nav-info",
@@ -1378,8 +1507,16 @@
     return route === id;
   }
 
+  /** Тихий режим: ядро без деревця, серій і кроків догляду. Нові акаунти — увімкнено. */
+  function isFocusCore() {
+    if (!S.state || !S.state.settings) return false;
+    return S.state.settings.focusCore === true;
+  }
+
   function needsRecoverySelect() {
     if (!S.state || !S.state.profile) return false;
+    if (isFocusCore()) return false;
+    if (S.state.settings && S.state.settings.recoverySkipped) return false;
     return !S.getRecovery().recoverySymbolId;
   }
 
@@ -1475,22 +1612,49 @@
     return `Сьогодні ${ui}/10 · ${wellbeingStateLabel(ui)}`;
   }
 
-  function wellbeingCheckModalHTML(idAttr) {
+  function wellbeingCheckModalHTML(idAttr, opts) {
+    const options = opts || {};
     const attr = idAttr || "data-care-well";
-    const scale = Array.from({ length: 10 }, (_, i) =>
-      `<button class="well-btn" type="button" ${attr}="${i + 1}">${i + 1}</button>`).join("");
+    const current = options.current;
+    const scale = Array.from({ length: 10 }, (_, i) => {
+      const v = i + 1;
+      const sel = current === v ? " sel" : "";
+      return `<button class="well-btn${sel}" type="button" ${attr}="${v}">${v}</button>`;
+    }).join("");
+    const title = options.edit ? "Виправити оцінку сьогодні" : "Оціни свій стан сьогодні";
+    const intro = options.edit
+      ? "Обери правильну оцінку — попередню замінимо."
+      : "<b>1</b> — дуже важко, <b>10</b> — дуже добре. Без правильних відповідей — лише як ти зараз.";
     return `
-      <h2>Оціни свій стан сьогодні ${uiText("🌿")}</h2>
-      <p class="muted" style="margin:0 0 14px;line-height:1.55">
-        <b>1</b> — дуже важко, <b>10</b> — дуже добре. Без правильних відповідей — лише як ти зараз.
-      </p>
+      <h2>${title} ${uiText("🌿")}</h2>
+      <p class="muted" style="margin:0 0 14px;line-height:1.55">${intro}</p>
       <div class="well-scale">${scale}</div>
       <div class="row spread" style="margin-top:8px;color:var(--ink-faint);font-size:12px;font-weight:700">
         <span>1 · дуже важко</span><span>10 · дуже добре</span>
       </div>
-      <div class="row" style="justify-content:flex-end;margin-top:14px">
+      <div class="row spread" style="margin-top:14px;gap:8px;flex-wrap:wrap">
+        ${options.edit ? `<button class="btn btn-ghost btn-sm" id="well-clear-today" type="button">Прибрати оцінку</button>` : "<span></span>"}
         <button class="btn btn-ghost btn-sm" data-close type="button">Пізніше</button>
       </div>`;
+  }
+
+  function openWellbeingEdit() {
+    const today = S.todayWellbeing();
+    const current = today ? wellbeingUiLevel(today) : null;
+    openModal(wellbeingCheckModalHTML("data-well-edit", { edit: true, current }));
+    $$("#modal-root [data-well-edit]").forEach((b) => b.onclick = () => {
+      handleWellbeingAnswer(+b.dataset.wellEdit, { edit: true });
+    });
+    const clearBtn = $("#well-clear-today");
+    if (clearBtn) {
+      clearBtn.onclick = () => {
+        if (S.clearWellbeing && S.clearWellbeing()) {
+          closeModal();
+          render();
+          toast("Сьогоднішню оцінку прибрано", "good");
+        }
+      };
+    }
   }
 
   function openLowWellbeingFollowUp() {
@@ -1514,10 +1678,15 @@
     if (diary) diary.onclick = () => { closeModal(); go("new"); };
   }
 
-  function handleWellbeingAnswer(uiLevel) {
+  function handleWellbeingAnswer(uiLevel, opts) {
+    const options = opts || {};
     S.setWellbeing(uiLevel, null, { scale: "wellbeing" });
     closeModal();
     render();
+    if (options.edit) {
+      toast("Оцінку оновлено 🌿", "good");
+      return;
+    }
     if (uiLevel <= 5) {
       setTimeout(openLowWellbeingFollowUp, 280);
     } else if (uiLevel >= 8) {
@@ -1872,40 +2041,40 @@
   function continueHomeAction() {
     const task = lastUnfinishedTask();
     if (task) { task.action(); return; }
-    // Якщо є рекомендований крок догляду — спочатку він (м’яко, без примусу).
-    const practice = dailyPracticeStatus();
-    const next = practice.items.find((x) => !x.done);
-    if (next) {
-      openPracticeStep(next.id);
-      return;
+    if (!isFocusCore()) {
+      const practice = dailyPracticeStatus();
+      const next = practice.items.find((x) => !x.done);
+      if (next) {
+        openPracticeStep(next.id);
+        return;
+      }
     }
     const last = activeEntries()[0];
     if (last && !last.reviewed) { go("history"); return; }
     go("new");
   }
 
-  /** Відкрити ритуал за часом доби (не вечір о 14:00). */
+  /** Відкрити ритуал за часом доби. */
   function openRecommendedRitual() {
     if (!window.Rituals) return;
-    const h = new Date().getHours();
-    if (h < 12) {
+    const slot = C.getRecoveryTimeOfDay ? C.getRecoveryTimeOfDay() : "day";
+    if (slot === "morning") {
       Rituals.openMorning();
       return;
     }
-    if (h < 18) {
-      if (typeof Rituals.shouldShowMidday === "function" && Rituals.shouldShowMidday()) {
-        Rituals.openMidday();
-        return;
-      }
-      if (typeof Rituals.shouldShowMorning === "function" && Rituals.shouldShowMorning()) {
-        Rituals.openMorning();
-        return;
-      }
-      // Вдень без ранкового ритуалу — короткий check-in, не вечірній розбір.
+    if (slot === "evening" || slot === "night") {
+      Rituals.openEvening();
+      return;
+    }
+    if (typeof Rituals.shouldShowMidday === "function" && Rituals.shouldShowMidday()) {
       Rituals.openMidday();
       return;
     }
-    Rituals.openEvening();
+    if (typeof Rituals.shouldShowMorning === "function" && Rituals.shouldShowMorning()) {
+      Rituals.openMorning();
+      return;
+    }
+    Rituals.openMidday();
   }
 
   function openPracticeStep(id) {
@@ -2030,6 +2199,7 @@
   }
 
   function recoveryHomeBlockHTML() {
+    if (isFocusCore()) return "";
     const rec = S.getRecovery();
     if (!rec.recoverySymbolId) return "";
     const symbol = C.getRecoverySymbolById(rec.recoverySymbolId);
@@ -2086,6 +2256,7 @@
   }
 
   function homeNextStepFallbackHTML() {
+    if (isFocusCore()) return "";
     const rec = S.getRecovery();
     if (rec.recoverySymbolId) return "";
     const practice = dailyPracticeStatus();
@@ -2171,20 +2342,23 @@
       </div>`;
     }
 
-    const sub = todayWell
-      ? formatWellbeingSummary(todayWell)
-      : (isMale() ? "Без тиску. Один крок за раз." : "Достатньо одного маленького кроку до себе.");
+    const subHtml = todayWell
+      ? `${esc(formatWellbeingSummary(todayWell))} · <button type="button" class="today-well-edit" id="today-well-edit">Виправити</button>`
+      : `<button type="button" class="today-well-check" id="today-well-check">Оцінити стан (1 — важко, 10 — добре)</button>`;
 
     const ritualCard = window.Rituals ? Rituals.homeRitualCardHTML() : "";
     const recoveryBlock = recoveryHomeBlockHTML();
     const nextFallback = homeNextStepFallbackHTML();
+    const recoveryOptIn = isFocusCore() && !S.getRecovery().recoverySymbolId && !(S.state.settings && S.state.settings.recoverySkipped)
+      ? `<p class="today-recovery-opt"><button type="button" class="btn btn-ghost btn-sm" id="recovery-opt-in">🌿 Символ відновлення (за бажанням)</button></p>`
+      : "";
 
     $("#view").innerHTML = `
       <div class="today-page">
         ${alert}
         <header class="today-head" data-tour="mood">
           <h1>Як ти зараз?</h1>
-          <p>${esc(sub)}</p>
+          <p>${subHtml}</p>
         </header>
 
         <div class="today-actions">
@@ -2199,6 +2373,7 @@
         ${ritualCard}
         ${recoveryBlock}
         ${nextFallback}
+        ${recoveryOptIn}
 
         <details class="today-more">
           <summary>Ще сьогодні</summary>
@@ -2236,6 +2411,12 @@
 
     $("#ta-sos").onclick = () => startCalm("quick");
     $("#ta-diary").onclick = () => go("new");
+    const wellCheck = $("#today-well-check");
+    if (wellCheck) wellCheck.onclick = openWellbeingCheck;
+    const wellEdit = $("#today-well-edit");
+    if (wellEdit) wellEdit.onclick = openWellbeingEdit;
+    const recoveryOpt = $("#recovery-opt-in");
+    if (recoveryOpt) recoveryOpt.onclick = () => go("recoverySelect");
     const taSit = $("#ta-situation");
     if (taSit) taSit.onclick = () => startCalm("full");
     const nextBtn = $("#today-next-step");
@@ -2269,39 +2450,36 @@
   }
 
   function viewSupport() {
-    const groups = [
-      {
-        title: "Заспокоїтися",
-        links: [
-          { route: "resources", icon: "◌", title: "Мої ресурси", desc: "Що допомагає заспокоїтися" },
-          { route: "types", icon: "⌁", title: "Типи тривоги", desc: "М'які тести та розбір" },
-          { route: "library", icon: "§", title: "Бібліотека", desc: "Короткі статті про тривогу" }
-        ]
-      },
-      {
-        title: "Записати і згадати",
-        links: [
-          { route: "friend", icon: "✉", title: isMale() ? "Лист другові" : "Порада подрузі", desc: "Погляд на ситуацію з теплом" },
-          { route: "gratitude", icon: "∴", title: isMale() ? "За що я вдячний" : "За що я вдячна", desc: "Короткі нотатки опори" },
-          { route: "joys", icon: "◇", title: "Мої радощі", desc: "Книги, музика, прогулянки" },
-          { route: "treasure", icon: "□", title: "Скарбничка", desc: "Теплі слова та перемоги" },
-          { route: "evidence", icon: "✓", title: "Банк доказів", desc: "Страхи, що не справдилися" }
-        ]
-      }
+    const coreLinks = [
+      { route: "evidence", icon: "✓", title: "Банк доказів", desc: "Страхи, що не справдилися — головна опора" },
+      { route: "resources", icon: "◌", title: "Мої ресурси", desc: "Що допомагає заспокоїтися зараз" },
+      { route: "good", icon: "☀", title: "Хороші події", desc: "Теплі моменти, включно з вечірніми «3 речі»" }
     ];
+    const extraLinks = [
+      { route: "friend", icon: "✉", title: isMale() ? "Лист другові" : "Порада подрузі", desc: "Погляд на ситуацію з теплом" },
+      { route: "gratitude", icon: "∴", title: isMale() ? "За що я вдячний" : "За що я вдячна", desc: "Короткі нотатки опори" },
+      { route: "treasure", icon: "□", title: "Скарбничка", desc: "Теплі слова та перемоги" },
+      { route: "types", icon: "⌁", title: "Типи тривоги", desc: "М'які тести та розбір" },
+      { route: "library", icon: "§", title: "Бібліотека", desc: "Короткі статті про тривогу" },
+      { route: "joys", icon: "◇", title: "Мої радощі", desc: "Книги, музика, прогулянки" }
+    ];
+    const linkBtn = (l) => `
+      <button class="support-link" type="button" data-route="${l.route}">
+        <span class="support-ico">${l.icon}</span>
+        <span class="support-body"><b>${esc(l.title)}</b><span>${esc(l.desc)}</span></span>
+      </button>`;
     $("#view").innerHTML = `
-      <div class="page-head"><h1>Опора</h1><p>Практики та інструменти, які допомагають повернутися до спокою.</p></div>
-      ${groups.map(g => `
-        <div class="support-group">
-          <h2 class="support-group-title">${esc(g.title)}</h2>
-          <div class="support-grid">
-            ${g.links.map(l => `
-              <button class="support-link" type="button" data-route="${l.route}">
-                <span class="support-ico">${l.icon}</span>
-                <span class="support-body"><b>${esc(l.title)}</b><span>${esc(l.desc)}</span></span>
-              </button>`).join("")}
-          </div>
-        </div>`).join("")}`;
+      <div class="page-head"><h1>Опора</h1><p>Спочатку — те, що реально тримає: докази, ресурси й хороші моменти.</p></div>
+      <div class="support-group">
+        <h2 class="support-group-title">Головне</h2>
+        <div class="support-grid">${coreLinks.map(linkBtn).join("")}</div>
+      </div>
+      <details class="support-more">
+        <summary>Ще інструменти</summary>
+        <div class="support-more-body">
+          <div class="support-grid">${extraLinks.map(linkBtn).join("")}</div>
+        </div>
+      </details>`;
     $$("[data-route]", $("#view")).forEach(b => b.onclick = () => go(b.dataset.route));
   }
 
@@ -2309,6 +2487,12 @@
     const practice = dailyPracticeStatus();
     const next = practice.items.find((x) => !x.done);
     const cards = [
+      {
+        id: "updates",
+        icon: "↑",
+        title: "Що нового на сайті",
+        desc: "Короткий список останніх оновлень Sпokiy."
+      },
       {
         id: "today",
         icon: "1",
@@ -2357,7 +2541,8 @@
     $$("[data-info]", $("#view")).forEach((b) => {
       b.onclick = () => {
         const id = b.dataset.info;
-        if (id === "today") openPracticeGuide();
+        if (id === "updates") openLatestChangelog();
+        else if (id === "today") openPracticeGuide();
         else if (id === "guide") openGuide();
         else if (id === "payment") go("payment");
         else if (id === "privacy") go("privacy");
@@ -2416,10 +2601,9 @@
     if (hero && !$("#plant-skip")) {
       hero.appendChild(skip);
       skip.onclick = () => {
-        if (!S.selectRecoverySymbol(plantId)) {
-          // навіть якщо збереження не вдалось — не блокуємо вхід у щоденник
-          try { S.state.profile.recoverySymbolId = plantId; S.save(); } catch (e) {}
-        }
+        if (!S.state.settings) S.state.settings = {};
+        S.state.settings.recoverySkipped = true;
+        S.save();
         go("home");
         maybeShowWelcomeOrOnboard();
       };
@@ -4331,16 +4515,17 @@
     const tgLinked = tgProfileCache && tgProfileCache.linked;
     const tgBlock = `
       <div class="card" id="tg-card">
-        <div class="card-title">📱 Telegram <span class="faint" style="font-size:12px;font-weight:500">(опційно)</span></div>
-        <p class="muted">Ті самі ритуали можна отримувати в Telegram. На сайті все вже доступно вище.</p>
+        <div class="card-title">📱 Telegram <span class="faint" style="font-size:12px;font-weight:500">(лише нагадування)</span></div>
+        <p class="muted">Бот не замінює сайт — він нагадує відкрити Sпokiy. Записи, SOS, історія й експорт — тут.</p>
+        <p class="faint" style="margin:6px 0 0;font-size:12px">Рекомендуємо лише вечірнє нагадування про 3 приємні речі.</p>
         ${tgLinked
-          ? `<p class="muted" style="margin:8px 0"><span class="pill pill-green">Підключено</span> Нагадування в боті: ⚙️ Налаштування.</p>
+          ? `<p class="muted" style="margin:8px 0"><span class="pill pill-green">Підключено</span> Час і тип нагадувань — у боті: ⚙️ Налаштування.</p>
              <div class="row">
                <button class="btn btn-ghost btn-sm" id="tg-open">Відкрити бота</button>
                <button class="btn btn-ghost btn-sm" id="tg-unlink">Відключити</button>
              </div>`
           : `<p class="muted" style="margin:8px 0">Нагадування вимкнені, поки не підключиш бота.</p>
-             <button class="btn btn-primary btn-sm" id="tg-connect">Підключити Telegram</button>
+             <button class="btn btn-primary btn-sm" id="tg-connect">Підключити нагадування</button>
              <p class="faint" id="tg-link-hint" style="margin-top:10px;font-size:12px"></p>`}
       </div>`;
 
@@ -4385,6 +4570,10 @@
 
       <div class="card">
         <div class="card-title">🎛 Інтерфейс</div>
+        <label class="profile-pref">
+          <input type="checkbox" id="pref-focus-core"${isFocusCore() ? " checked" : ""} />
+          <div><b>Тихий режим</b><span>Без деревця, кроків догляду й gamification — SOS, запис, стан і вечірні 3 речі</span></div>
+        </label>
         <label class="profile-pref">
           <input type="checkbox" id="pref-music-home"${S.state.settings.showMusicOnHome ? " checked" : ""} />
           <div><b>Показувати музику на головній</b><span>Рекомендована пісня вгорі екрана «Сьогодні»</span></div>
@@ -4456,6 +4645,15 @@
         toast(musicHome.checked ? "Музика на головній увімкнена 🎶" : "Музика на головній прихована", "good");
       };
     }
+    const focusCore = $("#pref-focus-core");
+    if (focusCore) {
+      focusCore.onchange = () => {
+        S.state.settings.focusCore = focusCore.checked;
+        S.save();
+        toast(focusCore.checked ? "Тихий режим увімкнено — лише ядро 🌿" : "Деревце й догляд знову на головній", "good");
+        if (route === "home" || route === "profile") render();
+      };
+    }
     const openAdm = $("#open-admin");
     if (openAdm) openAdm.onclick = () => go("admin");
     $("#del-all").onclick = () => confirmModal("Видалити всі дані?", "Профіль і всі записи буде видалено назавжди.", () => {
@@ -4487,7 +4685,7 @@
         const hint = $("#tg-link-hint");
         if (res.linkUrl) {
           window.open(res.linkUrl, "_blank");
-          if (hint) hint.textContent = "Посилання діє 15 хвилин. У Telegram натисни Start — і акаунт підключиться.";
+          if (hint) hint.textContent = "Посилання діє 15 хвилин. У Telegram натисни Start — і нагадування підключаться.";
           toast("Відкрий Telegram і натисни Start 🌿", "good");
         } else if (hint) {
           hint.textContent = res.botUsername
@@ -4704,20 +4902,21 @@
     if (needsRecoverySelect()) go("recoverySelect");
     else go("home");
 
-    // якщо стать не вказана (старий акаунт) — запитати один раз, потім оновити порядок карток
-    if (!S.state.profile.gender) {
-      setTimeout(() => askGender(g => {
-        S.setGender(g);
-        applyGenderTheme();
-        if (needsRecoverySelect()) go("recoverySelect");
-        else maybeShowWelcomeOrOnboard();
-      }), 400);
-    } else if (!needsRecoverySelect()) {
-      maybeShowWelcomeOrOnboard();
-    }
-    notifyReminders();
-    handleDeepLinks();
-    if (window.Rituals) { Rituals.startReminderScheduler(); }
+    maybeShowUpdateNotice(() => {
+      if (!S.state.profile.gender) {
+        setTimeout(() => askGender(g => {
+          S.setGender(g);
+          applyGenderTheme();
+          if (needsRecoverySelect()) go("recoverySelect");
+          else maybeShowWelcomeOrOnboard();
+        }), 400);
+      } else if (!needsRecoverySelect()) {
+        maybeShowWelcomeOrOnboard();
+      }
+      notifyReminders();
+      handleDeepLinks();
+      if (window.Rituals) { Rituals.startReminderScheduler(); }
+    });
   }
 
   function maybeShowWelcomeOrOnboard() {
@@ -5373,6 +5572,7 @@
     });
 
     if (S.isAuthed()) showApp();
+    else maybeShowUpdateNotice();
   }
 
   // глобальний доступ для кнопки кризи з будь-де
@@ -5383,7 +5583,7 @@
       Rituals.init({
         S, $, $$, esc, genderize, uiText, isMale, pluralUk, daysBetween, todayKey,
         openModal, closeModal, toast, confirmModal, go, startCalm,
-        showPromptSheet, closePromptSheet
+        showPromptSheet, closePromptSheet, isFocusCore
       });
     } catch (e) {
       console.warn("Rituals.init failed", e);
@@ -5399,6 +5599,8 @@
     }
     const r = p.get("route");
     if (r === "new") setTimeout(() => go("new"), 300);
+    if (r === "evening") setTimeout(() => { go("home"); if (window.Rituals && Rituals.openEvening) Rituals.openEvening(); }, 400);
+    if (r === "wellbeing") setTimeout(() => { go("home"); openWellbeingCheck(); }, 400);
     if (r === "payment") setTimeout(() => go("payment"), 300);
     if (p.has("sos") || p.has("route")) {
       history.replaceState(null, "", location.pathname);

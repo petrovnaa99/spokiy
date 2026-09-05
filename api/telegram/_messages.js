@@ -26,6 +26,42 @@ const WORRIES = {
 
 const DAY_LABELS = ["Нд", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 
+const TIME_GREETINGS = {
+  morning: "Доброго ранку",
+  day: "Доброго дня",
+  evening: "Доброго вечора",
+  night: "Доброї ночі"
+};
+
+/** @returns {"morning"|"day"|"evening"|"night"} */
+function getTimeOfDayFromMinutes(mins) {
+  if (mins >= 21 * 60 + 46 || mins < 4 * 60) return "night";
+  if (mins <= 11 * 60 + 30) return "morning";
+  if (mins <= 17 * 60) return "day";
+  return "evening";
+}
+
+function timeGreetingForTz(timezone) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone || "Europe/Kyiv",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).formatToParts(new Date());
+    const map = {};
+    parts.forEach((p) => { if (p.type !== "literal") map[p.type] = p.value; });
+    const mins = parseInt(map.hour, 10) * 60 + parseInt(map.minute, 10);
+    return TIME_GREETINGS[getTimeOfDayFromMinutes(mins)] || TIME_GREETINGS.day;
+  } catch {
+    return TIME_GREETINGS.day;
+  }
+}
+
+function morningPromptText(timezone) {
+  return `🌿\n\n${timeGreetingForTz(timezone)}.\n\nЯк ти сьогодні?`;
+}
+
 function siteUrl() {
   const u = process.env.SITE_URL || process.env.VERCEL_URL;
   if (!u) return "https://example.com";
@@ -258,6 +294,9 @@ const TEXT = {
 Доброго ранку.
 
 Як ти сьогодні?`,
+
+  morningPromptText,
+  timeGreetingForTz,
 
   morningSleep: "Як ти спав(ла)? Оціни сон зірочками:",
 

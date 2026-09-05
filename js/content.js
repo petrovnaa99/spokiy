@@ -926,10 +926,10 @@ window.CONTENT = (function () {
   function getRecoveryTimeOfDay(date) {
     const d = date || new Date();
     const mins = d.getHours() * 60 + d.getMinutes();
-    // Ніч: 23:00–03:59 · ранок: 04:00–11:00 · день: 11:01–16:00 · вечір: 16:01–22:59
-    if (mins >= 23 * 60 || mins < 4 * 60) return "night";
-    if (mins <= 11 * 60) return "morning";
-    if (mins <= 16 * 60) return "day";
+    // Ніч: 21:46–03:59 · ранок: 04:00–11:30 · день: 11:31–17:00 · вечір: 17:01–21:45
+    if (mins >= 21 * 60 + 46 || mins < 4 * 60) return "night";
+    if (mins <= 11 * 60 + 30) return "morning";
+    if (mins <= 17 * 60) return "day";
     return "evening";
   }
 

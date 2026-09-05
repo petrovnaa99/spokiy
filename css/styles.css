@@ -1237,6 +1237,35 @@ a { color: var(--primary); }
   font-size: clamp(24px, 6vw, 30px); font-weight: 700; margin: 0 0 6px; line-height: 1.15;
 }
 .today-head p { margin: 0; color: var(--ink-soft); font-size: 14px; line-height: 1.5; }
+.today-well-edit {
+  margin-left: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary-d);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.today-well-edit:hover { color: var(--primary); }
+.today-well-check {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary-d);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.today-well-check:hover { color: var(--primary); }
+.today-recovery-opt { margin: 0 0 16px; text-align: center; }
 
 .today-actions { display: grid; gap: 10px; margin-bottom: 20px; }
 .today-action {
@@ -4660,6 +4689,31 @@ body.tour-active { overflow: hidden; }
   font-weight: 700;
   color: var(--primary-d);
 }
+.support-more {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.support-more summary {
+  padding: 12px 14px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.support-more summary::-webkit-details-marker { display: none; }
+.support-more-body { padding: 0 14px 14px; }
+.reminder-more { margin-top: 10px; }
+.reminder-more summary {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  cursor: pointer;
+  list-style: none;
+}
+.reminder-more summary::-webkit-details-marker { display: none; }
+.reminder-more-body { margin-top: 8px; }
 
 .profile-pref {
   display: flex;
@@ -4676,6 +4730,47 @@ body.tour-active { overflow: hidden; }
   margin-top: 2px;
   font-size: 13px;
   color: var(--ink-soft);
+}
+
+.update-notice-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.update-notice-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--primary-soft);
+  color: var(--primary-d);
+}
+.update-notice-date {
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+.update-notice h2 {
+  margin: 0 0 12px;
+  font-size: clamp(20px, 4.5vw, 24px);
+  line-height: 1.2;
+}
+.update-notice-sub {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+.update-notice-list {
+  margin: 0;
+  padding-left: 1.15em;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.update-notice-list li + li {
+  margin-top: 8px;
 }
 
 .evening-pleasant-fields {

@@ -348,6 +348,14 @@ window.Store = (function () {
         welcomeSeen: false,
         /** Чи вже пройшов(ла) або пропустив(ла) навчання по меню. */
         tourSeen: false,
+        /** Тихий режим: без деревця, кроків догляду й gamification — лише ядро. */
+        focusCore: true,
+        /** Користувач свідомо пропустив(ла) вибір символу відновлення. */
+        recoverySkipped: false,
+        /** Музика на головній (за замовчуванням вимкнена). */
+        showMusicOnHome: false,
+        /** Останній переглянутий білд сайту (сповіщення про оновлення). */
+        lastSeenBuild: null,
         /** Тон комунікації: "gentle" | "solid" | null (null = визначити з символу / статі). */
         communicationTone: null,
         ritualDismiss: {},
@@ -1304,6 +1312,14 @@ window.Store = (function () {
       // Перша оцінка стану за день (повторні зміни шкали не дають прогресу).
       this.awardRecoveryProgress("wellbeing");
       return state.wellbeing[dayKey];
+    },
+    clearWellbeing(dayKey) {
+      const key = dayKey || dayKeyLocal(new Date());
+      if (!state.wellbeing || Array.isArray(state.wellbeing)) return false;
+      if (!state.wellbeing[key]) return false;
+      delete state.wellbeing[key];
+      persist();
+      return true;
     },
     todayWellbeing() {
       if (!state.wellbeing || Array.isArray(state.wellbeing)) state.wellbeing = {};

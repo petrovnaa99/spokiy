@@ -1,6 +1,6 @@
 ﻿/* Spokiy service worker — shell cache */
-const CACHE = "spokiy-shell-20260905";
-const SHELL = ["/", "/css/styles.css", "/js/content.js", "/js/storage.js", "/js/safeguard.js", "/js/rituals.js", "/js/recovery-art.js", "/js/app.js", "/manifest.webmanifest", "/icon-192.png", "/favicon.png"];
+const CACHE = "spokiy-shell-20260908";
+const SHELL = ["/", "/css/styles.css", "/js/changelog.js", "/js/content.js", "/js/storage.js", "/js/safeguard.js", "/js/rituals.js", "/js/recovery-art.js", "/js/app.js", "/manifest.webmanifest", "/icon-192.png", "/favicon.png"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });

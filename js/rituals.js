@@ -86,6 +86,18 @@ window.Rituals = (function () {
     return new Date().getHours();
   }
 
+  function localMinutes() {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  }
+
+  function timeGreeting() {
+    if (window.CONTENT && typeof window.CONTENT.getRecoveryGreeting === "function") {
+      return window.CONTENT.getRecoveryGreeting("gentle");
+    }
+    return "Доброго дня";
+  }
+
   function hoursSince(iso) {
     if (!iso) return Infinity;
     return (Date.now() - Date.parse(iso)) / 3600000;
@@ -93,19 +105,21 @@ window.Rituals = (function () {
 
   function shouldShowMorning() {
     if (todayRitual().morning || isDismissed("morning")) return false;
-    return localHour() < 12;
+    const mins = localMinutes();
+    return mins >= 4 * 60 && mins <= 11 * 60 + 30;
   }
 
   function shouldShowEvening() {
     if (todayRitual().evening || isDismissed("evening")) return false;
-    return localHour() >= 18;
+    return localMinutes() >= 17 * 60 + 1;
   }
 
   function shouldShowMidday() {
     const t = todayRitual();
     if (t.midday || isDismissed("midday") || !t.morning) return false;
     const after = S().settings.reminders.midday.hoursAfterMorning || 5;
-    return hoursSince(t.morning.at) >= after && localHour() >= 12 && localHour() < 18;
+    const mins = localMinutes();
+    return hoursSince(t.morning.at) >= after && mins >= 11 * 60 + 31 && mins <= 17 * 60;
   }
 
   function moodButtons(moods, prefix) {
@@ -197,7 +211,7 @@ window.Rituals = (function () {
       if (step === 1) {
         body = `
           <div class="ritual-badge">🌿</div>
-          <h2>Доброго ранку</h2>
+          <h2>${deps.esc(timeGreeting())}</h2>
           <p class="muted">Як ти сьогодні почуваєшся?</p>
           ${moodButtons(MORNING_MOODS, "mm")}`;
       } else if (step === 2) {
@@ -381,7 +395,7 @@ window.Rituals = (function () {
     const map = {
       morning: {
         title: "Ранковий ритуал",
-        text: "Доброго ранку. Як ти сьогодні? Коротке заповнення — близько хвилини.",
+        text: timeGreeting() + ". Як ти сьогодні? Коротке заповнення — близько хвилини.",
         open: openMorning
       },
       midday: {
@@ -523,15 +537,21 @@ window.Rituals = (function () {
 
   function homeRitualCardHTML() {
     const t = todayRitual();
-    const h = localHour();
+    const focus = deps.isFocusCore && deps.isFocusCore();
     const items = [];
-    if (h < 12 && !t.morning) items.push({ id: "morning", label: "🌿 Ранковий ритуал", sub: "до 1 хв" });
-    if (shouldShowMidday()) items.push({ id: "midday", label: "☀ Check-in", sub: "як ти зараз?" });
-    if (h >= 18 && !t.evening) items.push({ id: "evening", label: "🌙 Вечірній ритуал", sub: "3 приємні речі" });
+    if (focus) {
+      if (!t.evening) {
+        items.push({ id: "evening", label: "🌙 3 приємні речі", sub: "вечірній ритуал · ядро дня" });
+      }
+    } else {
+      if (shouldShowMorning() && !t.morning) items.push({ id: "morning", label: "🌿 Ранковий ритуал", sub: "до 1 хв" });
+      if (shouldShowMidday()) items.push({ id: "midday", label: "☀ Check-in", sub: "як ти зараз?" });
+      if (shouldShowEvening()) items.push({ id: "evening", label: "🌙 Вечірній ритуал", sub: "3 приємні речі" });
+    }
     if (!items.length) return "";
 
     return `<div class="card ritual-home-card">
-      <div class="card-title">Сьогоднішні ритуали</div>
+      <div class="card-title">${focus ? "Сьогодні" : "Сьогоднішні ритуали"}</div>
       <div class="ritual-home-list">${items.map((i) =>
         `<button type="button" class="ritual-home-btn" data-ritual="${i.id}"><b>${i.label}</b><span>${i.sub}</span></button>`
       ).join("")}</div>
@@ -550,25 +570,35 @@ window.Rituals = (function () {
   function profileRemindersHTML() {
     ensureState();
     const r = S().settings.reminders;
-    const on = (v) => (v ? "✅" : "○");
+    const focus = deps.isFocusCore && deps.isFocusCore();
     const times = ["07:00", "08:00", "09:00", "12:00", "14:00", "18:00", "20:00", "21:00", "22:00"];
     const timeOpts = (sel) => times.map((t) => `<option value="${t}" ${t === sel ? "selected" : ""}>${t}</option>`).join("");
+    const row = (id, label, cfg, pushId, timeId, checkId) => `
+        <div class="reminder-row"><label><input type="checkbox" id="${checkId}" ${cfg.enabled ? "checked" : ""} /> <span>${label}</span></label>
+          <select id="${timeId}" aria-label="Час нагадування ${label}">${timeOpts(cfg.time)}</select>
+          <label class="rem-push"><input type="checkbox" id="${pushId}" ${cfg.push ? "checked" : ""} /> Push</label></div>`;
+
+    const eveningBlock = `
+        ${row("eve", "Вечірнє · 3 приємні речі", r.evening, "rem-eve-push", "rem-eve-time", "rem-eve")}`;
+
+    const fullBlock = `
+        ${row("mrn", "Ранкове", r.morning, "rem-mrn-push", "rem-mrn-time", "rem-mrn")}
+        ${row("mid", "Денне", r.midday, "rem-mid-push", "rem-mid-time", "rem-mid")}
+        ${eveningBlock}`;
 
     return `<div class="card" id="reminders-card">
-      <div class="card-title">🔔 Нагадування</div>
-      <p class="muted">Усі вимкнені за замовчуванням. Push працює, коли сайт відкритий у браузері.</p>
+      <div class="card-title">🔔 Нагадування на сайті</div>
+      <p class="muted">${focus
+        ? "У тихому режимі достатньо вечірнього нагадування. Push працює, коли сайт відкритий у браузері."
+        : "Усі вимкнені за замовчуванням. Push працює, коли сайт відкритий у браузері."}</p>
       <div class="reminder-rows">
-        <div class="reminder-row"><label><input type="checkbox" id="rem-mrn" ${r.morning.enabled ? "checked" : ""} /> <span>Ранкове</span></label>
-          <select id="rem-mrn-time" aria-label="Час ранкового нагадування">${timeOpts(r.morning.time)}</select>
-          <label class="rem-push"><input type="checkbox" id="rem-mrn-push" ${r.morning.push ? "checked" : ""} /> Push</label></div>
-        <div class="reminder-row"><label><input type="checkbox" id="rem-mid" ${r.midday.enabled ? "checked" : ""} /> <span>Денне</span></label>
-          <select id="rem-mid-time" aria-label="Час денного нагадування">${timeOpts(r.midday.time)}</select>
-          <label class="rem-push"><input type="checkbox" id="rem-mid-push" ${r.midday.push ? "checked" : ""} /> Push</label></div>
-        <div class="reminder-row"><label><input type="checkbox" id="rem-eve" ${r.evening.enabled ? "checked" : ""} /> <span>Вечірнє</span></label>
-          <select id="rem-eve-time" aria-label="Час вечірнього нагадування">${timeOpts(r.evening.time)}</select>
-          <label class="rem-push"><input type="checkbox" id="rem-eve-push" ${r.evening.push ? "checked" : ""} /> Push</label></div>
+        ${focus ? eveningBlock : fullBlock}
+        ${focus ? `<details class="reminder-more"><summary>Ранкове й денне</summary><div class="reminder-more-body">
+          ${row("mrn", "Ранкове", r.morning, "rem-mrn-push", "rem-mrn-time", "rem-mrn")}
+          ${row("mid", "Денне", r.midday, "rem-mid-push", "rem-mid-time", "rem-mid")}
+        </div></details>` : ""}
       </div>
-      <p class="faint" style="margin:10px 0 0;font-size:12px">Telegram-нагадування — у розділі нижче (опційно).</p>
+      <p class="faint" style="margin:10px 0 0;font-size:12px">Telegram — лише нагадування відкрити сайт (розділ нижче).</p>
       <button class="btn btn-primary btn-sm" id="rem-save" type="button" style="margin-top:12px">Зберегти</button>
     </div>`;
   }
@@ -641,7 +671,7 @@ window.Rituals = (function () {
       setTimeout(openFn, 800);
     };
 
-    tryFire("morning", r.morning, "Sпокій 🌿", "Доброго ранку. Як ти сьогодні?", openMorning);
+    tryFire("morning", r.morning, "Sпokiy 🌿", timeGreeting() + ". Як ти сьогодні?", openMorning);
     tryFire("midday", r.midday, "Sпокій", "Як зараз твій стан?", openMidday);
     tryFire("evening", r.evening, "Sпокій 🌙", "Напиши 3 приємні речі, які сьогодні відбулися", openEvening);
   }
