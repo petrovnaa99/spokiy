@@ -4535,3 +4535,208 @@ body.tour-active { overflow: hidden; }
   .blog-card { padding: 14px; }
   .blog-card strong { font-size: 16px; }
 }
+
+/* ---------- UX: compact home, topbar, support, landing ---------- */
+.topbar-extras {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex: none;
+}
+.theme-toggle--compact {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 12px;
+}
+.theme-toggle--compact .tt-ico { font-size: 18px; }
+
+.landing-sos-btn {
+  width: 100%;
+  max-width: 340px;
+  margin: 16px auto 0;
+}
+.landing-seo--fold details { margin: 0; }
+.landing-seo--fold summary {
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--primary-d);
+  list-style: none;
+}
+.landing-seo--fold summary::-webkit-details-marker { display: none; }
+.landing-seo--fold summary::after {
+  content: " ▾";
+  font-size: 12px;
+  opacity: .7;
+}
+.landing-seo--fold details[open] summary::after { content: " ▴"; }
+.landing-seo-body { padding-top: 10px; }
+
+.recovery-home--compact {
+  align-items: stretch;
+  text-align: left;
+  padding: 16px 14px 14px;
+  gap: 12px;
+}
+.recovery-home-compact-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.recovery-home-art--sm {
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
+  margin: 0;
+  border-radius: 18px;
+}
+.recovery-home-compact-text { min-width: 0; flex: 1; }
+.recovery-home--compact .recovery-home-greet {
+  font-size: 17px;
+  text-align: left;
+}
+.recovery-home-soft--inline {
+  margin: 2px 0 4px;
+  font-size: 13px;
+  max-width: none;
+}
+.recovery-home-stage-compact {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.recovery-home-done-note {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  text-align: center;
+}
+.recovery-home-more {
+  margin-top: 2px;
+  text-align: left;
+}
+.recovery-home-more summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-d);
+}
+.recovery-home-more-body { padding-top: 10px; }
+
+.today-next-step { margin: 0 0 14px; }
+.today-more {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.today-more summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  padding: 8px 0;
+  list-style: none;
+}
+.today-more summary::-webkit-details-marker { display: none; }
+.today-more-body { padding-bottom: 8px; }
+.today-blocks--compact { margin-bottom: 12px; }
+.today-more-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.support-group { margin-bottom: 22px; }
+.support-group:last-child { margin-bottom: 0; }
+.support-group-title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--primary-d);
+}
+
+.profile-pref {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.profile-pref input { margin-top: 3px; flex: none; }
+.profile-pref span {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.evening-pleasant-fields {
+  display: grid;
+  gap: 10px;
+}
+.evening-pleasant-fields .field span {
+  min-width: 1.2em;
+  font-weight: 700;
+  color: var(--ink-faint);
+}
+
+.analytics-pleasant {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+  background:
+    radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 55%),
+    var(--surface);
+}
+.analytics-pleasant-progress {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+.analytics-pleasant-count {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--primary-d);
+}
+.analytics-pleasant-list {
+  margin: 0 0 12px;
+  padding-left: 1.2em;
+  display: grid;
+  gap: 6px;
+}
+.analytics-pleasant-list li {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.analytics-pleasant-actions {
+  margin-top: 4px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.analytics-pleasant-week {
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+
+@media (max-width: 880px) {
+  .topbar { justify-content: flex-start; }
+  .topbar-title { flex: 1; min-width: 0; }
+}
+
+@media (max-width: 640px) {
+  .recovery-home-art--sm {
+    width: 64px;
+    height: 64px;
+    min-width: 64px;
+  }
+  .recovery-home--compact .recovery-home-greet { font-size: 16px; }
+}

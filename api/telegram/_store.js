@@ -128,6 +128,9 @@ function applyDailyNoteToState(state, kind, payload = {}) {
     state.rituals[dayKey][ritualType] = { ...data, at, source: "telegram" };
     applyWellbeingAndCheckin(state, dayKey, data, at);
     if (data.gratitude) appendGratitude(state, data.gratitude, dayKey, at);
+    if (Array.isArray(data.pleasantThings)) {
+      data.pleasantThings.forEach((t) => appendGoodEvent(state, t, dayKey, at));
+    }
     const thought = payload.diaryThought ? String(payload.diaryThought).trim() : "";
     if (thought) {
       diaryEntry = buildTelegramDiaryEntry(thought, data, dayKey);

@@ -128,9 +128,31 @@ async function sendMidday(chatId) {
   });
 }
 
-async function sendEvening(chatId) {
-  await sendMessage(chatId, TEXT.eveningPrompt, {
-    replyMarkup: { inline_keyboard: [moodRow("eve")] }
+async function startEveningFlow(store, user, chatId) {
+  const settings = user.settings;
+  const bot_state = user.bot_state;
+  const dayKey = todayKeyInTz(settings.timezone);
+  bot_state.pendingFlow = newFlow("evening", dayKey, {
+    step: "pleasant1",
+    data: { pleasantThings: [] },
+    awaitingText: true
+  });
+  bot_state.pendingFlow.expiresAt = Date.now() + 30 * 60 * 1000;
+  await saveUser(store, user.email, settings, bot_state);
+  await sendMessage(chatId, TEXT.eveningPrompt, { replyMarkup: cancelKeyboard() });
+  await promptEveningPleasant(store, user, chatId, 1);
+}
+
+async function promptEveningPleasant(store, user, chatId, n) {
+  const flow = user.bot_state.pendingFlow;
+  if (!flow) return;
+  flow.step = `pleasant${n}`;
+  flow.awaitingText = true;
+  flow.expiresAt = Date.now() + 30 * 60 * 1000;
+  await saveUser(store, user.email, user.settings, user.bot_state);
+  const prompts = [TEXT.eveningPleasant1, TEXT.eveningPleasant2, TEXT.eveningPleasant3];
+  await sendMessage(chatId, prompts[n - 1], {
+    replyMarkup: n === 3 ? skipOrCancelKeyboard() : cancelKeyboard()
   });
 }
 
@@ -142,7 +164,7 @@ async function startRitualFlow(store, user, chatId, ritual) {
   await saveUser(store, user.email, settings, bot_state);
   if (ritual === "morning") await sendMorning(chatId);
   else if (ritual === "midday") await sendMidday(chatId);
-  else if (ritual === "evening") await sendEvening(chatId);
+  else if (ritual === "evening") await startEveningFlow(store, user, chatId);
   else {
     await sendMessage(chatId, TEXT.nowPrompt, {
       replyMarkup: { inline_keyboard: [moodRow("now")] }
@@ -172,38 +194,6 @@ async function promptMorningGoal(store, user, chatId) {
   user.bot_state.pendingFlow.expiresAt = Date.now() + 30 * 60 * 1000;
   await saveUser(store, user.email, user.settings, user.bot_state);
   await sendMessage(chatId, TEXT.morningGoal, { replyMarkup: skipOrCancelKeyboard() });
-}
-
-async function promptEveningWin(store, user, chatId) {
-  user.bot_state.pendingFlow.step = "win";
-  user.bot_state.pendingFlow.awaitingText = true;
-  user.bot_state.pendingFlow.expiresAt = Date.now() + 30 * 60 * 1000;
-  await saveUser(store, user.email, user.settings, user.bot_state);
-  await sendMessage(chatId, TEXT.eveningWin, { replyMarkup: cancelKeyboard() });
-}
-
-async function promptEveningHard(store, user, chatId) {
-  user.bot_state.pendingFlow.step = "hard";
-  user.bot_state.pendingFlow.awaitingText = true;
-  user.bot_state.pendingFlow.expiresAt = Date.now() + 30 * 60 * 1000;
-  await saveUser(store, user.email, user.settings, user.bot_state);
-  await sendMessage(chatId, TEXT.eveningHard, { replyMarkup: skipOrCancelKeyboard() });
-}
-
-async function promptEveningGratitude(store, user, chatId) {
-  user.bot_state.pendingFlow.step = "gratitude";
-  user.bot_state.pendingFlow.awaitingText = true;
-  user.bot_state.pendingFlow.expiresAt = Date.now() + 30 * 60 * 1000;
-  await saveUser(store, user.email, user.settings, user.bot_state);
-  await sendMessage(chatId, TEXT.eveningGratitude, { replyMarkup: cancelKeyboard() });
-}
-
-async function promptEveningHelped(store, user, chatId) {
-  user.bot_state.pendingFlow.step = "helped";
-  user.bot_state.pendingFlow.awaitingText = true;
-  user.bot_state.pendingFlow.expiresAt = Date.now() + 30 * 60 * 1000;
-  await saveUser(store, user.email, user.settings, user.bot_state);
-  await sendMessage(chatId, TEXT.eveningHelped, { replyMarkup: skipOrCancelKeyboard() });
 }
 
 async function finishMoodFlow(store, user, chatId, ritual, moodKey) {
@@ -290,14 +280,7 @@ async function afterMoodAnswer(store, user, ritual, moodKey, chatId) {
   }
 
   if (ritual === "evening") {
-    bot_state.pendingFlow = newFlow("evening", dayKey, { step: "win", data });
-    await saveUser(store, user.email, settings, bot_state);
-    try {
-      await store.syncRitualToUserData(user.email, dayKey, ritual, data);
-    } catch (err) {
-      console.error("syncRitualToUserData mood failed", err && err.message ? err.message : err);
-    }
-    await promptEveningWin(store, user, chatId);
+    await startEveningFlow(store, user, chatId);
     return;
   }
 
@@ -396,31 +379,19 @@ async function handleFlowText(store, user, chatId, text) {
   }
 
   if (flow.kind === "evening") {
-    if (step === "win") {
-      if (!value) {
-        await sendMessage(chatId, "Напиши хоча б щось маленьке, що вдалося 🌿");
+    const pleasantStep = /^pleasant(\d)$/.exec(step);
+    if (pleasantStep) {
+      const n = Number(pleasantStep[1]);
+      if (!value && n === 1) {
+        await sendMessage(chatId, "Напиши хоча б одну приємну річ 🌿");
         return true;
       }
-      flow.data.win = value;
-      await promptEveningHard(store, user, chatId);
-      return true;
-    }
-    if (step === "hard") {
-      if (value) flow.data.hard = value;
-      await promptEveningGratitude(store, user, chatId);
-      return true;
-    }
-    if (step === "gratitude") {
-      if (!value) {
-        await sendMessage(chatId, "Напиши за що ти вдячний(на) 🌿");
+      if (!flow.data.pleasantThings) flow.data.pleasantThings = [];
+      if (value) flow.data.pleasantThings.push(value);
+      if (n < 3) {
+        await promptEveningPleasant(store, user, chatId, n + 1);
         return true;
       }
-      flow.data.gratitude = value;
-      await promptEveningHelped(store, user, chatId);
-      return true;
-    }
-    if (step === "helped") {
-      if (value) flow.data.helped = value;
       flow.awaitingText = false;
       await saveUser(store, user.email, user.settings, bot_state);
       await saveRitualAndFinish(store, user, chatId, null);
@@ -512,11 +483,8 @@ async function handleFlowSkip(store, user, chatId) {
   }
 
   if (flow.kind === "evening") {
-    if (flow.step === "hard") {
-      await promptEveningGratitude(store, user, chatId);
-      return;
-    }
-    if (flow.step === "helped") {
+    const pleasantStep = /^pleasant(\d)$/.exec(flow.step);
+    if (pleasantStep && Number(pleasantStep[1]) === 3) {
       flow.awaitingText = false;
       await saveUser(store, user.email, user.settings, user.bot_state);
       await saveRitualAndFinish(store, user, chatId, null);
@@ -940,7 +908,7 @@ async function runRitualCron(store) {
 
     if (settings.evening.enabled && settings.evening.days.includes(day) &&
         !log.evening?.sent && timeWithinWindow(time, settings.evening.time)) {
-      await sendEvening(chatId);
+      await startEveningFlow(store, user, chatId);
       log.evening = { sent: true, sentAt: new Date().toISOString() };
       changed = true;
       sent++;
@@ -962,5 +930,5 @@ module.exports = {
   nowInTz,
   sendMorning,
   sendMidday,
-  sendEvening
+  startEveningFlow
 };

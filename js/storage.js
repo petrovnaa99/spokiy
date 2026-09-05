@@ -245,6 +245,9 @@ window.Store = (function () {
 
   function anxietyOfWellbeing(entry) {
     if (!entry || typeof entry.level !== "number") return null;
+    if (entry.scale === "wellbeing") {
+      return Math.max(1, Math.min(10, Math.round(11 - entry.level)));
+    }
     if (entry.source === "telegram" && entry.scale !== "anxiety") {
       return Math.max(1, Math.min(10, Math.round(11 - entry.level)));
     }
@@ -1289,12 +1292,13 @@ window.Store = (function () {
     },
     removeFriendNote(id) { state.friendNotes = (state.friendNotes || []).filter(x => x.id !== id); persist(); },
 
-    setWellbeing(level, date) {
+    setWellbeing(level, date, opts) {
       const iso = date || new Date().toISOString();
       const d = new Date(iso);
       const dayKey = Number.isNaN(d.getTime()) ? String(iso).slice(0, 10) : dayKeyLocal(d);
       if (!state.wellbeing || Array.isArray(state.wellbeing)) state.wellbeing = {};
-      state.wellbeing[dayKey] = { level: +level, date: iso, scale: "anxiety" };
+      const scale = (opts && opts.scale) || "wellbeing";
+      state.wellbeing[dayKey] = { level: +level, date: iso, scale };
       this.markCheckin(iso);
       persist();
       // Перша оцінка стану за день (повторні зміни шкали не дають прогресу).

@@ -25,9 +25,11 @@ module.exports = async (req, res) => {
     admin = false;
   }
   res.setHeader("Cache-Control", "private, max-age=30");
+  const { mailConfigured } = require("./_mail");
   return res.status(200).json({
     ok: true,
     googleClientId: process.env.GOOGLE_CLIENT_ID || "",
+    emailCodeEnabled: mailConfigured(),
     admin
   });
 };

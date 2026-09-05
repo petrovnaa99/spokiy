@@ -1,0 +1,15 @@
+﻿{
+  "name": "Sпокій — щоденник стану",
+  "short_name": "Sпокій",
+  "description": "Особистий щоденник стану: записи, check-in, SOS і динаміка.",
+  "start_url": "/?source=pwa",
+  "display": "standalone",
+  "background_color": "#f0a878",
+  "theme_color": "#0c2e24",
+  "lang": "uk",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/favicon.png", "sizes": "64x64", "type": "image/png" }
+  ]
+}

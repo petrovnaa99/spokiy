@@ -1,4 +1,4 @@
-/* Спокій — основна логіка додатку */
+/* Sпокій — основна логіка додатку */
 (function () {
   const C = window.CONTENT;
   const S = window.Store;
@@ -218,8 +218,74 @@
 
   /* ===================== Модальні вікна ===================== */
   let pendingAfterModal = null;
+  let promptSheetOnOpen = null;
+  let promptSheetOnSkip = null;
+
+  function isCompactUI() {
+    return window.matchMedia("(max-width: 640px)").matches;
+  }
+
+  function closePromptSheet(reason) {
+    const root = $("#prompt-sheet");
+    if (!root || root.classList.contains("hidden")) return;
+    root.classList.add("hidden");
+    root.innerHTML = "";
+    root.onclick = null;
+    const openFn = promptSheetOnOpen;
+    const skipFn = promptSheetOnSkip;
+    promptSheetOnOpen = null;
+    promptSheetOnSkip = null;
+    if (reason === "open" && typeof openFn === "function") openFn();
+    else if (reason === "skip" && typeof skipFn === "function") skipFn();
+  }
+
+  /** Компактна шторка: «Відкрити» / «Пропустити» (не на весь екран). */
+  function showPromptSheet(opts) {
+    const root = $("#prompt-sheet");
+    if (!root || !opts) return false;
+    const modal = $("#modal-root");
+    if (modal && !modal.classList.contains("hidden") && modal.innerHTML.trim()) return false;
+    if (!root.classList.contains("hidden") && root.innerHTML.trim()) return false;
+
+    promptSheetOnOpen = opts.onOpen || null;
+    promptSheetOnSkip = opts.onSkip || null;
+    const title = opts.title || "Sпокій";
+    const text = opts.text || "";
+    const openLabel = opts.openLabel || "Відкрити";
+    const skipLabel = opts.skipLabel || "Пропустити";
+    root.innerHTML = `<div class="prompt-sheet" role="dialog" aria-modal="true" aria-labelledby="prompt-sheet-title">
+      <div class="prompt-sheet-handle" aria-hidden="true"></div>
+      <p class="prompt-sheet-eyebrow">Sпокій</p>
+      <h2 id="prompt-sheet-title">${esc(title)}</h2>
+      <p class="prompt-sheet-text">${esc(text)}</p>
+      <div class="prompt-sheet-actions">
+        <button type="button" class="btn btn-primary" data-prompt-open>${esc(openLabel)}</button>
+        <button type="button" class="btn btn-ghost" data-prompt-skip>${esc(skipLabel)}</button>
+      </div>
+    </div>`;
+    root.classList.remove("hidden");
+    genderizeDOM(root);
+    root.onclick = (e) => { if (e.target === root) closePromptSheet("skip"); };
+    const openBtn = root.querySelector("[data-prompt-open]");
+    const skipBtn = root.querySelector("[data-prompt-skip]");
+    if (openBtn) openBtn.onclick = () => closePromptSheet("open");
+    if (skipBtn) skipBtn.onclick = () => closePromptSheet("skip");
+    return true;
+  }
+
+  function dismissWellbeingToday() {
+    if (!S.state.settings) S.state.settings = {};
+    if (!S.state.settings.wellbeingDismiss) S.state.settings.wellbeingDismiss = {};
+    S.state.settings.wellbeingDismiss[todayKey()] = true;
+    S.save();
+  }
+
+  function isWellbeingPromptDismissed() {
+    return !!(S.state.settings && S.state.settings.wellbeingDismiss && S.state.settings.wellbeingDismiss[todayKey()]);
+  }
 
   function openModal(html) {
+    closePromptSheet("dismiss");
     const root = $("#modal-root");
     root.innerHTML = `<div class="modal" style="position:relative">${html}<button class="modal-x" data-close>×</button></div>`;
     root.classList.remove("hidden");
@@ -440,17 +506,17 @@
       {
         key: mobile ? "bn-home" : "nav-home",
         title: "Сьогодні",
-        text: "Головна дня: деревце, ритуали й швидкі кроки турботи."
+        text: "Головна дня: SOS, запис, ритуали й наступний крок догляду."
       },
       {
         key: "music",
         title: "Музика",
-        text: "Смуга вгорі: рекомендована пісня. «Слухати» — знайти на YouTube."
+        text: "Смуга вгорі: рекомендована пісня. «Слухати» — знайти на YouTube. Увімкнути можна в профілі."
       },
       {
         key: "mood",
         title: "Настрій",
-        text: "Блок «Як ти зараз?»: стан дня, підказки й продовження маленьким кроком."
+        text: "«Як ти зараз?» — стан дня й дві головні дії: SOS або запис."
       },
       {
         key: mobile ? "bn-sos" : "nav-sos",
@@ -495,6 +561,9 @@
         title: "Конфіденційність і FAQ",
         text: "Політика та FAQ — у профілі й у розділі «Інформація»."
       });
+    }
+    if (!(S.state.settings && S.state.settings.showMusicOnHome)) {
+      return steps.filter((s) => s.key !== "music");
     }
     return steps;
   }
@@ -707,14 +776,16 @@
 
   function paymentContentHTML(opts) {
     const pay = C.PAYMENT || {};
+    const legal = C.LEGAL || {};
     const compact = !!(opts && opts.compact);
     const plans = Array.isArray(pay.plans) ? pay.plans : [];
     const payUrl = (pay.payUrl || "").trim();
+    const supportUrl = (pay.supportUrl || "").trim();
     return `
       ${compact ? "" : `<p class="muted" style="margin:0 0 14px;line-height:1.55">${esc(pay.intro || "")}</p>`}
       <div class="payment-plans">
         ${plans.map((p) => `
-          <article class="payment-plan">
+          <article class="payment-plan ${p.highlight ? "payment-plan--pro" : ""} ${p.id === "b2b" ? "payment-plan--b2b" : ""}">
             <div class="payment-plan-top">
               <h3>${esc(p.name || "")}</h3>
               ${p.badge ? `<span class="payment-badge">${esc(p.badge)}</span>` : ""}
@@ -728,8 +799,13 @@
             </ul>
           </article>`).join("")}
       </div>
-      ${pay.requisites ? `<div class="payment-requisites"><b>Як оплатити / підтримати</b><p>${esc(pay.requisites)}</p></div>` : ""}
-      ${payUrl ? `<a class="btn btn-primary btn-block" id="payment-pay-link" href="${esc(payUrl)}" target="_blank" rel="noopener noreferrer">${esc(pay.payLabel || "Перейти до оплати")}</a>` : ""}
+      ${pay.b2bHint ? `<p class="payment-b2b-hint">${esc(pay.b2bHint)}</p>` : ""}
+      ${pay.requisites ? `<div class="payment-requisites"><b>Як оплатити</b><p>${esc(pay.requisites)}</p></div>` : ""}
+      <div class="payment-cta-row">
+        ${payUrl ? `<a class="btn btn-primary btn-block" id="payment-pay-link" href="${esc(payUrl)}" target="_blank" rel="noopener noreferrer">${esc(pay.payLabel || "Оформити Pro")}</a>` : `<button type="button" class="btn btn-primary btn-block" id="payment-pro-soon">Pro 99 грн/міс — незабаром (після підключення еквайрингу)</button>`}
+        ${supportUrl ? `<a class="btn btn-ghost btn-block" id="payment-support-link" href="${esc(supportUrl)}" target="_blank" rel="noopener noreferrer">${esc(pay.supportLabel || "Добровільна підтримка")}</a>` : ""}
+      </div>
+      <p class="faint" style="margin:10px 0 0;font-size:12.5px"><a href="${esc(legal.offerUrl || "/offer")}" target="_blank" rel="noopener">Публічна оферта</a> · <a href="${esc(legal.privacyUrl || "/privacy")}" target="_blank" rel="noopener">Конфіденційність</a></p>
       ${pay.note ? `<p class="payment-note">${esc(pay.note)}</p>` : ""}
       ${pay.contactHint ? `<p class="faint" style="margin:8px 0 0;font-size:12.5px;line-height:1.45">${esc(pay.contactHint)}</p>` : ""}
     `;
@@ -745,6 +821,8 @@
       <div class="row" style="justify-content:flex-end;margin-top:14px">
         <button type="button" class="btn btn-ghost btn-sm" data-close>Закрити</button>
       </div>`);
+    const soon = $("#payment-pro-soon");
+    if (soon) soon.onclick = () => toast("Еквайринг Pro підключимо після оформлення юрособи (WayForPay/LiqPay). Поки можна підтримати банкою або написати на email.", "good", 7000);
   }
 
   function openPrivacyInfo() {
@@ -803,6 +881,8 @@
       <button class="btn btn-ghost btn-sm" id="payment-back" type="button" style="margin-top:12px">← Назад до інформації</button>`;
     const back = $("#payment-back");
     if (back) back.onclick = () => go("info");
+    const soon = $("#payment-pro-soon");
+    if (soon) soon.onclick = () => toast("Еквайринг Pro підключимо після оформлення юрособи (WayForPay/LiqPay).", "good", 6500);
   }
 
   function viewPrivacy() {
@@ -899,12 +979,12 @@
           const map = {
             message_too_short: "Напиши трохи докладніше",
             message_too_long: "Повідомлення задовге",
-            db_missing: "Сервер ще не готовий прийняти відгук. Напиши пізніше або на email підтримки.",
+            db_missing: "Таблиця відгуків ще не створена. У Supabase → SQL Editor виконай supabase/site_feedback.sql, потім онови сторінку.",
             db_error: "Не вдалося зберегти. Спробуй ще раз.",
             offline: "Потрібен інтернет і вхід в акаунт",
             network: "Немає з’єднання"
           };
-          toast(map[res.error] || "Не вдалося надіслати", "warn");
+          toast(map[res.error] || "Не вдалося надіслати", "warn", res.error === "db_missing" ? 8000 : 4200);
           return;
         }
         if ($("#fb-message")) $("#fb-message").value = "";
@@ -1023,9 +1103,12 @@
       const box = $("#admin-feedback-list");
       if (!box) return;
       if (!fb.ok) {
-        box.innerHTML = `<p class="faint" style="font-size:12.5px;line-height:1.45">
+        box.innerHTML = `<p class="faint" style="font-size:12.5px;line-height:1.55">
           ${fb.error === "db_missing"
-            ? "Таблиця site_feedback ще не створена в Supabase. Запусти supabase/site_feedback.sql."
+            ? `Таблиця <code>site_feedback</code> ще не створена.<br>
+               1) Відкрий <a href="https://supabase.com/dashboard/project/vickrdzztxwrrngaqcrn/sql/new" target="_blank" rel="noopener">SQL Editor</a><br>
+               2) Встав SQL з <code>supabase/site_feedback.sql</code> і натисни <b>Run</b><br>
+               3) Повернись сюди й натисни «Оновити».`
             : "Не вдалося завантажити відгуки (" + esc(fb.error || "помилка") + ")."}
         </p>`;
         return;
@@ -1092,12 +1175,38 @@
   function toggleTheme() {
     applyTheme(currentTheme() === "dark" ? "light" : "dark");
     refreshSongBar();
+    mountTopbarExtras();
   }
-  function themeToggleHTML() {
+  function themeToggleHTML(compact) {
     const dark = currentTheme() === "dark";
-    return `<button class="theme-toggle" id="theme-toggle" title="Змінити тему">
-      <span class="tt-ico">${dark ? "☀️" : "🌙"}</span><span>${dark ? "День" : "Ніч"}</span>
+    const cls = compact ? "theme-toggle theme-toggle--compact" : "theme-toggle";
+    const id = compact ? "topbar-theme-toggle" : "theme-toggle";
+    return `<button class="${cls}" id="${id}" title="Змінити тему" type="button">
+      <span class="tt-ico">${dark ? "☀️" : "🌙"}</span>${compact ? "" : `<span>${dark ? "День" : "Ніч"}</span>`}
     </button>`;
+  }
+
+  function mountTopbarExtras() {
+    const topbar = $(".topbar");
+    if (!topbar) return;
+    let extras = $("#topbar-extras");
+    if (!extras) {
+      const profile = $("#topbar-profile");
+      extras = document.createElement("div");
+      extras.id = "topbar-extras";
+      extras.className = "topbar-extras";
+      if (profile) topbar.insertBefore(extras, profile);
+      else topbar.appendChild(extras);
+    }
+    extras.innerHTML = themeToggleHTML(true);
+    const tg = $("#topbar-theme-toggle");
+    if (tg) tg.onclick = toggleTheme;
+  }
+
+  function shouldShowSongBar() {
+    if (route === "recoverySelect") return false;
+    if (route === "home") return !!(S.state.settings && S.state.settings.showMusicOnHome);
+    return true;
   }
 
   /* ===================== МУЗИКА НАСТРОЮ ===================== */
@@ -1162,6 +1271,11 @@
   function mountSongBar() {
     const view = $("#view");
     if (!view) return;
+    mountTopbarExtras();
+    if (!shouldShowSongBar()) {
+      $$(".song-bar", view).forEach((el) => el.remove());
+      return;
+    }
     const bars = $$(".song-bar", view);
     if (bars.length) {
       bars.slice(1).forEach((el) => el.remove());
@@ -1296,7 +1410,7 @@
   function applyGo(r, param = null) {
     const prevRoute = route;
     route = r; routeParam = param;
-    const title = ROUTE_TITLES[r] || NAV.find(n => n.id === r)?.label || "Спокій";
+    const title = ROUTE_TITLES[r] || NAV.find(n => n.id === r)?.label || "Sпокій";
     $("#topbar-title").textContent = uiText(genderize(title));
     syncRecoveryGateChrome();
     renderNav();
@@ -1327,14 +1441,90 @@
       .sort((a, b) => Date.parse(b.archivedAt || b.updatedAt || 0) - Date.parse(a.archivedAt || a.updatedAt || 0));
   }
 
-  /** Тривога 1–10 з wellbeing (сайт). Telegram раніше писав mood×2 — нормалізуємо. */
+  /** Тривога 1–10 з wellbeing. scale wellbeing: 10 = добре → тривога низька. */
   function wellbeingAnxiety(wbEntry) {
     if (!wbEntry || typeof wbEntry.level !== "number") return null;
+    if (wbEntry.scale === "wellbeing") {
+      return Math.max(1, Math.min(10, 11 - wbEntry.level));
+    }
     if (wbEntry.source === "telegram" && wbEntry.scale !== "anxiety") {
       // legacy: mood×2 (більше = краще) → anxiety
       return Math.max(1, Math.min(10, 11 - wbEntry.level));
     }
     return wbEntry.level;
+  }
+
+  /** Підпис для шкали «стан сьогодні»: 1 — дуже важко, 10 — дуже добре. */
+  function wellbeingStateLabel(level) {
+    if (level >= 9) return "дуже добре";
+    if (level >= 7) return "добре";
+    if (level >= 5) return "нейтрально";
+    if (level >= 3) return "важко";
+    return "дуже важко";
+  }
+
+  function wellbeingUiLevel(wbEntry) {
+    if (!wbEntry || typeof wbEntry.level !== "number") return null;
+    if (wbEntry.scale === "wellbeing") return wbEntry.level;
+    return Math.max(1, Math.min(10, 11 - wbEntry.level));
+  }
+
+  function formatWellbeingSummary(wbEntry) {
+    const ui = wellbeingUiLevel(wbEntry);
+    if (ui == null) return null;
+    return `Сьогодні ${ui}/10 · ${wellbeingStateLabel(ui)}`;
+  }
+
+  function wellbeingCheckModalHTML(idAttr) {
+    const attr = idAttr || "data-care-well";
+    const scale = Array.from({ length: 10 }, (_, i) =>
+      `<button class="well-btn" type="button" ${attr}="${i + 1}">${i + 1}</button>`).join("");
+    return `
+      <h2>Оціни свій стан сьогодні ${uiText("🌿")}</h2>
+      <p class="muted" style="margin:0 0 14px;line-height:1.55">
+        <b>1</b> — дуже важко, <b>10</b> — дуже добре. Без правильних відповідей — лише як ти зараз.
+      </p>
+      <div class="well-scale">${scale}</div>
+      <div class="row spread" style="margin-top:8px;color:var(--ink-faint);font-size:12px;font-weight:700">
+        <span>1 · дуже важко</span><span>10 · дуже добре</span>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost btn-sm" data-close type="button">Пізніше</button>
+      </div>`;
+  }
+
+  function openLowWellbeingFollowUp() {
+    openModal(`
+      <h2>Дякую за чесність 🌿</h2>
+      <p class="muted" style="margin:0 0 14px;line-height:1.55">
+        ${isMale()
+          ? "Коли стан низький, не треба одразу все розбирати. Що зараз допоможе більше?"
+          : "Коли стан низький, не треба одразу все розбирати. Що зараз допоможе більше?"}
+      </p>
+      <div class="stack" style="gap:8px">
+        <button class="btn btn-primary btn-block" id="wb-low-sos" type="button">SOS — подихати разом</button>
+        <button class="btn btn-ghost btn-block" id="wb-low-diary" type="button">Записати, що турбує</button>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost btn-sm" data-close type="button">Пізніше</button>
+      </div>`);
+    const sos = $("#wb-low-sos");
+    if (sos) sos.onclick = () => { closeModal(); startCalm("quick"); };
+    const diary = $("#wb-low-diary");
+    if (diary) diary.onclick = () => { closeModal(); go("new"); };
+  }
+
+  function handleWellbeingAnswer(uiLevel) {
+    S.setWellbeing(uiLevel, null, { scale: "wellbeing" });
+    closeModal();
+    render();
+    if (uiLevel <= 5) {
+      setTimeout(openLowWellbeingFollowUp, 280);
+    } else if (uiLevel >= 8) {
+      toast(uiText("Гарний стан. Можна зафіксувати щось приємне сьогодні 🙂"), "good");
+    } else {
+      toast("Записано. Один маленький крок сьогодні — вже достатньо", "good");
+    }
   }
 
   /** Унікальні дні з активністю: запис, оцінка стану, ритуал (сайт/Telegram) або check-in */
@@ -1621,7 +1811,7 @@
 
   function wireWellbeingCard() {
     $$(".well-btn", $("#view")).forEach(b => b.onclick = () => {
-      S.setWellbeing(+b.dataset.well);
+      S.setWellbeing(+b.dataset.well, null, { scale: "anxiety" });
       render();
     });
     const types = $("#well-types"); if (types) types.onclick = () => go("types");
@@ -1853,67 +2043,61 @@
     const stageId = rec.recoveryStage || 1;
     const practice = dailyPracticeStatus();
     const stageDesc = stage && stage.description ? stage.description : "";
-    const nextHint = todayNextStepHint(practice);
+    const next = practice.items.find((x) => !x.done);
     return `
-      <section class="recovery-home recovery-home--${tone}" aria-label="Внутрішнє деревце відновлення">
-        <p class="recovery-home-greet">${esc(greeting)}</p>
-        <p class="recovery-home-soft">${esc(soft)}</p>
-        <div class="recovery-home-art" data-recovery-art="1" aria-hidden="true">${recoverySymbolSvg(symbol.id, {
-          stage: stageId,
-          style: symbol.visualStyle,
-          animate: true
-        })}</div>
-        <p class="recovery-home-plant">Твоє деревце</p>
-        <p class="recovery-home-stage">Етап · ${esc(stageName)}</p>
-        ${stageDesc ? `<p class="recovery-home-stage-desc">${esc(stageDesc)}</p>` : ""}
-        <p class="recovery-home-msg">${esc(message)}</p>
-        <div class="practice-today" aria-label="Рекомендований догляд на сьогодні">
-          <div class="practice-today-head">
-            <span>Догляд сьогодні · ${practice.doneCount}/${practice.total}</span>
-            <button type="button" class="practice-today-guide" id="practice-guide-btn">Путівник</button>
+      <section class="recovery-home recovery-home--compact recovery-home--${tone}" aria-label="Внутрішнє деревце відновлення">
+        <div class="recovery-home-compact-row">
+          <div class="recovery-home-art recovery-home-art--sm" data-recovery-art="1" aria-hidden="true">${recoverySymbolSvg(symbol.id, {
+            stage: stageId,
+            style: symbol.visualStyle,
+            animate: true
+          })}</div>
+          <div class="recovery-home-compact-text">
+            <p class="recovery-home-greet">${esc(greeting)}</p>
+            <p class="recovery-home-soft recovery-home-soft--inline">${esc(soft)}</p>
+            <p class="recovery-home-stage-compact">Етап · ${esc(stageName)} · ${practice.doneCount}/${practice.total}</p>
           </div>
-          ${nextHint ? `<p class="practice-today-next">${esc(nextHint)}</p>` : ""}
-          <div class="practice-today-chips">
-            ${practice.items.map((item) => `
-              <button type="button" class="practice-chip ${item.done ? "is-done" : ""}" data-practice="${esc(item.id)}" title="${esc(item.desc)}">
-                <i>${item.done ? "✓" : "○"}</i>
-                <span>${esc(practiceChipLabel(item))}</span>
-              </button>`).join("")}
-          </div>
-          <p class="practice-today-note">Рекомендовано, не обов’язково. Деревце росте від турботи в твоєму темпі.</p>
         </div>
-        <button type="button" class="btn recovery-home-care" id="recovery-care-btn">Подбати про себе</button>
+        ${next
+          ? `<button type="button" class="btn btn-primary btn-block today-next-step" id="today-next-step">${esc(practiceChipLabel(next))} — наступний крок</button>`
+          : `<p class="recovery-home-done-note">Сьогодні догляд повний. Можна просто побути з собою.</p>`}
+        <details class="recovery-home-more">
+          <summary>Догляд і деревце</summary>
+          <div class="recovery-home-more-body">
+            ${stageDesc ? `<p class="recovery-home-stage-desc">${esc(stageDesc)}</p>` : ""}
+            <p class="recovery-home-msg">${esc(message)}</p>
+            <div class="practice-today" aria-label="Догляд на сьогодні">
+              <div class="practice-today-head">
+                <span>Кроки догляду</span>
+                <button type="button" class="practice-today-guide" id="practice-guide-btn">Путівник</button>
+              </div>
+              <div class="practice-today-chips">
+                ${practice.items.map((item) => `
+                  <button type="button" class="practice-chip ${item.done ? "is-done" : ""}" data-practice="${esc(item.id)}" title="${esc(item.desc)}">
+                    <i>${item.done ? "✓" : "○"}</i>
+                    <span>${esc(practiceChipLabel(item))}</span>
+                  </button>`).join("")}
+              </div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm recovery-home-care" id="recovery-care-btn">Ще способи подбати про себе</button>
+          </div>
+        </details>
       </section>`;
   }
 
+  function homeNextStepFallbackHTML() {
+    const rec = S.getRecovery();
+    if (rec.recoverySymbolId) return "";
+    const practice = dailyPracticeStatus();
+    const next = practice.items.find((x) => !x.done);
+    if (!next) return "";
+    return `<button type="button" class="btn btn-primary btn-block today-next-step" id="today-next-step">${esc(practiceChipLabel(next))} — наступний крок</button>`;
+  }
+
   function openWellbeingCheck() {
-    const scale = Array.from({ length: 10 }, (_, i) =>
-      `<button class="well-btn" type="button" data-care-well="${i + 1}">${i + 1}</button>`).join("");
-    openModal(`
-      <h2>Як ти зараз? ${uiText("🌿")}</h2>
-      <p class="muted" style="margin:0 0 14px;line-height:1.55">
-        Оціни свій рівень тривоги: <b>1</b> — спокійно, <b>10</b> — напруга на максимумі.
-        Без оцінок і правильних відповідей — лише чесний замір стану.
-      </p>
-      <div class="well-scale">${scale}</div>
-      <div class="row spread" style="margin-top:8px;color:var(--ink-faint);font-size:12px;font-weight:700">
-        <span>1 · спокій</span><span>10 · максимум</span>
-      </div>
-      <div class="row" style="justify-content:flex-end;margin-top:14px">
-        <button class="btn btn-ghost btn-sm" data-close type="button">Пізніше</button>
-      </div>`);
+    openModal(wellbeingCheckModalHTML("data-care-well"));
     $$("#modal-root [data-care-well]").forEach(b => b.onclick = () => {
-      const v = +b.dataset.careWell;
-      S.setWellbeing(v);
-      closeModal();
-      render();
-      if (v >= 7) {
-        confirmModal(uiText("Дякую за чесність 🌿"),
-          "Не треба нічого розбирати одразу. Можна почати з короткої дихальної практики.",
-          () => startCalm("quick"), "Так, дихати");
-      } else {
-        toast("Записано. Сьогодні достатньо навіть одного кроку", "good");
-      }
+      handleWellbeingAnswer(+b.dataset.careWell);
     });
   }
 
@@ -1926,7 +2110,7 @@
       { id: "diary", title: "Записати думки", desc: "Рекомендовано · один рядок уже має значення" },
       { id: "breath", title: "Дихальна практика", desc: "Рекомендовано · м’яке заспокоєння тіла" },
       { id: "gratitude", title: isMale() ? "Записати вдячність" : "Записати вдячність", desc: "Рекомендовано · за що ти сьогодні вдячний / вдячна" },
-      { id: "well", title: "Перевірити свій стан", desc: "За бажанням · короткий замір напруги" },
+      { id: "well", title: "Перевірити свій стан", desc: "За бажанням · 1 — дуже важко, 10 — дуже добре" },
       { id: "good", title: "Додати хороший момент дня", desc: "За бажанням · зафіксувати щось тепле" },
       { id: "past", title: "Повернутися до минулої тривоги", desc: "За бажанням · чи справдилася вона" }
     ];
@@ -1966,12 +2150,9 @@
   }
 
   function viewHome() {
-    const routeInfo = monthRouteInfo();
     const lastEntry = activeEntries()[0] || null;
     const unfinished = lastUnfinishedTask();
     const week = weekDynamics();
-    const tip = randomAff();
-    const supportCount = selfSupportMomentsCount();
     const todayWell = S.todayWellbeing();
     const pend = pendingReminders();
 
@@ -1991,24 +2172,16 @@
     }
 
     const sub = todayWell
-      ? `Сьогодні ${todayWell.level}/10 · ${wellbeingLabel(todayWell.level)}`
+      ? formatWellbeingSummary(todayWell)
       : (isMale() ? "Без тиску. Один крок за раз." : "Достатньо одного маленького кроку до себе.");
-
-    const careBanner = window.Rituals ? `
-        <div class="care-banner">
-          <span class="care-banner-ico">🌿</span>
-          <div class="care-banner-text">${esc(Rituals.careMessage())}</div>
-        </div>` : "";
 
     const ritualCard = window.Rituals ? Rituals.homeRitualCardHTML() : "";
     const recoveryBlock = recoveryHomeBlockHTML();
+    const nextFallback = homeNextStepFallbackHTML();
 
     $("#view").innerHTML = `
       <div class="today-page">
         ${alert}
-        ${careBanner}
-        ${ritualCard}
-        ${recoveryBlock}
         <header class="today-head" data-tour="mood">
           <h1>Як ти зараз?</h1>
           <p>${esc(sub)}</p>
@@ -2019,61 +2192,60 @@
             <span class="ta-ico">SOS</span><span class="ta-title">Мені тривожно зараз</span>
           </button>
           <button class="today-action" id="ta-diary" type="button">
-            <span class="ta-ico">+</span><span class="ta-title">Зробити запис дня</span>
-          </button>
-          <button class="today-action" id="ta-situation" type="button">
-            <span class="ta-ico">⌁</span><span class="ta-title">Розібрати ситуацію</span>
+            <span class="ta-ico">+</span><span class="ta-title">Зробити запис</span>
           </button>
         </div>
 
-        <div class="today-blocks">
-          <div class="today-tile">
-            <div class="today-tile-label">Місячний маршрут</div>
-            <div class="today-tile-main">День ${routeInfo.day} з ${routeInfo.daysInMonth}</div>
-            <div class="bar today-bar"><i style="width:${routeInfo.pct}%"></i></div>
-            <div class="today-tile-meta">${routeInfo.monthDays} ${pluralUk(routeInfo.monthDays, "день", "дні", "днів")} із записами</div>
-          </div>
+        ${ritualCard}
+        ${recoveryBlock}
+        ${nextFallback}
 
-          <div class="today-tile">
-            <div class="today-tile-label">Останній запис</div>
-            ${lastEntry
-              ? `<div class="today-tile-main today-tile-clamp">${esc((lastEntry.fear || "").slice(0, 80))}</div>
-                 <div class="today-tile-meta">${fmtDate(lastEntry.createdAt)} · ${lastEntry.anxiety ? lastEntry.anxiety + "/10" : "запис"}</div>`
-              : `<div class="today-tile-main muted">Ще немає записів</div><div class="today-tile-meta">Почни з одного рядка про страх</div>`}
+        <details class="today-more">
+          <summary>Ще сьогодні</summary>
+          <div class="today-more-body">
+            <div class="today-blocks today-blocks--compact">
+              ${lastEntry
+                ? `<button type="button" class="today-tile is-clickable" id="tile-last">
+                    <div class="today-tile-label">Останній запис</div>
+                    <div class="today-tile-main today-tile-clamp">${esc((lastEntry.fear || "").slice(0, 80))}</div>
+                    <div class="today-tile-meta">${fmtDate(lastEntry.createdAt)}</div>
+                  </button>`
+                : `<div class="today-tile">
+                    <div class="today-tile-label">Останній запис</div>
+                    <div class="today-tile-main muted">Ще немає</div>
+                    <div class="today-tile-meta">Достатньо одного рядка</div>
+                  </div>`}
+              ${unfinished
+                ? `<button type="button" class="today-tile is-clickable" id="tile-unfinished">
+                    <div class="today-tile-label">${esc(unfinished.title)}</div>
+                    <div class="today-tile-main today-tile-clamp">${esc(unfinished.text)}</div>
+                  </button>`
+                : ""}
+              <div class="today-tile today-tile-wide">
+                <div class="today-tile-label">Стан за 7 днів</div>
+                ${weekBarsHTML(week)}
+              </div>
+            </div>
+            <div class="today-more-actions">
+              <button class="btn btn-ghost btn-sm" id="ta-situation" type="button">⌁ Розібрати ситуацію</button>
+              <button class="btn btn-ghost btn-sm" data-route="analytics" type="button">∿ Моя динаміка</button>
+            </div>
           </div>
-
-          <div class="today-tile">
-            <div class="today-tile-label">Незавершена вправа</div>
-            ${unfinished
-              ? `<div class="today-tile-main today-tile-clamp">${esc(unfinished.title)}</div>
-                 <div class="today-tile-meta today-tile-clamp">${esc(unfinished.text)}</div>`
-              : `<div class="today-tile-main muted">Немає незавершеного</div><div class="today-tile-meta">Можна відпочити або зробити новий крок</div>`}
-          </div>
-
-          <div class="today-tile today-tile-wide">
-            <div class="today-tile-label">Стан за 7 днів</div>
-            ${weekBarsHTML(week)}
-          </div>
-
-          <div class="today-tile">
-            <div class="today-tile-label">${isMale() ? "Підказка дня" : "Персональна підказка"}</div>
-            <p class="today-tip">${esc(tip)}</p>
-          </div>
-
-          <div class="today-tile">
-            <div class="today-tile-label">Моменти самопідтримки</div>
-            <div class="today-tile-main today-tile-num">${supportCount}</div>
-            <div class="today-tile-meta">завершених кроків і опор</div>
-          </div>
-        </div>
-
-        <button class="btn btn-primary btn-block today-continue" id="today-continue" type="button">Продовжити</button>
+        </details>
       </div>`;
 
     $("#ta-sos").onclick = () => startCalm("quick");
     $("#ta-diary").onclick = () => go("new");
-    $("#ta-situation").onclick = () => startCalm("full");
-    $("#today-continue").onclick = continueHomeAction;
+    const taSit = $("#ta-situation");
+    if (taSit) taSit.onclick = () => startCalm("full");
+    const nextBtn = $("#today-next-step");
+    if (nextBtn) {
+      nextBtn.onclick = () => {
+        const practice = dailyPracticeStatus();
+        const next = practice.items.find((x) => !x.done);
+        if (next) openPracticeStep(next.id);
+      };
+    }
     const careBtn = $("#recovery-care-btn");
     if (careBtn) careBtn.onclick = openRecoveryCareMenu;
     const guideBtn = $("#practice-guide-btn");
@@ -2086,14 +2258,10 @@
       RecoveryArt.bindPress(homeArt);
       RecoveryArt.observeVisibility(homeArt);
     }
-    if (unfinished) {
-      const tiles = $$(".today-tile", $("#view"));
-      if (tiles[2]) { tiles[2].classList.add("is-clickable"); tiles[2].onclick = unfinished.action; }
-    }
-    if (lastEntry) {
-      const tiles = $$(".today-tile", $("#view"));
-      if (tiles[1]) { tiles[1].classList.add("is-clickable"); tiles[1].onclick = () => go("history"); }
-    }
+    const tileLast = $("#tile-last");
+    if (tileLast) tileLast.onclick = () => go("history");
+    const tileUnfin = $("#tile-unfinished");
+    if (tileUnfin && unfinished) tileUnfin.onclick = unfinished.action;
     $$("[data-route]", $("#view")).forEach(b => b.onclick = () => go(b.dataset.route));
     const dr = $("#dismiss-red");
     if (dr) dr.onclick = () => { S.state.settings.dismissedRedFlag = todayKey(); S.save(); render(); };
@@ -2101,25 +2269,39 @@
   }
 
   function viewSupport() {
-    const links = [
-      { route: "resources", icon: "◌", title: "Мої ресурси", desc: "Що допомагає заспокоїтися" },
-      { route: "friend", icon: "✉", title: isMale() ? "Лист другові" : "Порада подрузі", desc: "Погляд на ситуацію з теплом" },
-      { route: "gratitude", icon: "∴", title: isMale() ? "За що я вдячний" : "За що я вдячна", desc: "Короткі нотатки опори" },
-      { route: "joys", icon: "◇", title: "Мої радощі", desc: "Книги, музика, прогулянки" },
-      { route: "treasure", icon: "□", title: "Скарбничка", desc: "Теплі слова та перемоги" },
-      { route: "evidence", icon: "✓", title: "Банк доказів", desc: "Страхи, що не справдилися" },
-      { route: "library", icon: "§", title: "Бібліотека", desc: "Короткі статті про тривогу" },
-      { route: "types", icon: "⌁", title: "Типи тривоги", desc: "М'які тести та розбір" }
+    const groups = [
+      {
+        title: "Заспокоїтися",
+        links: [
+          { route: "resources", icon: "◌", title: "Мої ресурси", desc: "Що допомагає заспокоїтися" },
+          { route: "types", icon: "⌁", title: "Типи тривоги", desc: "М'які тести та розбір" },
+          { route: "library", icon: "§", title: "Бібліотека", desc: "Короткі статті про тривогу" }
+        ]
+      },
+      {
+        title: "Записати і згадати",
+        links: [
+          { route: "friend", icon: "✉", title: isMale() ? "Лист другові" : "Порада подрузі", desc: "Погляд на ситуацію з теплом" },
+          { route: "gratitude", icon: "∴", title: isMale() ? "За що я вдячний" : "За що я вдячна", desc: "Короткі нотатки опори" },
+          { route: "joys", icon: "◇", title: "Мої радощі", desc: "Книги, музика, прогулянки" },
+          { route: "treasure", icon: "□", title: "Скарбничка", desc: "Теплі слова та перемоги" },
+          { route: "evidence", icon: "✓", title: "Банк доказів", desc: "Страхи, що не справдилися" }
+        ]
+      }
     ];
     $("#view").innerHTML = `
       <div class="page-head"><h1>Опора</h1><p>Практики та інструменти, які допомагають повернутися до спокою.</p></div>
-      <div class="support-grid">
-        ${links.map(l => `
-          <button class="support-link" type="button" data-route="${l.route}">
-            <span class="support-ico">${l.icon}</span>
-            <span class="support-body"><b>${esc(l.title)}</b><span>${esc(l.desc)}</span></span>
-          </button>`).join("")}
-      </div>`;
+      ${groups.map(g => `
+        <div class="support-group">
+          <h2 class="support-group-title">${esc(g.title)}</h2>
+          <div class="support-grid">
+            ${g.links.map(l => `
+              <button class="support-link" type="button" data-route="${l.route}">
+                <span class="support-ico">${l.icon}</span>
+                <span class="support-body"><b>${esc(l.title)}</b><span>${esc(l.desc)}</span></span>
+              </button>`).join("")}
+          </div>
+        </div>`).join("")}`;
     $$("[data-route]", $("#view")).forEach(b => b.onclick = () => go(b.dataset.route));
   }
 
@@ -2220,17 +2402,28 @@
       }
       toast(uiText("Деревце з тобою. Це твій перший крок 🌿"), "good");
       go("home");
-      if (shouldShowWelcome()) {
-        openWelcomeFeatures({ thenOnboarding: true, thenPracticeGuide: true });
-      } else if (shouldShowTour()) {
-        startSiteTour({ thenWellbeing: true, thenPracticeGuide: true });
-      } else {
-        startOnboarding();
-        setTimeout(() => runAfterModal(openPracticeGuide), 900);
-      }
+      maybeShowWelcomeOrOnboard();
     };
     const guide = $("#plant-guide");
     if (guide) guide.onclick = () => openPracticeGuide();
+    const skip = document.createElement("button");
+    skip.type = "button";
+    skip.className = "btn btn-ghost";
+    skip.style.marginTop = "8px";
+    skip.textContent = "Пропустити наразі";
+    skip.id = "plant-skip";
+    const hero = $(".recovery-plant-hero", $("#view"));
+    if (hero && !$("#plant-skip")) {
+      hero.appendChild(skip);
+      skip.onclick = () => {
+        if (!S.selectRecoverySymbol(plantId)) {
+          // навіть якщо збереження не вдалось — не блокуємо вхід у щоденник
+          try { S.state.profile.recoverySymbolId = plantId; S.save(); } catch (e) {}
+        }
+        go("home");
+        maybeShowWelcomeOrOnboard();
+      };
+    }
   }
 
   /* ===================== ТИПИ ТРИВОЖНОСТІ ===================== */
@@ -2907,6 +3100,20 @@
           <button class="crisis-close" id="crisis-close">×</button>
         </div>
 
+        <div class="crisis-card crisis-help-card">
+          <h3>${esc((C.CRISIS_HELP && C.CRISIS_HELP.title) || "Кризовий пакет")}</h3>
+          <div class="sub" style="margin-bottom:8px">${esc((C.CRISIS_HELP && C.CRISIS_HELP.lead) || "")}</div>
+          <div class="crisis-hotlines">
+            ${((C.CRISIS_HELP && C.CRISIS_HELP.hotlines) || []).map((h) => `
+              <a class="crisis-hotline" href="tel:${esc(h.phone)}">
+                <b>${esc(h.phone)}</b>
+                <span>${esc(h.name)}</span>
+                <small>${esc(h.note || "")}</small>
+              </a>`).join("")}
+          </div>
+          <div class="sub" style="margin-top:10px">${esc((C.CRISIS_HELP && C.CRISIS_HELP.disclaimer) || "")}</div>
+        </div>
+
         <div class="crisis-card">
           <h3>🫁 ${C.BREATHING.name}</h3>
           <div class="sub">${C.BREATHING.desc}</div>
@@ -3161,24 +3368,27 @@
   function viewGoodEvents() {
     const events = S.state.goodEvents || [];
     const today = S.todayWellbeing();
-    const goodDesc = isMale()
-      ? "Це твій банк приємних фактів. У тривожні періоди він нагадує: хороше теж стається, навіть якщо мозок тимчасово фокусується на загрозах."
-      : "Це твоя колекція приємних фактів. У тривожні періоди вона нагадує: хороше теж стається, навіть якщо мозок тимчасово фокусується на загрозах.";
     const goodPrompt = isMale()
       ? "Наприклад: була нормальна прогулянка, добре поговорив, почув класну пісню..."
       : "Наприклад: була гарна прогулянка, добре поговорила, почула класну пісню...";
     $("#view").innerHTML = `
-      <div class="page-head"><h1>Хороші події</h1>
-        <p>${goodDesc}</p></div>
+      <div class="page-head"><h1>Приємні речі дня</h1>
+        <p>Вечірнє нагадування просить написати 3 приємні речі — вони зберігаються тут і виділені в аналітиці. У тривожні періоди цей список нагадує: хороше теж стається.</p></div>
 
       <div class="grid grid-2">
         <div class="card">
-          <div class="card-title">Додати подію сьогодні</div>
-          <p class="muted">Якщо день гарний — зроби його ще кращим: поміть маленьку приємність, цікаву розмову, добрий жест, смачну каву, прогулянку чи будь-яку теплу деталь.</p>
-          <label class="field" style="margin-top:12px"><span>Що приємного або цікавого сталося?</span>
-            <textarea id="good-text" rows="3" placeholder="${esc(goodPrompt)}"></textarea></label>
+          <div class="card-title">3 приємні речі сьогодні</div>
+          <p class="muted">Можна одразу три поля — як у вечірньому ритуалі. Навіть дрібниці мають значення.</p>
+          <div class="evening-pleasant-fields" style="margin-top:12px">
+            <label class="field"><span>1.</span><input class="quick-input" id="good-text-1" placeholder="${esc(goodPrompt)}" /></label>
+            <label class="field"><span>2.</span><input class="quick-input" id="good-text-2" placeholder="Ще одна приємна деталь…" /></label>
+            <label class="field"><span>3.</span><input class="quick-input" id="good-text-3" placeholder="І третя — за бажанням" /></label>
+          </div>
           <div class="row" style="justify-content:space-between;margin-top:12px;gap:10px">
-            ${today ? `<span class="pill ${today.level >= 7 ? "pill-red" : today.level <= 4 ? "pill-green" : "pill-warn"}">Самопочуття: ${today.level}/10</span>` : `<span class="faint">Сьогодні ще немає оцінки самопочуття</span>`}
+            ${today ? (() => {
+              const ui = wellbeingUiLevel(today);
+              return `<span class="pill ${ui <= 5 ? "pill-red" : ui >= 8 ? "pill-green" : "pill-warn"}">Стан: ${ui}/10 · ${esc(wellbeingStateLabel(ui))}</span>`;
+            })() : `<span class="faint">Сьогодні ще немає оцінки стану</span>`}
             <button class="btn btn-primary btn-sm" id="good-save">Зберегти</button>
           </div>
         </div>
@@ -3198,10 +3408,12 @@
       </div>`;
 
     $("#good-save").onclick = () => {
-      const text = $("#good-text").value.trim();
-      if (!text) { toast("Опиши приємну подію", "warn"); return; }
-      S.addGoodEvent(text);
-      toast("Хорошу подію збережено 🙂", "good");
+      const texts = [1, 2, 3]
+        .map((n) => ($(`#good-text-${n}`) && $(`#good-text-${n}`).value || "").trim())
+        .filter(Boolean);
+      if (!texts.length) { toast("Напиши хоча б одну приємну річ", "warn"); return; }
+      texts.forEach((t) => S.addGoodEvent(t));
+      toast(texts.length > 1 ? `Збережено ${texts.length} приємні речі 🙂` : "Приємну річ збережено 🙂", "good");
       render();
     };
     $$("[data-del-good]", $("#view")).forEach(b => b.onclick = () => {
@@ -3455,7 +3667,7 @@
     const cat = C.CALM.categories.find(c => c.id === calmState.category) || C.CALM.categories[0];
     calmShell(`
       <div class="crisis-card">
-        <h3>💚 Спокійний погляд</h3>
+        <h3>💚 Sпокійний погляд</h3>
         <p style="font-size:20px;line-height:1.5;font-family:var(--font-hand)">${esc(cat.conclusion)}</p>
       </div>
       <div class="row" style="justify-content:center;gap:10px">
@@ -3671,11 +3883,42 @@
     return `<div class="card analytics-banner analytics-span-12">
       <span class="analytics-banner-ico">📊</span>
       <div class="analytics-banner-text">
-        <b>Недостатньо даних</b>
-        <span>Створи ${needText} у щоденнику або відміть стан у Telegram — з’явиться аналітика.</span>
+        <b>Тут з’явиться твоя динаміка</b>
+        <span>Зроби ${needText} — check-in на головній, запис у щоденнику або ритуал. Потім побачиш графік і закономірності.</span>
       </div>
-      <button class="btn btn-primary btn-sm" id="analytics-new">Новий запис</button>
+      <button class="btn btn-primary btn-sm" id="analytics-new">Зробити запис</button>
     </div>`;
+  }
+
+  function analyticsPleasantThingsCard() {
+    const tk = todayKey();
+    const all = S.state.goodEvents || [];
+    const todayEvents = all.filter((e) => e.dayKey === tk);
+    const weekAgo = Date.now() - 7 * 86400000;
+    const weekCount = all.filter((e) => {
+      const t = new Date(e.date || (e.dayKey + "T12:00:00")).getTime();
+      return !Number.isNaN(t) && t >= weekAgo;
+    }).length;
+    const filled = todayEvents.length;
+    const target = 3;
+
+    return `
+      <div class="card analytics-card analytics-pleasant analytics-span-12" id="analytics-pleasant">
+        <div class="card-title">✨ Приємні речі дня</div>
+        <p class="analytics-week-sub">Сюди потрапляють 3 приємні речі з вечірнього нагадування — і будь-які записи з розділу «Хороші події».</p>
+        <div class="analytics-pleasant-progress">
+          <span class="analytics-pleasant-count">${filled}/${target}</span>
+          <span class="faint">сьогодні</span>
+        </div>
+        ${todayEvents.length
+          ? `<ol class="analytics-pleasant-list">${todayEvents.slice(0, 3).map((e) => `<li>${esc(e.text)}</li>`).join("")}</ol>`
+          : `<p class="analytics-none">Сьогодні ще порожньо. Ввечері нагадаємо: «Напиши 3 приємні речі, які сьогодні відбулися».</p>`}
+        <div class="row analytics-pleasant-actions">
+          <button class="btn btn-primary btn-sm" id="pleasant-evening" type="button">Записати 3 речі</button>
+          <button class="btn btn-ghost btn-sm" data-route="good" type="button">Усі приємні події (${all.length})</button>
+        </div>
+        ${weekCount ? `<p class="faint analytics-pleasant-week">За 7 днів: ${weekCount} ${pluralUk(weekCount, "запис", "записи", "записів")}</p>` : ""}
+      </div>`;
   }
 
   function analyticsWeek7Card(week7) {
@@ -3805,6 +4048,7 @@
       bodyHTML = `<div class="card analytics-card analytics-span-12"><p class="analytics-none">Не вдалося зібрати блок ритуалів. Інші показники нижче.</p></div>`;
     }
     bodyHTML += analyticsWeek7Card(week7);
+    bodyHTML = analyticsPleasantThingsCard() + bodyHTML;
     if (!enoughRecords || (tgStats.marks > 0 && diaryCount < 3 && dayKeys.length < 2)) {
       bodyHTML = analyticsNoticeBanner(diaryCount, tgStats) + bodyHTML;
     }
@@ -3856,6 +4100,13 @@
 
     const rt = $("#retake"); if (rt) rt.onclick = startTest;
     const nb = $("#analytics-new"); if (nb) nb.onclick = () => go("new");
+    const pe = $("#pleasant-evening");
+    if (pe) {
+      pe.onclick = () => {
+        if (window.Rituals && Rituals.openEvening) Rituals.openEvening();
+        else go("good");
+      };
+    }
     const me = $("#metric-entries"); if (me) me.onclick = () => go("history");
     $$("[data-route]", $("#view")).forEach(b => b.onclick = () => go(b.dataset.route));
 
@@ -4132,6 +4383,14 @@
         <button class="btn btn-ghost btn-sm" id="open-tour" type="button" style="margin-top:8px">Пройти навчання</button>
       </div>
 
+      <div class="card">
+        <div class="card-title">🎛 Інтерфейс</div>
+        <label class="profile-pref">
+          <input type="checkbox" id="pref-music-home"${S.state.settings.showMusicOnHome ? " checked" : ""} />
+          <div><b>Показувати музику на головній</b><span>Рекомендована пісня вгорі екрана «Сьогодні»</span></div>
+        </label>
+      </div>
+
       ${S.isAdminEmail(p.email) || (window.SPOKIY_CONFIG && window.SPOKIY_CONFIG.admin) ? `
       <div class="card">
         <div class="card-title">🛠 Адмін-панель</div>
@@ -4188,6 +4447,15 @@
     if (openPriv) openPriv.onclick = () => go("privacy");
     const openTour = $("#open-tour");
     if (openTour) openTour.onclick = () => startSiteTour({ force: true });
+    const musicHome = $("#pref-music-home");
+    if (musicHome) {
+      musicHome.onchange = () => {
+        S.state.settings.showMusicOnHome = musicHome.checked;
+        S.save();
+        refreshSongBar();
+        toast(musicHome.checked ? "Музика на головній увімкнена 🎶" : "Музика на головній прихована", "good");
+      };
+    }
     const openAdm = $("#open-admin");
     if (openAdm) openAdm.onclick = () => go("admin");
     $("#del-all").onclick = () => confirmModal("Видалити всі дані?", "Профіль і всі записи буде видалено назавжди.", () => {
@@ -4298,8 +4566,8 @@
     const evHtml = S.state.evidence.map(x=>`<div class="it"><b>Страх:</b> ${esc(x.fear)}<br><b>Реальність:</b> ${esc(x.realResult)}<br>${x.conclusion?`<b>Висновок:</b> ${esc(x.conclusion)}`:""}</div>`).join("") || "<p>—</p>";
     const enHtml = activeEntries().map(x=>`<div class="it"><div class="d">${fmtDateTime(x.createdAt)} · ${x.type==="letter"?"Лист":"Тривога "+(x.anxiety||"–")+"/10"}</div>${esc(x.fear)}${x.review?`<br><i>Підсумок: ${x.review.cameTrue==="no"?"страх не справдився":x.review.cameTrue==="partly"?"справдився частково":"справдився"}. ${esc(x.review.whatHappened||"")}</i>`:""}</div>`).join("") || "<p>—</p>";
     const shHtml = shadowedEntries().map(x=>`<div class="it"><div class="d">${fmtDateTime(x.createdAt)} · тінь</div>${esc(x.fear)}</div>`).join("") || "<p>—</p>";
-    win.document.write(`<html><head><meta charset="utf-8"><title>Спокій — звіт</title><style>${style}</style></head><body>
-      <h1>🌿 Спокій — особистий звіт</h1>
+    win.document.write(`<html><head><meta charset="utf-8"><title>Sпокій — звіт</title><style>${style}</style></head><body>
+      <h1>🌿 Sпокій — особистий звіт</h1>
       <p class="d">${esc(p.name||"")} · ${esc(p.email)} · ${fmtDate(new Date().toISOString())}</p>
       <p>Активних днів: <b>${filledDays()}</b> · Серія: <b>${computeStreak()}</b> · Страхів не справдилось: <b>${S.state.evidence.length}</b></p>
       <h2>🛡️ Банк доказів</h2>${evHtml}
@@ -4416,10 +4684,20 @@
   }
 
   /* ===================== АВТОРИЗАЦІЯ ===================== */
+  function playBrandWrite() {
+    const el = document.querySelector("#sidebar .brand-name");
+    if (!el) return;
+    el.classList.remove("is-writing");
+    // Force reflow so the write animation can restart each time app opens.
+    void el.offsetWidth;
+    el.classList.add("is-writing");
+  }
+
   function showApp() {
     applyGenderTheme();
     $("#auth-screen").classList.add("hidden");
     $("#app").classList.remove("hidden");
+    playBrandWrite();
     renderNav();
     checkAchievements(true);
 
@@ -4439,55 +4717,41 @@
     }
     notifyReminders();
     handleDeepLinks();
-    if (window.Rituals) { Rituals.startReminderScheduler(); Rituals.requestPushPermission(); }
+    if (window.Rituals) { Rituals.startReminderScheduler(); }
   }
 
   function maybeShowWelcomeOrOnboard() {
     render();
-    if (shouldShowWelcome()) {
-      setTimeout(() => openWelcomeFeatures({ thenOnboarding: true }), 450);
-    } else if (shouldShowTour()) {
-      setTimeout(() => startSiteTour({ thenWellbeing: true }), 450);
-    } else {
-      startOnboarding();
-    }
+    // Лаконічний онбординг: без welcome-модалки й туру. Цінність — на лендінгу до входу.
+    try {
+      if (!S.state.settings) S.state.settings = {};
+      S.state.settings.welcomeSeen = true;
+      S.state.settings.tourSeen = true;
+      S.save();
+    } catch (e) {}
+    // Одна м’яка шторка check-in (або ритуал), без стеку вікон.
+    setTimeout(() => startOnboarding(), 500);
+  }
+
+  function openWellbeingOnboardingModal() {
+    openModal(wellbeingCheckModalHTML("data-onb-well"));
+    $$("#modal-root [data-onb-well]").forEach(b => b.onclick = () => {
+      handleWellbeingAnswer(+b.dataset.onbWell);
+    });
   }
 
   function startOnboarding() {
-    if (window.Rituals) Rituals.maybePrompt();
-    if (S.todayWellbeing()) return;
-    const scale = Array.from({ length: 10 }, (_, i) =>
-      `<button class="well-btn" data-onb-well="${i + 1}">${i + 1}</button>`).join("");
-    openModal(`
-      <h2>${isMale() ? "Як ти зараз, друже?" : "Як ти зараз?"} ${uiText("🌿")}</h2>
-      <p class="muted" style="margin:0 0 14px;line-height:1.55">
-        Оціни свій рівень тривоги просто зараз: <b>1</b> — спокійно, <b>10</b> — напруга на максимумі.
-        Це не тест і тут немає правильних відповідей — просто чесний замір стану.
-      </p>
-      <div class="well-scale">${scale}</div>
-      <div class="row spread" style="margin-top:8px;color:var(--ink-faint);font-size:12px;font-weight:700">
-        <span>1 · спокій</span><span>10 · максимум</span>
-      </div>
-      <div class="row" style="justify-content:flex-end;margin-top:14px">
-        <button class="btn btn-ghost btn-sm" data-close>Пізніше</button>
-      </div>`);
-    $$("#modal-root [data-onb-well]").forEach(b => b.onclick = () => {
-      const v = +b.dataset.onbWell;
-      S.setWellbeing(v);
-      closeModal();
-      render();
-      if (v >= 7) {
-        // Висока напруга: спершу стабілізація нервової системи, аналіз — потім.
-        confirmModal(uiText("Схоже, зараз непросто 🌿"),
-          isMale()
-            ? "Дякую за чесність. Не треба нічого розбирати просто зараз — спершу дамо тілу заспокоїтися. Хочеш коротку SOS-практику дихання?"
-            : "Дякую за чесність. Не треба нічого розбирати просто зараз — спершу дай тілу заспокоїтися. Хочеш коротку SOS-практику дихання?",
-          () => startCalm("quick"), "Так, заспокоїтись");
-      } else if (v <= 4) {
-        toast(uiText("Гарний стан. Зафіксуй щось хороше сьогодні 🙂"), "good");
-      } else {
-        toast("Записано. Один маленький крок сьогодні — вже достатньо", "good");
-      }
+    // Один автозапит за раз: спочатку ритуал (якщо час), інакше замір стану.
+    if (window.Rituals && Rituals.maybePrompt && Rituals.maybePrompt()) return;
+    if (S.todayWellbeing() || isWellbeingPromptDismissed()) return;
+
+    showPromptSheet({
+      title: "Оціни свій стан сьогодні",
+      text: "Шкала від 1 до 10: 1 — дуже важко, 10 — дуже добре. Без правильних відповідей.",
+      openLabel: "Оцінити",
+      skipLabel: "Пропустити",
+      onOpen: openWellbeingOnboardingModal,
+      onSkip: dismissWellbeingToday
     });
   }
 
@@ -4495,7 +4759,7 @@
   function notifyReminders() {
     const pend = pendingReminders();
     if (!pend.length || !("Notification" in window)) return;
-    const fire = () => new Notification(uiText("Спокій 🌿 — час відкрити запис"), {
+    const fire = () => new Notification(uiText("Sпокій 🌿 — час відкрити запис"), {
       body: `Настав день відкриття для ${pend.length} ${pluralUk(pend.length, "запису", "записів", "записів")}. Перевір, чи справдилися твої страхи.`,
       icon: isMale()
         ? "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='18' y='18' width='64' height='64' rx='12' fill='%233f6f8f'/><text x='50' y='62' text-anchor='middle' font-size='38' fill='white' font-family='Arial'>S</text></svg>"
@@ -4512,7 +4776,7 @@
     openModal(`
       <h2>Як мною користуватися</h2>
       <div class="landing-about-body">
-        <p class="muted">Я — «Спокій»: особистий простір самопідтримки, коли тривожно, важко або потрібно почути себе.</p>
+        <p class="muted">Я — «Sпокій»: особистий простір самопідтримки, коли тривожно, важко або потрібно почути себе.</p>
         <p class="muted">Можна зупинитися, розібрати стан і знайти невелику дію саме зараз. Без оцінок і без потреби писати багато.</p>
         <ul class="landing-about-points">
           <li>Короткі вправи на 1–5 хвилин</li>
@@ -4569,6 +4833,8 @@
       password_or_code_required: "Введи пароль або код",
       code_required: "Введи код з email",
       code_unavailable: "Вхід за кодом доступний лише онлайн",
+      email_not_configured: "Надсилання коду на пошту ще не налаштоване. Увійди паролем або через Google.",
+      email_send_failed: "Не вдалося надіслати лист. Перевір email або спробуй через кілька хвилин.",
       offline: "Потрібне з'єднання з інтернетом",
       invalid_google_token: "Не вдалося підтвердити Google-акаунт",
       credential_required: "Потрібен новий вхід через Google",
@@ -4618,12 +4884,36 @@
     syncAuthSwitchLabel();
   }
 
+  function rememberEmailKey() { return "spokiy:remember-email"; }
+
+  function loadRememberedEmail() {
+    try {
+      const saved = localStorage.getItem(rememberEmailKey());
+      const emailInput = $("#auth-email");
+      const cb = $("#auth-remember");
+      if (saved && emailInput) {
+        emailInput.value = saved;
+        if (cb) cb.checked = true;
+      }
+    } catch (e) {}
+  }
+
+  function persistRememberedEmail(email) {
+    const cb = $("#auth-remember");
+    try {
+      if (cb && cb.checked && email) localStorage.setItem(rememberEmailKey(), email);
+      else localStorage.removeItem(rememberEmailKey());
+    } catch (e) {}
+  }
+
   async function finishAuth(res) {
     if (!res.ok) {
       toast(authErrorText(res.error), "warn");
       if (res.devCode) toast("Код для розробки: " + res.devCode, "good");
       return false;
     }
+    const email = ($("#auth-email") && $("#auth-email").value || "").trim().toLowerCase();
+    persistRememberedEmail(email);
     showApp();
     return true;
   }
@@ -4669,16 +4959,72 @@
     }
   }
 
-  async function requestLoginCode() {
+  async function requestLoginCode(opts) {
+    const quietSwitch = opts && opts.quietSwitch;
     const email = ($("#auth-email") && $("#auth-email").value || "").trim().toLowerCase();
-    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("Спочатку введи email", "warn"); return; }
-    const res = await S.requestCode(email, "login");
-    if (!res.ok) { toast(authErrorText(res.error || "offline"), "warn"); return; }
-    loginUseCode = true;
-    updateLoginFields();
-    toast(res.devCode ? "Код надіслано (dev: " + res.devCode + ")" : "Код надіслано на email", "good");
-    const codeInput = $("#auth-code");
-    if (codeInput) codeInput.focus();
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("Спочатку введи email", "warn"); return false; }
+    const resendBtn = $("#auth-resend-code");
+    if (resendBtn) resendBtn.disabled = true;
+    try {
+      const res = await S.requestCode(email, "login");
+      if (!res.ok) {
+        toast(authErrorText(res.error || "offline"), "warn");
+        return false;
+      }
+      loginUseCode = true;
+      updateLoginFields();
+      persistRememberedEmail(email);
+      if (res.devCode) toast("Код надіслано (dev: " + res.devCode + ")", "good", 8000);
+      else toast(quietSwitch ? "Перевір пошту — надіслали 6-значний код" : "Код надіслано на email. Дійсний 10 хвилин.", "good", 6000);
+      const codeInput = $("#auth-code");
+      if (codeInput) {
+        codeInput.value = "";
+        codeInput.focus();
+      }
+      return true;
+    } finally {
+      if (resendBtn) resendBtn.disabled = false;
+    }
+  }
+
+  function wirePasswordToggles(root) {
+    const scope = root || document;
+    scope.querySelectorAll(".pw-toggle").forEach(btn => {
+      if (btn.dataset.wired === "1") return;
+      btn.dataset.wired = "1";
+      const toggle = (e) => {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        const id = btn.getAttribute("data-pw-target");
+        const input = id ? document.getElementById(id) : (btn.parentElement && btn.parentElement.querySelector("input"));
+        if (!input) return;
+        const show = input.type === "password";
+        input.type = show ? "text" : "password";
+        btn.setAttribute("aria-pressed", show ? "true" : "false");
+        btn.setAttribute("aria-label", show ? "Сховати пароль" : "Показати пароль");
+        btn.title = show ? "Сховати пароль" : "Показати пароль";
+        btn.classList.toggle("is-on", show);
+        const icoShow = btn.querySelector(".pw-ico-show");
+        const icoHide = btn.querySelector(".pw-ico-hide");
+        if (icoShow) icoShow.classList.toggle("hidden", show);
+        if (icoHide) icoHide.classList.toggle("hidden", !show);
+      };
+      // Only stopPropagation — preventDefault on pointerdown can cancel click.
+      btn.addEventListener("pointerdown", (e) => { e.stopPropagation(); });
+      btn.addEventListener("click", toggle);
+    });
+  }
+
+  function passwordFieldHTML(id, placeholder, autocomplete) {
+    return `<div class="field-password">
+      <input id="${id}" type="password" placeholder="${esc(placeholder)}" autocomplete="${esc(autocomplete)}" />
+      <button type="button" class="pw-toggle" data-pw-target="${id}" aria-label="Показати пароль" title="Показати пароль" aria-pressed="false">
+        <svg class="pw-ico-show" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/></svg>
+        <svg class="pw-ico-hide hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 3l18 18M10.5 10.6a3.2 3.2 0 0 0 4 4M9.4 5.5A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a18.6 18.6 0 0 1-3.2 3.9M6.2 6.7C3.9 8.4 2 12 2 12a18.5 18.5 0 0 0 6.1 5.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>`;
   }
 
   function openForgotPassword() {
@@ -4687,17 +5033,26 @@
       <p class="muted" style="margin:0 0 14px">Надішлемо код на email. Потім задай новий пароль.</p>
       <label class="field"><span>Email</span><input id="fp-email" type="email" value="${esc(email)}" autocomplete="email" /></label>
       <label class="field"><span>Код з email</span><input id="fp-code" type="text" inputmode="numeric" maxlength="6" placeholder="6 цифр" /></label>
-      <label class="field"><span>Новий пароль</span><input id="fp-password" type="password" autocomplete="new-password" placeholder="Мінімум 6 символів" /></label>
+      <div class="field"><label for="fp-password"><span>Новий пароль</span></label>${passwordFieldHTML("fp-password", "Мінімум 6 символів", "new-password")}</div>
       <div class="row spread" style="margin-top:16px;gap:8px;flex-wrap:wrap">
         <button class="btn btn-ghost" type="button" id="fp-send">Надіслати код</button>
         <button class="btn btn-primary" type="button" id="fp-save">Зберегти пароль</button>
       </div>`);
+    wirePasswordToggles($("#modal-root") || document);
     $("#fp-send").onclick = async () => {
       const em = ($("#fp-email") && $("#fp-email").value || "").trim().toLowerCase();
       if (!em) { toast("Введи email", "warn"); return; }
-      const res = await S.requestCode(em, "reset");
-      if (!res.ok) { toast(authErrorText(res.error || "offline"), "warn"); return; }
-      toast(res.devCode ? "Код (dev): " + res.devCode : "Код надіслано", "good");
+      const btn = $("#fp-send");
+      if (btn) btn.disabled = true;
+      try {
+        const res = await S.requestCode(em, "reset");
+        if (!res.ok) { toast(authErrorText(res.error || "offline"), "warn"); return; }
+        toast(res.devCode ? "Код (dev): " + res.devCode : "Код надіслано на email. Дійсний 10 хвилин.", "good", 6000);
+        const codeEl = $("#fp-code");
+        if (codeEl) codeEl.focus();
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     };
     $("#fp-save").onclick = async () => {
       const em = ($("#fp-email") && $("#fp-email").value || "").trim().toLowerCase();
@@ -4731,6 +5086,8 @@
     }
     const aboutBtn = $("#landing-about");
     if (aboutBtn) aboutBtn.onclick = openLandingAbout;
+    const landingSos = $("#landing-sos");
+    if (landingSos) landingSos.onclick = () => openQuickCalm();
     const landingPay = $("#landing-payment");
     if (landingPay) landingPay.onclick = openPaymentInfo;
 
@@ -4746,11 +5103,32 @@
     const forgotBtn = $("#auth-forgot");
     if (forgotBtn) forgotBtn.onclick = openForgotPassword;
 
+    wirePasswordToggles();
+    loadRememberedEmail();
+    const rememberCb = $("#auth-remember");
+    if (rememberCb) {
+      rememberCb.onchange = () => {
+        const email = ($("#auth-email") && $("#auth-email").value || "").trim().toLowerCase();
+        persistRememberedEmail(email);
+      };
+    }
+    const emailForRemember = $("#auth-email");
+    if (emailForRemember) {
+      emailForRemember.addEventListener("change", () => {
+        const email = (emailForRemember.value || "").trim().toLowerCase();
+        persistRememberedEmail(email);
+      });
+    }
+
     const useCodeBtn = $("#auth-use-code");
     if (useCodeBtn) useCodeBtn.onclick = async () => {
-      if (!loginUseCode) await requestLoginCode();
+      if (!loginUseCode) await requestLoginCode({ quietSwitch: true });
       else { loginUseCode = false; updateLoginFields(); }
     };
+    const resendBtn = $("#auth-resend-code");
+    if (resendBtn) resendBtn.onclick = () => requestLoginCode();
+    const codeInput = $("#auth-code");
+    if (codeInput) codeInput.addEventListener("keydown", onEnter);
 
     setAuthMode("login");
 
@@ -4833,10 +5211,17 @@
       if (box) {
         try {
           box.innerHTML = "";
+          const btnW = Math.max(
+            240,
+            Math.min(
+              400,
+              Math.floor((box.clientWidth || (box.parentElement && box.parentElement.clientWidth) || 280))
+            )
+          );
           google.accounts.id.renderButton(box, {
             theme: "outline",
             size: "large",
-            width: Math.min(320, Math.floor((box.parentElement && box.parentElement.clientWidth) || 320)),
+            width: btnW,
             text: "continue_with",
             shape: "pill",
             locale: "uk"
@@ -4904,6 +5289,9 @@
     maybeShowDomainMoveNotice();
     await loadPublicConfig();
     initAuth();
+    if ("serviceWorker" in navigator) {
+      try { navigator.serviceWorker.register("/sw.js"); } catch (e) {}
+    }
     if (window.Safeguard) {
       Safeguard.init({
         S, toast, openModal, closeModal, go, esc,
@@ -4921,7 +5309,13 @@
     }
     const scrim = $("#scrim");
     if (scrim) scrim.onclick = closeSidebar;
-    document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); closeCrisis(); if (calmState) closeCalm(); } });
+    document.addEventListener("keydown", e => {
+      if (e.key !== "Escape") return;
+      closePromptSheet("skip");
+      closeModal();
+      closeCrisis();
+      if (calmState) closeCalm();
+    });
 
     // Дані підтягнулися з бекенда (SQLite) — оновити інтерфейс «на льоту».
     window.addEventListener("spokiy:synced", () => {
@@ -4988,7 +5382,8 @@
     try {
       Rituals.init({
         S, $, $$, esc, genderize, uiText, isMale, pluralUk, daysBetween, todayKey,
-        openModal, closeModal, toast, confirmModal, go, startCalm
+        openModal, closeModal, toast, confirmModal, go, startCalm,
+        showPromptSheet, closePromptSheet
       });
     } catch (e) {
       console.warn("Rituals.init failed", e);

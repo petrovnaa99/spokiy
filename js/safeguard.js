@@ -1,6 +1,6 @@
 "use strict";
 /**
- * Offline-first захист даних «Спокій»:
+ * Offline-first захист даних «Sпокій»:
  * — durable чернетки (IndexedDB + fallback localStorage)
  * — автозбереження з debounce
  * — банер offline / sync

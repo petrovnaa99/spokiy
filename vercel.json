@@ -3,12 +3,26 @@
   "functions": {
     "api/**/*.js": { "maxDuration": 10 }
   },
+  "headers": [
+    {
+      "source": "/preview-plant-growth(.*)",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+    },
+    {
+      "source": "/manifest.webmanifest",
+      "headers": [{ "key": "Content-Type", "value": "application/manifest+json" }]
+    }
+  ],
   "redirects": [
     {
       "source": "/:path*",
       "has": [{ "type": "host", "value": "spokiy-2026.vercel.app" }],
       "destination": "https://spokiy.me/:path*",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/:path*",
@@ -21,8 +35,12 @@
     { "source": "/about", "destination": "/about.html" },
     { "source": "/faq", "destination": "/faq.html" },
     { "source": "/privacy", "destination": "/privacy.html" },
+    { "source": "/offer", "destination": "/offer.html" },
     { "source": "/blog", "destination": "/blog.html" },
-    { "source": "/blog/yak-zaspokoitisya-za-5-hvilyn", "destination": "/blog/yak-zaspokoitisya-za-5-hvilyn.html" }
+    { "source": "/blog/yak-zaspokoitisya-za-5-hvilyn", "destination": "/blog/yak-zaspokoitisya-za-5-hvilyn.html" },
+    { "source": "/blog/chomu-shchodennyk-stanu", "destination": "/blog/chomu-shchodennyk-stanu.html" },
+    { "source": "/blog/tryvoga-vnochi", "destination": "/blog/tryvoga-vnochi.html" },
+    { "source": "/blog/shchodennyk-i-terapiya", "destination": "/blog/shchodennyk-i-terapiya.html" }
   ],
   "crons": [
     {

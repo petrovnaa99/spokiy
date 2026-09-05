@@ -308,101 +308,119 @@ window.Rituals = (function () {
     });
   }
 
+  function persistPleasantThings(things) {
+    (things || []).forEach((t) => {
+      const text = (t || "").trim();
+      if (text && deps.S.addGoodEvent) deps.S.addGoodEvent(text);
+    });
+  }
+
   function openEvening() {
-    let draft = { mood: null, win: "", hard: "", gratitude: "", helped: "" };
-    let step = 1;
-    const totalSteps = 5;
+    const placeholders = [
+      "Напр.: смачна кава, посмішка, спокійна хвилина…",
+      "Напр.: прогулянка, гарна пісня, тепла розмова…",
+      "Напр.: щось маленьке, що підняло настрій…"
+    ];
+    deps.openModal(`
+      <div class="ritual-modal">
+        <div class="ritual-badge">🌙</div>
+        <h2>3 приємні речі дня</h2>
+        <p class="muted">Напиши 3 приємні речі, які сьогодні відбулися. Навіть дрібниці мають значення — вони потраплять у «Приємні речі дня» в аналітиці.</p>
+        <div class="evening-pleasant-fields">
+          ${[1, 2, 3].map((n) => `
+            <label class="field">
+              <span>${n}.</span>
+              <input class="quick-input" id="eve-pleasant-${n}" placeholder="${deps.esc(placeholders[n - 1])}" />
+            </label>`).join("")}
+        </div>
+        <div class="row spread" style="margin-top:18px">
+          <button class="btn btn-ghost btn-sm" id="eve-skip" type="button">Пізніше</button>
+          <button class="btn btn-primary btn-sm" id="eve-save" type="button">Зберегти</button>
+        </div>
+      </div>`);
 
-    function paint() {
-      let body = "";
-      if (step === 1) {
-        body = `<h2>Як минув день?</h2>${moodButtons(DAY_MOODS, "eve")}`;
-      } else if (step === 2) {
-        body = `<label class="field"><span>Що сьогодні вдалося?</span><input id="eve-win" class="quick-input" value="${deps.esc(draft.win)}" placeholder="Навіть щось маленьке..." /></label>`;
-      } else if (step === 3) {
-        body = `<label class="field"><span>Що сьогодні було найважчим?</span><input id="eve-hard" class="quick-input" value="${deps.esc(draft.hard)}" placeholder="Можна одним реченням" /></label>`;
-      } else if (step === 4) {
-        const g = gratitudePrompt("evening");
-        body = `
-          <div class="ritual-badge">∴</div>
-          <h2>${deps.esc(g.title)}</h2>
-          <p class="muted">${deps.esc(g.hint)}</p>
-          <label class="field" style="margin-top:10px">
-            <span>${deps.esc(g.label)}</span>
-            <textarea class="quick-input" id="eve-gratitude" rows="3" placeholder="${deps.esc(g.placeholder)}">${deps.esc(draft.gratitude)}</textarea>
-          </label>`;
-      } else {
-        body = `<label class="field"><span>Що допомогло тобі хоча б трохи?</span><input id="eve-help" class="quick-input" value="${deps.esc(draft.helped)}" placeholder="Прогулянка, музика, друг..." /></label>`;
+    deps.$("#eve-skip").onclick = () => { dismissToday("evening"); deps.closeModal(); };
+    deps.$("#eve-save").onclick = () => {
+      const filled = [1, 2, 3]
+        .map((n) => (deps.$(`#eve-pleasant-${n}`) && deps.$(`#eve-pleasant-${n}`).value || "").trim())
+        .filter(Boolean);
+      if (!filled.length) {
+        deps.toast("Напиши хоча б одну приємну річ", "warn");
+        const first = deps.$("#eve-pleasant-1");
+        if (first) first.focus();
+        return;
       }
-
+      persistPleasantThings(filled);
+      saveRitual("evening", { pleasantThings: filled });
+      deps.closeModal();
+      const thanks = deps.isMale()
+        ? "Дякую ❤️\nЗаписи вже в розділі «Приємні речі дня»."
+        : "Дякую ❤️\nЗаписи вже в розділі «Приємні речі дня».";
       deps.openModal(`
-        <div class="ritual-modal">${body}
-          <div class="row spread" style="margin-top:18px">
-            <button class="btn btn-ghost btn-sm" id="eve-skip">Пізніше</button>
-            ${step > 1 ? `<button class="btn btn-ghost btn-sm" id="eve-back">←</button>` : "<span></span>"}
-            ${step < totalSteps
-              ? `<button class="btn btn-primary btn-sm" id="eve-next" ${step === 1 && !draft.mood ? "disabled" : ""}>Далі</button>`
-              : `<button class="btn btn-primary btn-sm" id="eve-save">Зберегти</button>`}
-          </div>
+        <div style="text-align:center;padding:8px 4px">
+          <p style="font-size:22px;line-height:1.45;font-family:var(--font-hand);margin:0;white-space:pre-line">${deps.esc(thanks)}</p>
+        </div>
+        <div class="row" style="justify-content:center;margin-top:14px">
+          <button class="btn btn-primary" data-close>Дякую 🌿</button>
         </div>`);
+    };
+    const first = deps.$("#eve-pleasant-1");
+    if (first) setTimeout(() => first.focus(), 60);
+  }
 
-      deps.$("#eve-skip").onclick = () => { dismissToday("evening"); deps.closeModal(); };
-      const back = deps.$("#eve-back"); if (back) back.onclick = () => { step--; paint(); };
+  function peekAutoPrompt() {
+    if (!deps || !deps.S.isAuthed()) return null;
+    ensureState();
+    if (shouldShowMorning()) return "morning";
+    if (shouldShowEvening()) return "evening";
+    if (shouldShowMidday()) return "midday";
+    return null;
+  }
 
-      if (step === 1) {
-        deps.$$("[data-eve]", deps.$("#modal-root")).forEach((b) => b.onclick = () => {
-          draft.mood = b.dataset.eve;
-          step = 2;
-          paint();
-        });
-      } else if (step === 2) {
-        deps.$("#eve-next").onclick = () => { draft.win = deps.$("#eve-win").value.trim(); step = 3; paint(); };
-      } else if (step === 3) {
-        deps.$("#eve-next").onclick = () => { draft.hard = deps.$("#eve-hard").value.trim(); step = 4; paint(); };
-      } else if (step === 4) {
-        const inp = deps.$("#eve-gratitude");
-        deps.$("#eve-next").onclick = () => {
-          draft.gratitude = (inp && inp.value || "").trim();
-          if (!draft.gratitude) {
-            deps.toast(deps.isMale()
-              ? "Це важливе заповнення — напиши, за що ти вдячний"
-              : "Це важливе заповнення — напиши, за що ти вдячна", "warn");
-            if (inp) inp.focus();
-            return;
-          }
-          step = 5;
-          paint();
-        };
-      } else {
-        deps.$("#eve-save").onclick = () => {
-          draft.helped = deps.$("#eve-help").value.trim();
-          persistGratitudeNote(draft.gratitude, "evening");
-          saveRitual("evening", draft);
-          deps.closeModal();
-          const thanks = deps.isMale()
-            ? "Дякую ❤️\nТи вже зробив маленький крок для себе."
-            : "Дякую ❤️\nТи вже зробила маленький крок для себе.";
-          deps.openModal(`
-            <div style="text-align:center;padding:8px 4px">
-              <p style="font-size:22px;line-height:1.45;font-family:var(--font-hand);margin:0;white-space:pre-line">${deps.esc(thanks)}</p>
-            </div>
-            <div class="row" style="justify-content:center;margin-top:14px">
-              <button class="btn btn-primary" data-close>Дякую 🌿</button>
-            </div>`);
-        };
+  function offerRitualPrompt(kind) {
+    const map = {
+      morning: {
+        title: "Ранковий ритуал",
+        text: "Доброго ранку. Як ти сьогодні? Коротке заповнення — близько хвилини.",
+        open: openMorning
+      },
+      midday: {
+        title: "Як зараз твій стан?",
+        text: "Швидкий check-in посеред дня — без оцінок і довгих текстів.",
+        open: openMidday
+      },
+      evening: {
+        title: "Вечірній ритуал",
+        text: "Напиши 3 приємні речі, які сьогодні відбулися — вони збережуться в аналітиці.",
+        open: openEvening
       }
+    };
+    const item = map[kind];
+    if (!item) return;
+    if (deps.showPromptSheet) {
+      const shown = deps.showPromptSheet({
+        title: item.title,
+        text: item.text,
+        openLabel: "Відкрити",
+        skipLabel: "Пропустити",
+        onOpen: item.open,
+        onSkip: () => dismissToday(kind)
+      });
+      if (shown) return;
     }
-    paint();
+    item.open();
   }
 
   function maybePrompt() {
-    if (!deps || !deps.S.isAuthed()) return;
+    if (!deps || !deps.S.isAuthed()) return false;
     ensureState();
+    const kind = peekAutoPrompt();
+    if (!kind) return false;
     setTimeout(() => {
-      if (shouldShowMorning()) openMorning();
-      else if (shouldShowEvening()) openEvening();
-      else if (shouldShowMidday()) openMidday();
+      if (peekAutoPrompt() !== kind) return;
+      offerRitualPrompt(kind);
     }, 600);
+    return true;
   }
 
   function careDayKeys() {
@@ -475,7 +493,9 @@ window.Rituals = (function () {
         }
       });
       if (day.morning && day.morning.worry) worries.push(day.morning.worry);
-      if (day.evening && day.evening.helped) helped.push(day.evening.helped);
+      if (day.evening && Array.isArray(day.evening.pleasantThings)) {
+        day.evening.pleasantThings.forEach((t) => { if (t) helped.push(t); });
+      } else if (day.evening && day.evening.helped) helped.push(day.evening.helped);
     });
 
     const avgMood = moods.length
@@ -507,7 +527,7 @@ window.Rituals = (function () {
     const items = [];
     if (h < 12 && !t.morning) items.push({ id: "morning", label: "🌿 Ранковий ритуал", sub: "до 1 хв" });
     if (shouldShowMidday()) items.push({ id: "midday", label: "☀ Check-in", sub: "як ти зараз?" });
-    if (h >= 18 && !t.evening) items.push({ id: "evening", label: "🌙 Вечірній ритуал", sub: "до 1 хв" });
+    if (h >= 18 && !t.evening) items.push({ id: "evening", label: "🌙 Вечірній ритуал", sub: "3 приємні речі" });
     if (!items.length) return "";
 
     return `<div class="card ritual-home-card">
@@ -538,15 +558,15 @@ window.Rituals = (function () {
       <div class="card-title">🔔 Нагадування</div>
       <p class="muted">Усі вимкнені за замовчуванням. Push працює, коли сайт відкритий у браузері.</p>
       <div class="reminder-rows">
-        <label class="reminder-row"><input type="checkbox" id="rem-mrn" ${r.morning.enabled ? "checked" : ""} /><span>Ранкове</span>
-          <select id="rem-mrn-time">${timeOpts(r.morning.time)}</select>
-          <label class="rem-push"><input type="checkbox" id="rem-mrn-push" ${r.morning.push ? "checked" : ""} /> Push</label></label>
-        <label class="reminder-row"><input type="checkbox" id="rem-mid" ${r.midday.enabled ? "checked" : ""} /><span>Денне</span>
-          <select id="rem-mid-time">${timeOpts(r.midday.time)}</select>
-          <label class="rem-push"><input type="checkbox" id="rem-mid-push" ${r.midday.push ? "checked" : ""} /> Push</label></label>
-        <label class="reminder-row"><input type="checkbox" id="rem-eve" ${r.evening.enabled ? "checked" : ""} /><span>Вечірнє</span>
-          <select id="rem-eve-time">${timeOpts(r.evening.time)}</select>
-          <label class="rem-push"><input type="checkbox" id="rem-eve-push" ${r.evening.push ? "checked" : ""} /> Push</label></label>
+        <div class="reminder-row"><label><input type="checkbox" id="rem-mrn" ${r.morning.enabled ? "checked" : ""} /> <span>Ранкове</span></label>
+          <select id="rem-mrn-time" aria-label="Час ранкового нагадування">${timeOpts(r.morning.time)}</select>
+          <label class="rem-push"><input type="checkbox" id="rem-mrn-push" ${r.morning.push ? "checked" : ""} /> Push</label></div>
+        <div class="reminder-row"><label><input type="checkbox" id="rem-mid" ${r.midday.enabled ? "checked" : ""} /> <span>Денне</span></label>
+          <select id="rem-mid-time" aria-label="Час денного нагадування">${timeOpts(r.midday.time)}</select>
+          <label class="rem-push"><input type="checkbox" id="rem-mid-push" ${r.midday.push ? "checked" : ""} /> Push</label></div>
+        <div class="reminder-row"><label><input type="checkbox" id="rem-eve" ${r.evening.enabled ? "checked" : ""} /> <span>Вечірнє</span></label>
+          <select id="rem-eve-time" aria-label="Час вечірнього нагадування">${timeOpts(r.evening.time)}</select>
+          <label class="rem-push"><input type="checkbox" id="rem-eve-push" ${r.evening.push ? "checked" : ""} /> Push</label></div>
       </div>
       <p class="faint" style="margin:10px 0 0;font-size:12px">Telegram-нагадування — у розділі нижче (опційно).</p>
       <button class="btn btn-primary btn-sm" id="rem-save" type="button" style="margin-top:12px">Зберегти</button>
@@ -606,13 +626,24 @@ window.Rituals = (function () {
       if (cfg.push && "Notification" in window && Notification.permission === "granted") {
         new Notification(title, { body, icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" });
       }
+      if (deps.showPromptSheet) {
+        const shown = deps.showPromptSheet({
+          title,
+          text: body,
+          openLabel: "Відкрити",
+          skipLabel: "Пропустити",
+          onOpen: openFn,
+          onSkip: () => dismissToday(type)
+        });
+        if (shown) return;
+      }
       deps.toast(body, "good", 5000);
       setTimeout(openFn, 800);
     };
 
-    tryFire("morning", r.morning, "Спокій 🌿", "Доброго ранку. Як ти сьогодні?", openMorning);
-    tryFire("midday", r.midday, "Спокій", "Як зараз твій стан?", openMidday);
-    tryFire("evening", r.evening, "Спокій 🌙", "Як минув день?", openEvening);
+    tryFire("morning", r.morning, "Sпокій 🌿", "Доброго ранку. Як ти сьогодні?", openMorning);
+    tryFire("midday", r.midday, "Sпокій", "Як зараз твій стан?", openMidday);
+    tryFire("evening", r.evening, "Sпокій 🌙", "Напиши 3 приємні речі, які сьогодні відбулися", openEvening);
   }
 
   function startReminderScheduler() {
@@ -648,7 +679,7 @@ window.Rituals = (function () {
 
     const helpList = a.topHelped.length
       ? a.topHelped.map(([w, c]) => `<div class="analytics-row"><span>${deps.esc(w)}</span><span class="faint">${c} ${deps.pluralUk(c, "раз", "рази", "разів")}</span></div>`).join("")
-      : `<p class="analytics-none">Заповнюй вечірній ритуал</p>`;
+      : `<p class="analytics-none">Заповнюй вечірній ритуал — 3 приємні речі дня</p>`;
 
     const typeLabel = { morning: "ранок", midday: "день", evening: "вечір", now: "зараз" };
     const notesList = a.notes && a.notes.length
@@ -683,7 +714,7 @@ window.Rituals = (function () {
         <div class="card-title">Найчастіші причини тривоги</div>${worryList}
       </div>
       <div class="card analytics-card analytics-list analytics-span-6">
-        <div class="card-title">Що допомагає найчастіше</div>${helpList}
+        <div class="card-title">Часті приємні речі</div>${helpList}
       </div>
       <div class="card analytics-card analytics-list analytics-span-12">
         <div class="card-title">Описи настрою</div>${notesList}
@@ -704,6 +735,7 @@ window.Rituals = (function () {
   return {
     init,
     maybePrompt,
+    peekAutoPrompt,
     openMorning,
     openMidday,
     openEvening,

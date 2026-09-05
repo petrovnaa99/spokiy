@@ -1,5 +1,5 @@
 /*
- * Спокій — бекенд «під ключ».
+ * Sпокій — бекенд «під ключ».
  * Один файл: віддає статичний сайт і надає REST API для збереження даних у SQLite.
  *
  * Запуск:   node serve.js   (або: npm start)
@@ -254,8 +254,19 @@ async function handleAuth(req, res, pathname) {
     if (!email) return sendJSON(res, 400, { ok: false, error: "bad_email" });
     const cred = qCredGet.get(email);
     if (!cred) return sendJSON(res, 200, { ok: true, message: "if_account_exists_code_sent" });
+    const { mailConfigured, sendAuthCodeEmail } = require("./api/_mail");
+    const allowDevHint = process.env.DEV_AUTH_HINT === "1" || process.env.NODE_ENV === "development";
+    if (!mailConfigured() && !allowDevHint) {
+      return sendJSON(res, 503, { ok: false, error: "email_not_configured" });
+    }
     const code = createCode();
     qCodeUpsert.run(email, purpose, code, codeExpiry());
+    if (mailConfigured()) {
+      const sent = await sendAuthCodeEmail({ to: email, code, purpose });
+      if (!sent.ok) {
+        return sendJSON(res, 502, { ok: false, error: sent.error || "email_send_failed", detail: sent.detail });
+      }
+    }
     return sendJSON(res, 200, { ok: true, message: "code_sent", purpose, ...devCodeHint(code) });
   }
 
@@ -699,7 +710,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Спокій запущено:  http://${HOST}:${PORT}`);
+  console.log(`Sпокій запущено:  http://${HOST}:${PORT}`);
   console.log(`База даних SQLite: ${DB_PATH}`);
 });
 

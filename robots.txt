@@ -1,4 +1,6 @@
-User-agent: *
+﻿User-agent: *
 Allow: /
-
+Disallow: /preview-plant-growth
+Disallow: /api/
+Disallow: /admin
 Sitemap: https://spokiy.me/sitemap.xml

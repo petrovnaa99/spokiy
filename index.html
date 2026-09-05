@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0c2e24" />
-  <meta name="spokiy-build" content="20260814" />
+  <meta name="spokiy-build" content="20260819" />
   <title>Sпокій — щоденник стану</title>
   <meta name="description" content="Sпокій — особистий щоденник стану: записи, check-in, SOS і динаміка. Спершу цінність — реєстрація, щоб зберегти історію." />
   <meta name="robots" content="index,follow" />
@@ -60,7 +60,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Comfortaa:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260814" />
+  <link rel="stylesheet" href="css/styles.css?v=20260904" />
   <link rel="icon" href="/favicon-32.png?v=20260811a" type="image/png" sizes="32x32" />
   <link rel="icon" href="/favicon.png?v=20260811a" type="image/png" sizes="64x64" />
   <link rel="icon" href="/icon-192.png?v=20260811a" type="image/png" sizes="192x192" />
@@ -72,25 +72,25 @@
     <div class="landing landing--value">
 
       <section class="landing-hero">
-        <img class="landing-mark" src="/icon-192.png?v=20260811a" width="64" height="64" alt="" />
+        <img class="landing-mark" src="icon-192.png?v=20260905" width="64" height="64" alt="" decoding="async" onerror="this.onerror=null;this.src='favicon.png?v=20260905';" />
         <h1 class="landing-title">Sпокій</h1>
         <p class="landing-subtitle">Особистий щоденник стану — без оцінок і без тиску писати багато</p>
+        <button class="btn btn-sos btn-lg landing-sos-btn" id="landing-sos" type="button">Мені тривожно зараз</button>
         <a class="btn btn-primary landing-hero-cta" href="#auth-reg">Зберегти записи в акаунті</a>
-        <p class="landing-hero-note">Спочатку подивись, що всередині. Реєстрація потрібна, щоб аналітика й історія не зникли.</p>
+        <p class="landing-hero-note">Реєстрація — щоб історія не зникла між пристроями.</p>
       </section>
 
       <section class="landing-value" aria-label="Цінність щоденника">
         <h2>Що дає щоденник</h2>
         <ul class="landing-value-list">
-          <li><b>Запис стану за хвилину</b> — кілька рядків або оцінка 1–10, без «правильних» відповідей.</li>
+          <li><b>Запис стану за хвилину</b> — кілька рядків або оцінка 1–10.</li>
           <li><b>Check-in ранку / дня / вечора</b> — помітити себе в ритмі дня.</li>
-          <li><b>SOS і кризовий пакет</b> — дихання, заземлення й номери допомоги в Україні.</li>
-          <li><b>Динаміка</b> — бачити тиждень і закономірності, коли є збережена історія.</li>
-          <li><b>Free і Pro 99 грн/міс</b> — базовий щоденник безкоштовно; Pro — повна історія, нагадування, PDF.</li>
+          <li><b>SOS і кризовий пакет</b> — дихання, заземлення й номери допомоги.</li>
+          <li><b>Динаміка</b> — графіки, коли є збережена історія.</li>
         </ul>
         <div class="landing-value-actions">
-          <a class="btn btn-ghost" href="/blog">Читати статті</a>
-          <a class="btn btn-ghost" href="/offer">Тарифи й оферта</a>
+          <a class="btn btn-ghost" href="/about">Як користуватися</a>
+          <a class="btn btn-ghost" href="/offer">Тарифи</a>
         </div>
       </section>
 
@@ -175,23 +175,14 @@
         <a class="landing-about-btn" href="/faq">FAQ</a>
       </div>
 
-      <section class="landing-seo" aria-label="Про щоденник Sпокій">
-        <h2>Що таке «Sпокій»</h2>
-        <p>«Sпокій» — український онлайн-щоденник стану. Тут можна коротко записати, як ти зараз, зробити check-in, скористатися SOS і з часом побачити динаміку своїх записів.</p>
-
-        <h2>Для кого</h2>
-        <p>Для тих, кому іноді тривожно чи важко і хто хоче вести щоденник без оцінок. Не як заміна психолога чи лікаря — як особистий журнал між днями й (за бажанням) між сесіями.</p>
-
-        <h2>Чим допомагає</h2>
-        <ul class="landing-seo-list">
-          <li>Записи стану без тиску писати багато</li>
-          <li>Ритуали check-in і SOS у моменті</li>
-          <li>Кризовий пакет з номерами допомоги</li>
-          <li>Аналітика історії — після збереження в акаунті</li>
-          <li>Один щоденник на телефоні й ноутбуці</li>
-        </ul>
-
-        <p class="landing-seo-note">Щоденник самоспостереження. Не ставить діагнозів і не замінює професійну допомогу. Детальніше — у <a href="/about">«Про Sпокій»</a>, <a href="/offer">оферті</a>, <a href="/faq">FAQ</a> та <a href="/blog">статтях</a>.</p>
+      <section class="landing-seo landing-seo--fold" aria-label="Про щоденник Sпокій">
+        <details>
+          <summary>Детальніше про Sпокій</summary>
+          <div class="landing-seo-body">
+            <p>«Sпокій» — український онлайн-щоденник стану. Не заміна психолога — особистий журнал між днями.</p>
+            <p class="landing-seo-note"><a href="/about">Про Sпокій</a> · <a href="/offer">Оферта</a> · <a href="/faq">FAQ</a></p>
+          </div>
+        </details>
       </section>
 
     </div>
@@ -258,10 +249,10 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
 <script src="js/content.js?v=20260811a"></script>
-<script src="js/storage.js?v=20260811a"></script>
+<script src="js/storage.js?v=20260905"></script>
 <script src="js/safeguard.js?v=20260811a"></script>
-<script src="js/rituals.js?v=20260811a"></script>
+<script src="js/rituals.js?v=20260904"></script>
 <script src="js/recovery-art.js?v=20260811a"></script>
-<script src="js/app.js?v=20260811a"></script>
+<script src="js/app.js?v=20260905"></script>
 </body>
 </html>
